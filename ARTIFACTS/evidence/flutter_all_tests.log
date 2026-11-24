@@ -1,0 +1,430 @@
+Package file_picker:linux references file_picker:linux as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: linux: default_package: file_picker` or add an inline implementation to file_picker via `platforms: linux:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:macos references file_picker:macos as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: macos: default_package: file_picker` or add an inline implementation to file_picker via `platforms: macos:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:linux references file_picker:linux as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: linux: default_package: file_picker` or add an inline implementation to file_picker via `platforms: linux:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:macos references file_picker:macos as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: macos: default_package: file_picker` or add an inline implementation to file_picker via `platforms: macos:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:linux references file_picker:linux as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: linux: default_package: file_picker` or add an inline implementation to file_picker via `platforms: linux:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:macos references file_picker:macos as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: macos: default_package: file_picker` or add an inline implementation to file_picker via `platforms: macos:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
+
+00:00 +0: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart
+Package file_picker:linux references file_picker:linux as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: linux: default_package: file_picker` or add an inline implementation to file_picker via `platforms: linux:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:macos references file_picker:macos as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: macos: default_package: file_picker` or add an inline implementation to file_picker via `platforms: macos:` `pluginClass` or `dartPluginClass`.
+
+Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
+Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
+
+00:00 +0: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across toggle_view_only
+00:00 +1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across toggle_show_my_cursor
+00:00 +2: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across toggle_mute
+00:00 +3: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across close_tab
+00:00 +4: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across switch_tab_next
+00:00 +5: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across switch_tab_prev
+00:00 +6: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across restart_remote
+00:00 +7: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across switch_sides
+00:00 +8: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across toggle_chat
+00:00 +9: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: forwarded W retains correct ownership across send_clipboard_keystrokes
+00:00 +10: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: toggle_view_only cleanup skips released keys and cancels after session close
+00:00 +11: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: toggle_chat cleanup skips released keys and cancels after session close
+00:00 +12: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: send_clipboard_keystrokes cleanup skips released keys and cancels after session close
+00:00 +13: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: owns each overlapping shortcut key until its own release
+00:00 +14: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: binding changes do not forward a previously consumed key
+00:00 +15: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: unmatched key stays forwarded when modifiers change during repeat
+00:00 +16: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: auto-repeat cannot trigger an action again
+00:00 +17: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: releases remote modifiers before running the action
+00:00 +18: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: native clipboard prompt can be repeated immediately after cancelling
+00:00 +19: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: native clipboard waits for outstanding remote modifier releases
+00:00 +20: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: Web clipboard still runs on key down for browser activation
+00:00 +20 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: closing a clipboard owner preserves another session release
+00:00 +21 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: closing the session drops its pending action but keeps the fired key
+00:00 +22 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: focus-changing actions run when the key is released
+00:00 +23 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: closing the session drops its action pending on key release
+00:00 +24 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: raw legacy shortcuts own repeats and release after modifiers change
+00:00 +25 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: shortcut key ownership follows focus to another session
+00:00 +26 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: closing another session keeps every fired key owned
+00:00 +27 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: restores released modifiers before the next ordinary map key
+00:00 +28 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: modifier events do not replay previously released modifiers
+00:00 +29 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: session closure drops pending modifier replay
+00:00 +30 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: view-only resume restores only still-held modifiers (releaseControl=false)
+00:00 +31 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/local_flutter_shortcuts_test.dart: view-only resume restores only still-held modifiers (releaseControl=true)
+00:00 +32 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_submenu_test.dart
+00:26 +32 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_submenu_test.dart: submenu preserves mixed entries and their close policies
+00:28 +33 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_submenu_test.dart: disabled submenu cannot open and can close its parent on cancel
+00:28 +34 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/peer_card_menu_semantics_test.dart
+00:30 +34 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/peer_card_menu_semantics_test.dart: More physical clicks opens once without connecting the card
+00:31 +35 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/peer_card_menu_semantics_test.dart: More semantic tap opens once without connecting the card
+00:31 +36 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/peer_card_menu_semantics_test.dart: More keyboard opens once without connecting the card
+00:32 +37 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart
+00:33 +37 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart: Linux Ctrl+V is not paste
+00:34 +38 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart: reports SGR wheel buttons without the Shift modifier bit
+00:34 +39 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart: reports normal-encoding wheel buttons in the 64..67 range
+00:34 +40 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart: leaves non-wheel buttons to the upstream handler
+00:34 +41 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart: dragging below scrolls and extends selection
+00:35 +42 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_mouse_handler_test.dart: tmux mouse input is reported without local selection
+00:35 +43 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_default_test.dart
+00:37 +43 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_default_test.dart: a shape the core cannot give shows the default cursor at once
+Register custom cursor with key 0__1_80000000_80000000_8_8 (0.0,0.0)
+Cursor 2 is not kept by the core
+Register custom cursor with key 0__-1_320000000_320000000_32_32 (16.0,16.0)
+00:37 +44 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart
+00:39 +44 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: last approval item stays open on click and when exiting below it
+00:41 +45 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: approval delays closing over parent items and cancels on leaving
+00:42 +46 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: submenu prefers the left screen edge when neither side fits
+00:43 +47 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: approval submenu opens beside its parent on either screen edge
+00:43 +48 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: approval trigger has one Tab stop and opens with Enter
+00:45 +49 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: tapping outside the approval submenu closes both menus
+00:45 +50 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: approval text and arrow align with normal menu items
+00:46 +51 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: normal connections and RDP editing remain direct actions
+00:47 +52 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: one approval menu offers all connection types and closes both menus (variant: TargetPlatform.android)
+00:49 +53 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: one approval menu offers all connection types and closes both menus (variant: TargetPlatform.iOS)
+00:51 +54 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: one approval menu offers all connection types and closes both menus (variant: TargetPlatform.linux)
+00:53 +55 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: one approval menu offers all connection types and closes both menus (variant: TargetPlatform.macOS)
+00:54 +56 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: one approval menu offers all connection types and closes both menus (variant: TargetPlatform.windows)
+00:55 +57 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: the whole approval row opens the submenu on a narrow screen (variant: TargetPlatform.android)
+00:56 +58 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/request_approval_menu_test.dart: the whole approval row opens the submenu on a narrow screen (variant: TargetPlatform.iOS)
+00:57 +59 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/uri_login_method_test.dart
+00:58 +59 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/uri_login_method_test.dart: request-approval links preserve their connection type
+00:58 +60 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/uri_login_method_test.dart: omitted and empty passwords retain automatic login
+00:58 +61 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/uri_login_method_test.dart: request-approval ignores an explicit password in either order
+00:58 +62 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_model_lifecycle_test.dart
+00:59 +62 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_model_lifecycle_test.dart: builds its terminal with the wheel button fix
+00:59 +63 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_manager_navigation_keys_test.dart
+01:01 +63 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_manager_navigation_keys_test.dart: navigation keys move the selection and stop at the ends
+01:01 +64 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_manager_navigation_keys_test.dart: shift extends and shrinks the range from the anchor
+01:01 +65 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_manager_navigation_keys_test.dart: page keys go to the visible edge before paging
+01:01 +66 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_manager_navigation_keys_test.dart: Enter does not reach type-to-search
+01:02 +67 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/quality_monitor_transport_test.dart
+01:04 +67 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/quality_monitor_transport_test.dart: the quality monitor names the WebRTC transport only on web
+01:04 +68 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart
+01:06 +68 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: Legacy Windows VK_MENU shortcut releases modifiers before dispatch
+01:06 +69 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: Legacy Windows RAlt shortcut releases modifiers before dispatch
+01:06 +70 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: Legacy Linux VK_MENU shortcut releases modifiers before dispatch
+01:06 +71 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: Legacy Linux RAlt shortcut releases modifiers before dispatch
+01:06 +72 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: Legacy Mac OS VK_MENU shortcut releases modifiers before dispatch
+01:06 +73 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: Legacy Mac OS RAlt shortcut releases modifiers before dispatch
+01:06 +74 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: fresh Chat shortcut sends through its outgoing session
+01:06 +75 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: a removed menu action cannot run its cached callback
+shortcut_triggered: no handler for mute
+01:06 +76 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: an action becomes available without reopening its menu
+01:06 +77 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: refresh finishes before invoking the current callback
+01:06 +78 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/shortcut_model_test.dart: closing during a refresh prevents late registration and dispatch
+01:07 +79 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/floating_mouse_cursor_offset_test.dart
+01:08 +79 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/floating_mouse_cursor_offset_test.dart: virtual mouse reports the handle in canvas coordinates
+01:09 +80 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart
+01:11 +80 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: shouldReleaseStaleMobileShift releases one-shot mobile shift after a text key
+01:11 +81 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: shouldReleaseStaleMobileShift does not release when shift is still physically pressed
+01:11 +82 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: shouldApplyTerminalInputModifiers rejects terminal control bytes and multi-character sequences
+01:11 +83 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: applyTerminalInputModifiers maps the complete Ctrl symbol range
+01:11 +84 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: applyTerminalInputModifiers applies Ctrl before Alt for combined modifiers
+01:11 +85 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: prepareTerminalInputPayload normalizes a mobile keyboard Enter to carriage return
+01:11 +86 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: prepareTerminalInputPayload keeps Ctrl+J as line feed on mobile
+01:11 +87 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: prepareTerminalInputPayload does not apply Alt to a terminal control byte
+01:11 +88 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: prepareTerminalInputPayload keeps decomposed graphemes intact with locked keyboard modifiers
+01:11 +89 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: prepareTerminalInputPayload wraps paste without applying locked modifiers
+01:11 +90 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: shouldHandleTerminalPasteShortcut handles only Ctrl+Shift+V on Linux with a virtual lock
+01:11 +91 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: shouldHandleTerminalPasteShortcut handles Ctrl+V and Meta+V when a virtual modifier lock is active
+01:11 +92 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/input_modifier_utils_test.dart: shouldClearTerminalModifiersWhenRow3Collapses clears visible modifier state when expanded row is collapsed
+01:11 +93 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/android_file_transfer_setup_test.dart
+01:13 +93 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/android_file_transfer_setup_test.dart: skipping folder setup suppresses later prompts
+01:14 +94 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/android_file_transfer_setup_test.dart: canceling setup leaves it available at the next entry
+01:15 +95 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart
+01:16 +95 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart: formatID groups typed IDs from the right
+01:16 +96 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart: formatID ignores line breaks, tabs and non-breaking spaces from a paste
+01:16 +97 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart: formatID keeps the relay suffix
+01:16 +98 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart: formatID leaves non-numeric input alone
+01:16 +99 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart: trimID drops all whitespace
+01:16 +100 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/id_formatter_test.dart: pasting an ID with a trailing newline formats it like typing
+01:16 +101 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart
+01:18 +101 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: SAF retry after completion
+01:18 +102 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: SAF retry after reconnect
+01:18 +103 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: SAF retry after dispatch reconnect
+01:18 +104 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: deletion confirms all five files despite refreshed selection
+01:18 +105 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: the Windows drive list keeps its drives under every sort
+01:18 +106 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: a fast remote response is matched after registration
+01:18 +107 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: a resolved Home path completes the sole empty-path request
+init remote home: /home/user
+01:18 +108 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: an automatic response initializes Home without a pending request
+init remote home: /home/user
+01:18 +109 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: a read error completes the sole pending request
+01:18 +110 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: same-path requests share the pending read
+01:18 +111 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: same-path requests with different hidden options are serialized
+01:18 +112 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: session invalidation cancels active and waiting reads
+01:18 +113 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/file_model_test.dart: navigation ignores stale directory responses
+01:18 +114 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/autocomplete_peer_merge_test.dart
+01:20 +114 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/autocomplete_peer_merge_test.dart: merged autocomplete peers keep address book metadata and online state
+01:20 +115 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/autocomplete_peer_merge_test.dart: online callback updates currently displayed options
+01:20 +116 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/server_settings_dialog_test.dart
+01:22 +116 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/server_settings_dialog_test.dart: server settings text fields preserve literal input
+01:23 +117 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_keyboard_utils_test.dart
+01:24 +117 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_keyboard_utils_test.dart: mobile terminal keyboard layout keeps the latest key order from the reviewed PR layout
+01:24 +118 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/windows_cm_window_position_test.dart
+01:26 +118 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/windows_cm_window_position_test.dart: CM side panel opens in one move at the right edge of a 100% monitor
+01:26 +119 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/windows_cm_window_position_test.dart: CM side panel keeps its size on a 150% monitor
+01:26 +120 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/download_path_test.dart
+01:28 +120 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/download_path_test.dart: downloads refuse peer listing names that escape the local folder
+path: /remote/report.txt, toPath: /downloads, to: /downloads/report.txt
+jobError {id: 2, file_num: 0, err: Invalid file name: ../outside.txt}
+jobError {id: 3, file_num: 0, err: Invalid file name: /outside.txt}
+jobError {id: 4, file_num: 0, err: Invalid file name: .}
+jobError {id: 5, file_num: 0, err: Invalid file name: ..}
+jobError {id: 6, file_num: 0, err: Invalid file name: }
+jobError {id: 7, file_num: 0, err: Invalid file name: bad name}
+jobError {id: 8, file_num: 0, err: Invalid file name: ../outside.txt}
+jobError {id: 9, file_num: 0, err: Invalid file name: /outside.txt}
+jobError {id: 10, file_num: 0, err: Invalid file name: .}
+jobError {id: 11, file_num: 0, err: Invalid file name: ..}
+jobError {id: 12, file_num: 0, err: Invalid file name: }
+jobError {id: 13, file_num: 0, err: Invalid file name: bad name}
+jobError {id: 14, file_num: 0, err: Invalid file name: ..\outside.txt}
+jobError {id: 15, file_num: 0, err: Invalid file name: C:\outside.txt}
+jobError {id: 16, file_num: 0, err: Invalid file name: \\host\share}
+01:28 +121 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/download_path_test.dart: empty-directory downloads reject paths outside the selected folder
+path: /remote/docs, toPath: /downloads, to: /downloads/docs
+jobError {id: 1, file_num: 0, err: Invalid download directory: /remote/other/empty}
+path: /remote/docs, toPath: /downloads, to: /downloads/docs
+jobError {id: 2, file_num: 0, err: Invalid download directory: /remote/docs/../out}
+path: /remote/docs, toPath: /downloads, to: /downloads/docs
+01:28 +122 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/download_path_test.dart: empty-directory downloads refuse existing local links
+path: /remote/docs, toPath: /tmp/rustdesk_download_SUCITS/downloads, to: /tmp/rustdesk_download_SUCITS/downloads/docs
+jobError {id: 1, file_num: 0, err: Download directory contains a link: /tmp/rustdesk_download_SUCITS/downloads/docs}
+01:28 +123 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_alt_screen_scroll_test.dart
+01:30 +123 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_alt_screen_scroll_test.dart: alternate screen reports trackpad after main-screen history (variant: TargetPlatform.macOS)
+01:31 +124 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_alt_screen_scroll_test.dart: leaving alternate screen restores local trackpad scrollback (variant: TargetPlatform.macOS)
+01:31 +125 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/terminal_alt_screen_scroll_test.dart: alternate screen without mouse capture still simulates arrows (variant: TargetPlatform.macOS)
+01:31 +126 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart
+01:33 +126 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: only the shape in use keeps an image, and a shape its native cursor holds keeps no pixels
+Register custom cursor with key 0__1_80000000_80000000_8_8 (0.0,0.0)
+Register custom cursor with key 0__2_80000000_80000000_8_8 (0.0,0.0)
+Register custom cursor with key 0__3_80000000_80000000_8_8 (0.0,0.0)
+01:33 +127 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: the shape in use keeps its pixels, and a new raster is made at once
+Register custom cursor with key 1__1_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 1__1_160000000_160000000_16_16 (0.0,0.0)
+01:33 +128 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: native cursors stay for the session, every raster of every shape
+Register custom cursor with key 2__0_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__1_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__2_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__3_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__4_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__5_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__6_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__7_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__8_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__9_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__10_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__11_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__12_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__13_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__14_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__15_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__16_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__17_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__18_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__19_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__20_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__21_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__22_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__23_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__24_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__25_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__26_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__27_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__28_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__29_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__30_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__31_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__32_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__33_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__34_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__35_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__36_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__37_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__38_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__39_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__40_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__41_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__42_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__43_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__44_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__45_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__46_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__47_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__48_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__49_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__50_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__51_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__52_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__53_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__54_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__55_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__56_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__57_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__58_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__59_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__60_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__61_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__62_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__63_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__64_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__65_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__66_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__67_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__68_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__69_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__70_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__71_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__72_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__73_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__74_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__75_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__76_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__77_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__78_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__79_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__80_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__81_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__82_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__83_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__84_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__85_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__86_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__87_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__88_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__89_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__90_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__91_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__92_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__93_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__94_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__95_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__96_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__97_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__98_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 2__99_320000000_320000000_32_32 (0.0,0.0)
+01:35 +129 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: a new raster of a shape without pixels keeps the cursor shown before
+Register custom cursor with key 3__1_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 3__2_320000000_320000000_32_32 (0.0,0.0)
+Register custom cursor with key 3__1_160000000_160000000_16_16 (0.0,0.0)
+01:35 +130 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: a shape painted again is decoded again, the last one shown meanwhile
+01:35 +131 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: a moved tab carries the id in use, and its window asks the core
+01:35 +132 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_replay_test.dart: a tab closing does not delete the cursors of another tab
+Register custom cursor with key 7__-1_320000000_320000000_32_32 (16.0,16.0)
+Register custom cursor with key 8__-1_320000000_320000000_32_32 (16.0,16.0)
+deleting cursor with key 7__-1_320000000_320000000_32_32
+01:35 +133 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart
+01:37 +133 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: submenu highlight stays steady while opening
+01:39 +134 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: menu hover paints one full row and keeps its action
+01:40 +135 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: menu actions have one Tab stop and RDP edit stays independent
+01:42 +136 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: parent actions remain clickable while the submenu is open
+01:44 +137 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: parent hover and dialog action work during the close delay
+01:44 +138 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: Enter on the first switch row focus toggles the option
+01:46 +139 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: Enter on the first radio menu row focus selects the option
+01:46 +140 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: Enter on the first radio submenu row focus selects the option
+01:47 +141 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/popup_menu_hover_test.dart: checkbox and row toggle once without closing the menu
+01:47 +142 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart
+01:49 +142 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart: (setUpAll)
+_globalFFI init
+registerEventHandler callback_query_onlines address book peer
+registerEventHandler load_address_book_peers address book peer
+registerEventHandler callback_query_onlines group peer
+registerEventHandler load_group_peers group peer
+registerEventHandler callback_query_onlines recent peer
+registerEventHandler load_recent_peers recent peer
+registerEventHandler callback_query_onlines fav peer
+registerEventHandler load_fav_peers fav peer
+registerEventHandler callback_query_onlines discovered peer
+registerEventHandler load_lan_peers discovered peer
+_globalFFI init end
+01:49 +142 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart: account password visibility with option ""
+01:51 +143 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart: account password visibility with option "N"
+01:51 +144 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart: account password visibility with option "Y"
+01:52 +145 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart: OIDC-only login shows loading before an empty provider response
+01:52 +146 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/account_password_login_test.dart: (tearDownAll)
+01:52 +146 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/dauverse_ui_test.dart
+01:54 +146 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/dauverse_ui_test.dart: Renders all 16 mandatory DAUVERSE screens in Dark and Light modes with VI/EN i18n
+02:00 +147 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/linux_window_restore_test.dart
+02:02 +147 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/linux_window_restore_test.dart: maximized Linux window keeps its layout after minimize and restore
+02:02 +148 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/api_server_warning_test.dart
+02:03 +148 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/api_server_warning_test.dart: warns only for remote HTTP endpoints
+02:03 +149 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/api_server_warning_test.dart: warning follows API and ID changes using the resolved endpoint
+02:04 +150 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/api_server_warning_test.dart: resolver failures are reported without breaking the server form
+02:04 +151 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/dialog_text_field_focus_test.dart
+02:06 +151 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/dialog_text_field_focus_test.dart: dialog text field keeps the caret when it regains focus (variant: TargetPlatform.linux)
+02:07 +152 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/dialog_text_field_focus_test.dart: dialog text field keeps the caret when it regains focus (variant: TargetPlatform.macOS)
+02:07 +153 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/dialog_text_field_focus_test.dart: dialog text field keeps the caret when it regains focus (variant: TargetPlatform.windows)
+02:08 +154 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart
+02:10 +154 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: native cursor size ((4, 64), 0.5, (2, 32))
+Register custom cursor with key 0_size_(4, 64)_20000000_320000000_2_32 (0.0,0.0)
+02:10 +155 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: native cursor size ((8, 8), 0.5, (12, 12))
+Register custom cursor with key 1_size_(8, 8)_120000000_120000000_12_12 (0.0,0.0)
+02:10 +156 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: cursor resize limits preserve the last valid raster
+Register custom cursor with key 2_size_(30, 20)_5120000000_3413333333_512_342 (68.26666666666667,119.7)
+Cursor (30, 20): rejected scale 17.1 for 30x20; using 17.066666666666666 (maximum raster side 512).
+Register custom cursor with key 2_size_(30, 20)_300000000_200000000_30_20 (4.0,7.0)
+Register custom cursor with key 3_size_(20, 30)_3413333333_5120000000_342_512 (68.4,119.46666666666667)
+Cursor (20, 30): rejected scale 17.1 for 20x30; using 17.066666666666666 (maximum raster side 512).
+Register custom cursor with key 3_size_(20, 30)_200000000_300000000_20_30 (4.0,7.0)
+02:11 +157 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: Windows peer cursor alpha survives resizing ([128, 0, 0, 128], 128)
+Register custom cursor with key 4__alpha_320000000_320000000_32_32 (0.0,0.0)
+02:11 +158 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: Windows peer cursor alpha survives resizing ([255, 0, 0, 255, 0, 0, 0, 0], 127)
+Register custom cursor with key 5__alpha_320000000_320000000_32_32 (0.0,0.0)
+02:11 +159 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: original zoom=false follows the live DPR and peer scale
+Register custom cursor with key 6_size_(64, 64)_1280000000_1280000000_128_128 (0.0,0.0)
+Register custom cursor with key 6_size_(64, 64)_256000000_256000000_26_26 (0.0,0.0)
+Register custom cursor with key 6_size_(64, 64)_320000000_320000000_32_32 (0.0,0.0)
+02:11 +160 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: adaptive zoom=false follows the live DPR and peer scale
+Register custom cursor with key 7_size_(64, 64)_640000000_640000000_64_64 (0.0,0.0)
+Register custom cursor with key 7_size_(64, 64)_256000000_256000000_26_26 (0.0,0.0)
+02:11 +161 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: adaptive zoom=true follows the live DPR and peer scale
+Register custom cursor with key 8_size_(64, 64)_640000000_640000000_64_64 (0.0,0.0)
+Register custom cursor with key 8_size_(64, 64)_160000000_160000000_16_16 (0.0,0.0)
+Register custom cursor with key 8_size_(64, 64)_320000000_320000000_32_32 (0.0,0.0)
+02:11 +162 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: custom zoom=false follows the live DPR and peer scale
+Register custom cursor with key 9_size_(64, 64)_640000000_640000000_64_64 (0.0,0.0)
+Register custom cursor with key 9_size_(64, 64)_256000000_256000000_26_26 (0.0,0.0)
+02:11 +163 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/cursor_size_test.dart: custom zoom=true follows the live DPR and peer scale
+Register custom cursor with key 10_size_(64, 64)_5120000000_5120000000_512_512 (0.0,0.0)
+Register custom cursor with key 10_size_(64, 64)_1024000000_1024000000_103_103 (0.0,0.0)
+Register custom cursor with key 10_size_(64, 64)_1280000000_1280000000_128_128 (0.0,0.0)
+02:12 +164 ~1: loading /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart
+02:13 +164 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: kDefaultShortcutBindings matches fixture
+02:13 +165 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: save order preserves macOS control modifier
+02:13 +166 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: shortcutBindingMapsFrom ignores malformed bindings
+02:13 +167 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: shortcutBindingMapsFrom ignores malformed binding fields
+02:13 +168 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: shortcutBindingMapsFrom preserves unbound and unknown bindings
+02:13 +169 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: platform filtering ignores malformed binding fields
+02:13 +170 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: shortcutModSetFrom ignores malformed modifiers
+02:13 +171 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: non-desktop defaults exclude desktop-only and tab shortcuts
+02:13 +172 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: filterKeyboardShortcutActionGroupsForPlatform strips desktop-only
+02:13 +173 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: filterKeyboardShortcutActionGroupsForPlatform hides Toggle Recording on Web/iOS
+02:13 +174 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: filterKeyboardShortcutActionGroupsForPlatform keeps full set on desktop
+02:13 +175 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: Wayland hides relative mouse mode but keeps screenshot
+02:13 +176 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: filterKeyboardShortcutActionGroupsForPlatform drops empty groups
+02:13 +177 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: physicalKeyName covers the supported-keys fixture
+02:13 +178 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: enable seeds defaults only for a config without bindings
+02:13 +179 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: ShortcutConfig.parse reads the flags and bindings once
+02:13 +180 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: Wayland active config preserves stored bindings and flags
+02:13 +181 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: active saved bindings follow Settings capabilities without reseeding
+02:13 +182 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: non-US layouts record and match the physical key
+02:13 +183 ~1: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/flutter/test/keyboard_shortcuts_test.dart: kShortcutActionsRunOnKeyUp matches the fixture and names real actions
+02:13 +184 ~1: All tests passed!

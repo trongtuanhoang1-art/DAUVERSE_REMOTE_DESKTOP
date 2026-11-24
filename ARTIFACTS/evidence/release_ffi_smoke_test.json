@@ -1,0 +1,211 @@
+{
+  "ai_summary": {
+    "comfyui_rendering": false,
+    "completed": 0,
+    "live_tasks": [],
+    "running": 0,
+    "sources_catalog": [
+      {
+        "display_name": "Claude Code CLI",
+        "notes": "Official Claude Code Stop/Notification/SubagentStop JSON hook adapter.",
+        "source_id": "claude_code",
+        "support_status": "OFFICIAL_HOOK"
+      },
+      {
+        "display_name": "Claude Desktop",
+        "notes": "No official completion webhook; reported UNKNOWN unless read-only MCP/log adapter is configured (never reads cookies/tokens).",
+        "source_id": "claude_desktop",
+        "support_status": "UNKNOWN"
+      },
+      {
+        "display_name": "Codex CLI",
+        "notes": "Official Codex CLI notify hook adapter.",
+        "source_id": "codex_cli",
+        "support_status": "OFFICIAL_HOOK"
+      },
+      {
+        "display_name": "Codex Desktop",
+        "notes": "Read-only process/log observer; reports UNKNOWN when structured completion event is absent.",
+        "source_id": "codex_desktop",
+        "support_status": "READ_ONLY_PROCESS_MONITOR"
+      },
+      {
+        "display_name": "Antigravity Desktop",
+        "notes": "Strictly read-only status interface; zero modification or workspace contention with DAUVERSE AI.",
+        "source_id": "antigravity_desktop",
+        "support_status": "STRUCTURED_LOGS_READ_ONLY"
+      },
+      {
+        "display_name": "Antigravity CLI",
+        "notes": "Supported via approved read-only wrapper / structured output.",
+        "source_id": "antigravity_cli",
+        "support_status": "APPROVED_WRAPPER_ADAPTER"
+      },
+      {
+        "display_name": "Antigravity Remote Agent",
+        "notes": "Structured checkpoint/status reader.",
+        "source_id": "antigravity_remote",
+        "support_status": "STRUCTURED_LOGS_READ_ONLY"
+      },
+      {
+        "display_name": "DAUVERSE AI Controller",
+        "notes": "Consumes existing Controller events read-only; never creates a second Controller.",
+        "source_id": "dauverse_ai_controller",
+        "support_status": "EXISTING_CONTROLLER_EVENTS_READ_ONLY"
+      },
+      {
+        "display_name": "ComfyUI Render Engine",
+        "notes": "Read-only localhost /queue and /history observer for video/image render jobs.",
+        "source_id": "comfyui",
+        "support_status": "OFFICIAL_LOCAL_HTTP_READ_ONLY"
+      },
+      {
+        "display_name": "Build / QA / Render / PowerShell Jobs",
+        "notes": "Signed wrapper scripts emitting verified exit codes and test counts.",
+        "source_id": "build_qa_powershell",
+        "support_status": "APPROVED_WRAPPER_ADAPTER"
+      }
+    ],
+    "waiting_approval": 0
+  },
+  "engine_base": "1.5.3",
+  "hardware": {
+    "ai_processes": [],
+    "captured_at_utc": "2026-11-24T17:26:42.437783756+00:00",
+    "cpu_brand": "Intel(R) Xeon(R) CPU @ 2.30GHz",
+    "cpu_temp_c": null,
+    "cpu_usage_pct": 0.0,
+    "disk_activity_read_bytes": 700416,
+    "disk_activity_write_bytes": 36864,
+    "disk_free_gb": 2307.68,
+    "disk_total_gb": 2501.31,
+    "disk_usage_pct": 7.699999809265137,
+    "disk_used_gb": 193.63,
+    "gpu_model": null,
+    "gpu_power_watts": null,
+    "gpu_temp_c": null,
+    "gpu_usage_pct": null,
+    "net_download_bps": 0,
+    "net_upload_bps": 0,
+    "ram_total_gb": 7.77,
+    "ram_usage_pct": 10.5,
+    "ram_used_gb": 0.82,
+    "remote_service_healthy": true,
+    "system_uptime_secs": 5258,
+    "vram_total_mb": null,
+    "vram_usage_pct": null,
+    "vram_used_mb": null
+  },
+  "hardware_alerts": [],
+  "headless": {
+    "active_preset": {
+      "dpi_scale_pct": 100,
+      "height": 1080,
+      "refresh_hz": 60,
+      "width": 1920
+    },
+    "auto_restore_on_disconnect": true,
+    "boss_driver_install_approved": false,
+    "display_state": "PHYSICAL_MONITOR_ACTIVE",
+    "driver_signature_enforcement_preserved": true,
+    "fallback_driver": "VirtualDrivers/Virtual-Display-Driver 25.7.23 (MttVDD)",
+    "hardware_fallback": "HDMI 2.0 EDID Dummy Plug (Hardware Fallback Only)",
+    "primary_driver": "RustDeskIddDriver v0.4 (Signed UMDF Indirect Display Driver)",
+    "require_signed_whql_driver": true,
+    "rtx_3060_compatible": true,
+    "saved_physical_topology": "Primary-DP1-1920x1080@60Hz",
+    "secure_boot_preserved": true,
+    "virtual_display_active": false
+  },
+  "notifications": {
+    "active_toasts": [],
+    "preferences": {
+      "auto_hide_seconds": 6,
+      "dedup_window_ms": 10000,
+      "do_not_disturb": false,
+      "enabled": true,
+      "hide_sensitive_by_default": true,
+      "max_history_items": 500,
+      "max_offline_buffered_events": 250,
+      "play_sound": false,
+      "quiet_mode": false
+    },
+    "unread_count": 0
+  },
+  "performance": {
+    "active_mode": "AUTO_ADAPTIVE",
+    "applied_params": {
+      "encoder_preference": "NVENC_LOW_LATENCY_P1",
+      "file_transfer_bw_cap_kbps": 40000,
+      "idle_fps": 10,
+      "max_bitrate_kbps": 12000,
+      "min_bitrate_kbps": 2500,
+      "mode": "AUTO_ADAPTIVE",
+      "preferred_codec": "H264",
+      "prioritize_input_latency": true,
+      "rationale": "Auto-Adaptive detected fast Direct P2P LAN/low-RTT path -> enabled 60 FPS Ultra Low Latency.",
+      "resolution_scale_pct": 100,
+      "static_frame_decimation": true,
+      "target_fps": 60
+    },
+    "bitrate_kbps": 7250,
+    "codec": "H264",
+    "connection_route": "Direct P2P",
+    "cpu_usage_pct": 0.0,
+    "encoder": "NVENC_LOW_LATENCY_P1",
+    "fps": 60,
+    "gpu_usage_pct": 0.0,
+    "network_quality_label": "Excellent",
+    "network_quality_score": 98,
+    "packet_loss_pct": 0.0,
+    "ping_rtt_ms": 14
+  },
+  "product": "DAUVERSE REMOTE DESKTOP",
+  "release": {
+    "auto_update_enabled": false,
+    "auto_update_policy": "Disabled until official Authenticode certificate is provisioned; manual SHA-256 verified update and rollback supported.",
+    "code_signing_status": "UNSIGNED",
+    "product_name": "DAUVERSE REMOTE DESKTOP",
+    "product_version": "1.0.0",
+    "rollback_supported": true,
+    "short_name": "DAUVERSE REMOTE",
+    "upstream_engine_base": "1.5.3"
+  },
+  "security": {
+    "active_sessions_count": 0,
+    "allowlist_enforced": true,
+    "audit_chain_intact": true,
+    "credential_vault": "UNIX_SEALED_0600_ENCRYPT_THEN_MAC",
+    "encryption": "End-to-End NaCl/Curve25519 + XSalsa20-Poly1305 (RustDesk Protocol) + HMAC-SHA256 IPC/Events",
+    "mfa_required": false,
+    "revoked_devices_count": 0,
+    "telemetry_enabled": false,
+    "trusted_devices": [],
+    "trusted_devices_count": 0
+  },
+  "service": {
+    "active_remote_banner_visible": true,
+    "auto_start_with_windows": false,
+    "defender_av_untouched": true,
+    "last_health_check_utc": "2026-11-24T17:26:42.437883605+00:00",
+    "no_hidden_persistence": true,
+    "pre_login_session_helper_enabled": false,
+    "privilege_separation_enforced": true,
+    "recovery_restart_count": 0,
+    "service_state": "NOT_INSTALLED_PORTABLE_MODE",
+    "system_tray_indicator_visible": true,
+    "unattended_access_enabled": false
+  },
+  "smart_power": {
+    "host_state": "ONLINE",
+    "smart_plug": {
+      "adapter_name": "DisabledSmartPlugAdapter",
+      "blocker_note": "BLOCKED: Smart plug brand/model not specified yet. Interface ready; Boss may continue using vendor app to toggle AC power.",
+      "evidence_class": "BLOCKED",
+      "integration_state": "BLOCKED",
+      "power_watts": null,
+      "relay_on": null
+    }
+  },
+  "version": "1.0.0"
+}

@@ -7,6 +7,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/overlay.dart';
+import 'package:flutter_hbb/dauverse/dauverse_shell.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
@@ -106,6 +107,12 @@ Future<void> main(List<String> args) async {
     runConnectionManagerScreen();
   } else if (args.contains('--install')) {
     runInstallPage();
+  } else if (args.contains('--dauverse-ui')) {
+    runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'DAUVERSE REMOTE DESKTOP V1.0',
+      home: DauverseExecutiveShell(),
+    ));
   } else {
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
@@ -502,7 +509,9 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           darkTheme: MyTheme.darkTheme,
           themeMode: MyTheme.currentThemeMode(),
           home: isDesktop
-              ? const DesktopTabPage()
+              ? DauverseExecutiveShell(
+                  classicRustDeskBuilder: (_) => const DesktopTabPage(),
+                )
               : isWeb
                   ? WebHomePage()
                   : HomePage(),

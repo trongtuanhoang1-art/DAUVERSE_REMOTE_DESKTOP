@@ -1,0 +1,28 @@
+# DAUVERSE REMOTE DESKTOP V1 — Self-Hosted Rendezvous (hbbs) & Relay (hbbr) Server
+# Pinned to upstream rustdesk/rustdesk-server v1.1.16 (AGPL-3.0)
+# Security policy: Key-enforced (-k _) mandatory; never deploy publicly without firewall allowlisting.
+
+services:
+  hbbs:
+    container_name: dauverse-hbbs
+    image: rustdesk/rustdesk-server:1.1.16
+    command: hbbs -k _
+    volumes:
+      - ./data:/root
+    network_mode: "host"
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  hbbr:
+    container_name: dauverse-hbbr
+    image: rustdesk/rustdesk-server:1.1.16
+    command: hbbr -k _
+    volumes:
+      - ./data:/root
+    network_mode: "host"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true

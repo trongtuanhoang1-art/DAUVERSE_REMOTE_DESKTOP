@@ -1,0 +1,113 @@
+# THIRD-PARTY OPEN SOURCE NOTICES — DAUVERSE REMOTE DESKTOP V1.0
+
+DAUVERSE REMOTE DESKTOP V1.0 is free and open-source software distributed under the
+**GNU Affero General Public License v3.0 (AGPL-3.0)**. Full verbatim license text is
+preserved in both `LICENSE` and `LICENCE`.
+
+## 1. Primary Upstream Attribution
+- **RustDesk** (`https://github.com/rustdesk/rustdesk`, commit `a0c0963c483fc8f1aeed4547787d1673adcb583c`, v1.5.3)
+  - Copyright (C) Purslane Tech Pte. Ltd. (`info@rustdesk.com`) and RustDesk Contributors.
+  - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
+- **hbb_common** (`https://github.com/rustdesk/hbb_common`, commit `450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb`)
+  - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
+- **rustdesk-server (Self-Host Reference)** (`https://github.com/rustdesk/rustdesk-server`, v1.1.16)
+  - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
+- **RustDeskIddDriver** (`https://github.com/rustdesk-org/RustDeskIddDriver`, v0.4)
+  - License: Microsoft Public License (`MS-PL`).
+- **Virtual-Display-Driver (Fallback Reference)** (`https://github.com/VirtualDrivers/Virtual-Display-Driver`, 25.7.23)
+  - License: MIT License.
+- **sysinfo** (`https://github.com/GuillaumeGomez/sysinfo` / `rustdesk-org/sysinfo` v0.29.10)
+  - Copyright (C) Guillaume Gomez and Contributors. License: MIT License.
+- **LibreHardwareMonitor (Optional Sensor Bridge Reference)** (`https://github.com/LibreHardwareMonitor/LibreHardwareMonitor`, v0.9.6)
+  - License: Mozilla Public License 2.0 (`MPL-2.0`).
+- **Flutter Framework & Engine** (`https://github.com/flutter/flutter`)
+  - Copyright 2014 The Flutter Authors. License: BSD 3-Clause License.
+
+## 2. Locked Dependency Summary
+- **Cargo Lockfile (`Cargo.lock`) SHA-256:** `c09e5bfcb87918f84c0c4f806f1f3b7ef1a8a879c3214f44046f7b516756909b`
+- **Total Locked Rust Crates:** 1026
+- **Total Locked Dart/Flutter Packages:** 212
+- **Full Machine-Readable Inventory:** See `SBOM.spdx.json` (1239 SPDX package records).
+
+## 3. Core Rust & Flutter Crate Inventory (Excerpt + Complete Count in SBOM.spdx.json)
+- `cargo:ab_glyph@0.2.31` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:ab_glyph_rasterizer@0.1.10` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:addr2line@0.22.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:adler@1.0.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:adler2@2.0.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:aead@0.5.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:aes@0.8.4` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:aes-gcm@0.10.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:ahash@0.7.8` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:ahash@0.8.12` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:aho-corasick@1.1.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:allo-isolate@0.1.25` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:alloc-no-stdlib@2.0.4` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:alloc-stdlib@0.2.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:alsa@0.9.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:alsa-sys@0.3.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:android-activity@0.6.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:android-properties@0.2.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:android-tzdata@0.1.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:android-wakelock@0.1.0` (git+https://github.com/rustdesk-org/android-wakelock#d0292e5a367e627c4fa6f1ca6bdfad005dca7d90)
+- `cargo:android_log-sys@0.3.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:android_logger@0.13.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:android_system_properties@0.1.5` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:ansi_term@0.12.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:anstream@0.6.14` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:anstyle@1.0.13` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:anstyle-parse@0.2.4` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:anstyle-query@1.1.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:anstyle-wincon@3.0.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:anyhow@1.0.98` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:arboard@3.4.0` (git+https://github.com/rustdesk-org/arboard#c7d5781f563176df9efd8df6287e823fb1b9bed5)
+- `cargo:arc-swap@1.7.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:arrayref@0.3.9` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:arrayvec@0.7.6` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:as-raw-xcb-connection@1.0.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:asn1-rs@0.6.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:asn1-rs-derive@0.5.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:asn1-rs-impl@0.2.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:associative-cache@1.0.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-broadcast@0.5.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-channel@2.3.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-compression@0.4.32` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-executor@1.12.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-fs@1.6.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-io@1.13.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-io@2.3.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-lock@2.8.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-lock@3.4.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-process@1.8.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-recursion@1.1.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-signal@0.2.8` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-task@4.7.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:async-trait@0.1.80` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:atk@0.18.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:atk-sys@0.18.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:atomic@0.5.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:atomic-waker@1.1.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:atty@0.2.14` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:auto_impl@1.3.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:autocfg@0.1.8` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:autocfg@1.3.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:backtrace@0.3.73` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:base@0.1.0` (workspace-local)
+- `cargo:base16ct@0.2.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:base32@0.4.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:base64@0.21.7` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:base64@0.22.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:base64ct@1.6.0` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bincode@1.3.3` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bindgen@0.59.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bindgen@0.65.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bindgen@0.69.4` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bindgen@0.72.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bit_field@0.10.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bitflags@1.3.2` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bitflags@2.9.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bitmask-enum@2.2.4` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:bitvec@1.0.1` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:block@0.1.6` (registry+https://github.com/rust-lang/crates.io-index)
+- `cargo:block-buffer@0.10.4` (registry+https://github.com/rust-lang/crates.io-index)
+- ... plus 946 additional Cargo crates and 212 Pub packages documented in `SBOM.spdx.json`.

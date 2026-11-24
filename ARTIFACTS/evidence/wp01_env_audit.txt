@@ -1,0 +1,13 @@
+=== DAUVERSE REMOTE V1 — WP01 ENVIRONMENT & ISOLATION AUDIT ===
+Linux devbox 6.18.57 #1-NixOS SMP PREEMPT_DYNAMIC @1792058300 x86_64 x86_64 x86_64 GNU/Linux
+rustc 1.100.0 (0ef1bc386 2026-11-09)
+cargo 1.100.0 (3acc79c0c 2026-11-05)
+Flutter 3.50.0 • channel stable • https://github.com/flutter/flutter.git
+Framework • revision ab2912035e (2 weeks ago) • 2026-11-09 08:50:21 -0800
+Engine • hash bf601093ad255aaf5c6d0fc5c4f9acfa60943b2a (revision 371f77202a) (15 days ago) • 2026-11-09 15:57:36.000Z
+Tools • Dart 3.14.0 • DevTools 2.61.0
+origin	https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP.git (fetch)
+origin	https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP.git (push)
+upstream	https://github.com/rustdesk/rustdesk.git (fetch)
+upstream	DISABLED_NO_PUSH (push)
+develop/dauverse-remote-v1

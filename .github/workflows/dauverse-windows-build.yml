@@ -1,0 +1,99 @@
+name: DAUVERSE Windows Release Build (Manual Dispatch Only)
+
+# Security & Cost Governance (Sections 06 & 30):
+# - Manual workflow_dispatch ONLY (zero automatic push/PR runner minutes).
+# - Least-privilege permissions (contents: read).
+# - All third-party GitHub Actions pinned to full 40-char commit SHAs.
+# - Never auto-publishes public releases; uploads private workflow artifacts only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run Rust dauverse:: and Flutter UI test suites before packaging"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  FLUTTER_VERSION: "3.44.8"
+  LLVM_VERSION: "17.0.6"
+
+jobs:
+  build-windows-x64:
+    name: Build DAUVERSE Remote V1 (Windows x64)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: dauverse-win-x64
+
+      - name: Setup vcpkg with binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+
+      - name: Install vcpkg static Windows dependencies
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Install Flutter SDK
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Generate flutter_rust_bridge bindings if absent
+        shell: bash
+        run: |
+          if [ ! -f "./flutter/lib/generated_bridge.dart" ]; then
+            cargo install cargo-expand --version 1.0.95 --locked
+            cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
+            pushd flutter && flutter pub get && popd
+            flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
+            sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart
+          fi
+
+      - name: Build Setup EXE, Portable EXE, and SHA-256 Manifest
+        shell: pwsh
+        env:
+          VCPKG_ROOT: C:\vcpkg
+        run: |
+          $skipTestsFlag = if ("${{ inputs.run_tests }}" -eq "true") { $false } else { $true }
+          ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -SkipVcpkgInstall -SkipTests:$skipTestsFlag
+
+      - name: Upload Unsigned Release Candidate Artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_UNSIGNED
+          path: |
+            _win_out/RELEASE/DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe
+            _win_out/RELEASE/DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe
+            _win_out/RELEASE/SHA256_MANIFEST.txt
+            _win_out/RELEASE/SIGNING_STATUS.txt
+          if-no-files-found: error
