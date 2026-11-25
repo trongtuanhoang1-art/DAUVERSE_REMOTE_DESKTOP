@@ -139,7 +139,7 @@ impl HeadlessManager {
                 | DisplayEnvironmentState::MonitorCableDisconnected
                 | DisplayEnvironmentState::HeadlessNoPhysicalMonitor
         );
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", not(test)))]
         if should_activate && g.boss_driver_install_approved {
             if let Err(e) = crate::virtual_display_manager::plug_in_headless() {
                 return Err(format!("WINDOWS_IDD_PLUGIN_FAILED: {e}"));
@@ -152,7 +152,7 @@ impl HeadlessManager {
     pub fn on_session_disconnected(&self) -> HeadlessPolicyState {
         let mut g = self.state.lock().unwrap();
         if g.auto_restore_on_disconnect && g.virtual_display_active {
-            #[cfg(target_os = "windows")]
+            #[cfg(all(target_os = "windows", not(test)))]
             if g.boss_driver_install_approved {
                 let _ = crate::virtual_display_manager::reset_all();
             }

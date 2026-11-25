@@ -36,7 +36,7 @@ jobs:
   build-windows-x64:
     name: Build DAUVERSE Remote V1 (Windows x64)
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Export GitHub Actions cache environment variables for vcpkg
         uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6

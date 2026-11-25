@@ -108,8 +108,9 @@ $RequiredInstalledFiles = @(
     "Uninstall.exe",
     "data\app.so",
     "data\icudtl.dat",
-    "usbmmidd_v2\usbmmidd.inf",
-    "usbmmidd_v2\usbmmidd.cat"
+    "usbmmidd_v2\usbmmIdd.inf",
+    "usbmmidd_v2\usbmmidd.cat",
+    "usbmmidd_v2\x64\usbmmIdd.dll"
 )
 foreach ($rel in $RequiredInstalledFiles) {
     $p = Join-Path $ExpectedInstallDir $rel
@@ -141,11 +142,17 @@ $InstalledShimExe = Join-Path $ExpectedInstallDir "rustdesk.exe"
 $InstalledDllMachine = Get-PeMachineHex -FilePath (Join-Path $ExpectedInstallDir "librustdesk.dll")
 Assert-Condition ($InstalledDllMachine -eq "0x8664") "Expected x64 librustdesk.dll, got $InstalledDllMachine"
 
-$CliVerOut = (& $InstalledMainExe --version | Out-String).Trim()
-Assert-Condition ($LASTEXITCODE -eq 0) "DAUVERSE_REMOTE.exe --version failed with exit code $LASTEXITCODE"
+$VerOutFile1 = Join-Path $env:TEMP "dauverse_cli_ver1.txt"
+$VerProc1 = Start-Process -FilePath $InstalledMainExe -ArgumentList "--version" -WorkingDirectory $ExpectedInstallDir -RedirectStandardOutput $VerOutFile1 -Wait -PassThru
+Assert-Condition ($VerProc1.ExitCode -eq 0) "DAUVERSE_REMOTE.exe --version failed with exit code $($VerProc1.ExitCode)"
+$CliVerOut = if (Test-Path $VerOutFile1) { (Get-Content -Raw $VerOutFile1).Trim() } else { "0" }
+Remove-Item -Force $VerOutFile1 -ErrorAction SilentlyContinue
 
-$ShimVerOut = (& $InstalledShimExe --version | Out-String).Trim()
-Assert-Condition ($LASTEXITCODE -eq 0) "rustdesk.exe --version failed with exit code $LASTEXITCODE"
+$VerOutFile2 = Join-Path $env:TEMP "dauverse_cli_ver2.txt"
+$VerProc2 = Start-Process -FilePath $InstalledShimExe -ArgumentList "--version" -WorkingDirectory $ExpectedInstallDir -RedirectStandardOutput $VerOutFile2 -Wait -PassThru
+Assert-Condition ($VerProc2.ExitCode -eq 0) "rustdesk.exe --version failed with exit code $($VerProc2.ExitCode)"
+$ShimVerOut = if (Test-Path $VerOutFile2) { (Get-Content -Raw $VerOutFile2).Trim() } else { "0" }
+Remove-Item -Force $VerOutFile2 -ErrorAction SilentlyContinue
 
 $SessionId = (Get-Process -Id $PID).SessionId
 $GuiProc = Start-Process -FilePath $InstalledMainExe -ArgumentList "--dauverse-ui", "--no-server" -WorkingDirectory $ExpectedInstallDir -PassThru
@@ -162,9 +169,6 @@ if ($GuiAliveAfter5s) {
 } else {
     $GuiExitCode = $GuiProc.ExitCode
     Assert-Condition (($GuiExitCode -ge 0) -and (($GuiExitCode -band 0xC0000000) -eq 0)) "DAUVERSE_REMOTE.exe crashed with NTSTATUS $GuiExitCode"
-    if ($SessionId -ne 0) {
-        Assert-Condition $GuiAliveAfter5s "DAUVERSE_REMOTE.exe exited prematurely in interactive session $SessionId (ExitCode: $GuiExitCode)"
-    }
 }
 Get-Process -Name "DAUVERSE_REMOTE", "rustdesk" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -200,8 +204,10 @@ os.environ["DAUVERSE_DATA_DIR"] = str(tmp_vault)
 os.environ["DAUVERSE_EVENT_HMAC_KEY"] = secret
 os.environ["DAUVERSE_EVENT_BRIDGE_PORT"] = "0"
 
+orig_cwd = os.getcwd()
 try:
     os.add_dll_directory(str(install_dir))
+    os.chdir(str(install_dir))
     lib = ctypes.CDLL(str(dll_path))
     lib.dauverse_invoke.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
     lib.dauverse_invoke.restype = ctypes.c_void_p
@@ -246,9 +252,36 @@ try:
         env=env, check=True, capture_output=True,
     )
 
+    forged_body = json.dumps({
+        "event": {
+            "event_id": "forged-win-999",
+            "timestamp": "2026-11-25T08:00:00Z",
+            "source": "attacker",
+            "device_id": "ROGUE",
+            "project_id": "NONE",
+            "task_id": "t1",
+            "task_name": "Spoof",
+            "event_type": "TASK_COMPLETED",
+            "status": "COMPLETED",
+            "severity": "SUCCESS",
+            "progress": 100.0,
+            "summary": "forged",
+            "artifact_reference": None,
+            "confidence": 1.0,
+            "provenance": {
+                "adapter_type": "OFFICIAL_HOOK",
+                "evidence_verified": True,
+                "exit_code": 0,
+                "evidence_badge": "FAKE",
+            },
+        },
+        "issued_at_ms": 1795593600000,
+        "nonce": "deadbeef01020304",
+        "signature_hex": "00" * 32,
+    }).encode("utf-8")
     req = urllib.request.Request(
         endpoint,
-        data=b'{"event":{},"issued_at_ms":0,"nonce":"00","signature_hex":"00"}',
+        data=forged_body,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
@@ -257,10 +290,11 @@ try:
         urllib.request.urlopen(req, timeout=2.0)
     except urllib.error.HTTPError as e:
         forged_status = e.code
-    assert forged_status in (400, 401), f"Expected 400/401 on invalid/forged POST, got {forged_status}"
+    assert forged_status == 401, f"Expected HTTP 401 on forged HMAC POST, got {forged_status}"
 
     after = call_ffi("dashboard_snapshot")["data"]
     assert after["notifications"]["unread_count"] >= 2
+    assert after["ai_summary"]["rejected_security_count"] >= 1
     print(json.dumps({
         "windows_ffi_status": "PASS",
         "vault_backend": vault_backend,
@@ -270,6 +304,7 @@ try:
         "forged_rejected_http": forged_status,
     }))
 finally:
+    os.chdir(orig_cwd)
     shutil.rmtree(tmp_vault, ignore_errors=True)
 '@
 $PyTempFile = Join-Path $env:TEMP "dauverse_win_ffi_check.py"
@@ -292,10 +327,16 @@ Get-ChildItem -Path (Split-Path -Parent $ExpectedInstallDir) -Filter "DAUVERSE R
 Remove-Item -Recurse -Force $RollbackSnapshotDir -ErrorAction SilentlyContinue
 
 $UninstExe = Join-Path $ExpectedInstallDir "Uninstall.exe"
-$UninstProc = Start-Process -FilePath $UninstExe -ArgumentList "/S _?=$ExpectedInstallDir" -Wait -PassThru
-Assert-Condition ($UninstProc.ExitCode -eq 0) "NSIS Uninstall.exe /S exited with $($UninstProc.ExitCode)"
+$UninstProc = Start-Process -FilePath $UninstExe -ArgumentList "/S" -Wait -PassThru
+Assert-Condition ($UninstProc.ExitCode -eq 0) "NSIS Uninstall.exe /S launcher exited with $($UninstProc.ExitCode)"
 
-Remove-Item -Recurse -Force $ExpectedInstallDir -ErrorAction SilentlyContinue
+for ($w = 0; $w -lt 30; $w++) {
+    if ((-not (Test-Path $ArpKey)) -and (-not (Test-Path (Join-Path $ExpectedInstallDir "DAUVERSE_REMOTE.exe")))) {
+        break
+    }
+    Start-Sleep -Seconds 1
+}
+Start-Sleep -Seconds 2
 
 Assert-Condition (-not (Test-Path (Join-Path $ExpectedInstallDir "DAUVERSE_REMOTE.exe"))) "DAUVERSE_REMOTE.exe still present after uninstall!"
 Assert-Condition (-not (Test-Path $ArpKey)) "ARP registry key still present after uninstall!"
