@@ -231,7 +231,7 @@ try:
     snap = call_ffi("dashboard_snapshot")
     assert snap.get("ok") is True, f"dashboard_snapshot failed: {snap}"
     sec = call_ffi("security_summary")
-    vault_backend = sec["data"]["summary"]["vault_backend"]
+    vault_backend = sec["data"]["summary"]["credential_vault"]
     assert vault_backend == "WINDOWS_DPAPI", f"Expected WINDOWS_DPAPI, got {vault_backend}"
 
     pin_res = call_ffi("set_step_up_pin", {"pin": "WinVault#2026"})
