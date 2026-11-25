@@ -40,12 +40,79 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
+      - name: Configure Git to preserve exact LF bytes before checkout
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
       - name: Checkout full repository history and pinned submodules
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        env:
+          GIT_CONFIG_COUNT: "2"
+          GIT_CONFIG_KEY_0: "core.autocrlf"
+          GIT_CONFIG_VALUE_0: "false"
+          GIT_CONFIG_KEY_1: "core.eol"
+          GIT_CONFIG_VALUE_1: "lf"
         with:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
+
+      - name: Pre-verify exact LF bytes, Codex QA report SHA-256, and packaging inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config --local core.autocrlf false
+          git config --local core.eol lf
+          git -C libs/hbb_common config --local core.autocrlf false
+          git -C libs/hbb_common config --local core.eol lf
+          $ErrorActionPreference = "Continue"
+          git config --global --unset-all core.autocrlf 2>$null
+          git config --global --unset-all core.eol 2>$null
+          $global:LASTEXITCODE = 0
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $ExpectedCodexSha = "f07b61edbd82a376cc5e3f854d72d0cc3331735094bc0631e37fbc9ebc60a913"
+          $ActualCodexSha = (Get-FileHash -LiteralPath "QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualCodexSha -ne $ExpectedCodexSha) {
+            throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedCodexSha, got $ActualCodexSha"
+          }
+          foreach ($reqFile in @(
+            "FINDINGS_REMEDIATION_MATRIX.md",
+            "QA/CODEX_REQA_WINDOWS_RC2_HANDOFF.md",
+            "FEATURE_ACCEPTANCE_MATRIX.md",
+            "HUONG_DAN_BOSS.md",
+            "LICENSE",
+            "LICENCE",
+            "THIRD_PARTY_NOTICES",
+            "LICENSE_COMPLIANCE_REPORT.md",
+            "UPSTREAM_MANIFEST.json",
+            "SBOM.spdx.json"
+          )) {
+            if (-not (Test-Path -LiteralPath $reqFile)) {
+              throw "PREFLIGHT_ABORT: Missing required packaging input: $reqFile"
+            }
+          }
+          foreach ($manifestPath in @("SHA256_MANIFEST.txt", "ARTIFACTS/SHA256_MANIFEST.txt")) {
+            $lines = @(Get-Content -LiteralPath $manifestPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            foreach ($line in $lines) {
+              if ($line -notmatch '^([0-9a-f]{64})\s\s(.+)$') {
+                throw "PREFLIGHT_ABORT: Malformed line in ${manifestPath}: $line"
+              }
+              $exp = $Matches[1]
+              $rel = $Matches[2]
+              if (-not (Test-Path -LiteralPath $rel)) {
+                throw "PREFLIGHT_ABORT: Missing file listed in ${manifestPath}: $rel"
+              }
+              $act = (Get-FileHash -LiteralPath $rel -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($act -ne $exp) {
+                throw "PREFLIGHT_ABORT: SHA-256 mismatch after checkout for $rel (expected $exp, got $act)"
+              }
+            }
+          }
+          Write-Host "PREFLIGHT OK: Codex QA report SHA-256 ($ActualCodexSha) and all $($lines.Count) SHA256_MANIFEST.txt entries verified byte-for-byte."
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
