@@ -183,7 +183,7 @@ try {
     # 5. Run targeted Rust & Flutter verification tests (strict non-zero exit enforcement)
     if (-not $SkipTests) {
         Invoke-Checked "Rust dauverse:: unit & security tests" {
-            & cargo test --locked --release --lib dauverse::
+            & cargo test --locked --features "flutter,hwcodec,vram" --release --lib dauverse::
         }
         Push-Location (Join-Path $RepoRoot "flutter")
         try {

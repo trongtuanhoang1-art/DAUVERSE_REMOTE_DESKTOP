@@ -112,11 +112,22 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
+          if (-not (Get-Command "makensis.exe" -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") -and -not (Test-Path "C:\Program Files\NSIS\makensis.exe")) {
+            choco install nsis -y --no-progress
+          }
           $skipTestsFlag = if ("${{ inputs.run_tests }}" -eq "true") { $false } else { $true }
           ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests:$skipTestsFlag
           if ($LASTEXITCODE -ne 0) { throw "build_windows_release.ps1 exited with $LASTEXITCODE" }
 
-      - name: Upload Unsigned Release Candidate Artifacts
+      - name: Verify Installer, Startup, Windows DPAPI, Rollback & Uninstaller in Sandbox
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          ./scripts/windows/verify_and_package_windows_rc.ps1 -ReleaseDir "$PWD/_win_out/RELEASE" -RepoRoot "$PWD" -LogsDir "$PWD/_win_out/LOGS" -AuthorizedSandbox
+          if ($LASTEXITCODE -ne 0) { throw "verify_and_package_windows_rc.ps1 exited with $LASTEXITCODE" }
+
+      - name: Upload Unsigned Release Candidate Artifacts & Verification Evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_UNSIGNED
@@ -125,4 +136,7 @@ jobs:
             _win_out/RELEASE/DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe
             _win_out/RELEASE/SHA256_MANIFEST.txt
             _win_out/RELEASE/SIGNING_STATUS.txt
+            _win_out/RELEASE/WINDOWS_RC_VERIFICATION_REPORT.json
+            _win_out/RELEASE/WINDOWS_RC_VERIFICATION_REPORT.md
+            _win_out/RELEASE/WINDOWS_NATIVE_BUILD.log
           if-no-files-found: error

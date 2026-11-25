@@ -129,9 +129,9 @@ pub fn active_vault_backend() -> VaultBackend {
 pub fn protect_secret_bytes(plaintext: &[u8], entropy: &[u8]) -> Result<Vec<u8>, String> {
     use std::ptr::null_mut;
     use winapi::um::{
-        dpapi::CryptProtectData,
+        dpapi::{CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN},
         winbase::LocalFree,
-        wincrypt::{CRYPTPROTECT_UI_FORBIDDEN, DATA_BLOB},
+        wincrypt::DATA_BLOB,
     };
 
     let mut in_buf = plaintext.to_vec();
@@ -188,9 +188,9 @@ pub fn protect_secret_bytes(plaintext: &[u8], entropy: &[u8]) -> Result<Vec<u8>,
 pub fn unprotect_secret_bytes(ciphertext: &[u8], entropy: &[u8]) -> Result<Vec<u8>, String> {
     use std::ptr::null_mut;
     use winapi::um::{
-        dpapi::CryptUnprotectData,
+        dpapi::{CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN},
         winbase::LocalFree,
-        wincrypt::{CRYPTPROTECT_UI_FORBIDDEN, DATA_BLOB},
+        wincrypt::DATA_BLOB,
     };
 
     let mut in_buf = ciphertext.to_vec();
