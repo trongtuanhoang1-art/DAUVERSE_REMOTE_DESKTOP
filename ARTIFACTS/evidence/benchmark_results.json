@@ -2,12 +2,12 @@
   "benchmark_scope": "LOCAL_PIPELINE_MICROBENCHMARK_ONLY (NOT End-to-End Remote Desktop Network/NVENC Latency)",
   "cpu_model": "Measured Host CPU",
   "environment_type": "linux (x86_64)",
-  "estimated_1080p_scan_fps_headroom": 631.5,
-  "frame_1080p_dirty_scan_ms": 1.583,
-  "hmac_event_sign_us": 2.453,
+  "estimated_1080p_scan_fps_headroom": 617.4000000000001,
+  "frame_1080p_dirty_scan_ms": 1.62,
+  "hmac_event_sign_us": 2.378,
   "logical_cores": 2,
-  "loopback_tcp_rtt_ms": 0.085,
-  "measured_at_utc": "2026-11-25T17:00:16.824574914+00:00",
+  "loopback_tcp_rtt_ms": 0.072,
+  "measured_at_utc": "2026-11-25T19:25:27.473596908+00:00",
   "notes": "Measures local CPU dirty-tile memory scan, HMAC signing, and 127.0.0.1 socket overhead ONLY. End-to-end Remote Desktop LAN/WAN + RTX 3060 NVENC latency requires 2-PC Windows measurement.",
   "target_reference_profile": "Intel Core i5-12400F + NVIDIA RTX 3060 12GB + 16GB RAM + Windows 11 Pro"
 }
