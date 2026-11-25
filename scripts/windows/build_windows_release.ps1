@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  DAUVERSE REMOTE DESKTOP V1.0 — Reproducible One-Command Windows Native Build & Provenance Script (RC2)
+  DAUVERSE REMOTE DESKTOP V1.0 -- Reproducible One-Command Windows Native Build & Provenance Script (RC2)
 .DESCRIPTION
   Remediates Codex Findings F02, F15 & A02:
     - Enforces strict $LASTEXITCODE checking on every external command (zero masked test/build failures).
@@ -86,7 +86,7 @@ Start-Transcript -Path $LogFile -Append | Out-Null
 $TranscriptActive = $true
 
 try {
-    Write-Host "=== DAUVERSE REMOTE DESKTOP V1.0 — WINDOWS NATIVE BUILD (RC2) ==="
+    Write-Host "=== DAUVERSE REMOTE DESKTOP V1.0 -- WINDOWS NATIVE BUILD (RC2) ==="
     Write-Host "RepoRoot      : $RepoRoot"
     Write-Host "WorkspaceRoot : $WorkspaceRoot"
     Write-Host "CargoTarget   : $CargoTargetDir"
@@ -327,7 +327,7 @@ try {
         $MakensisVersion = (& $MakensisPath /VERSION | Out-String).Trim()
         $NsiScript = Join-Path $RepoRoot "installer\nsis\dauverse_setup.nsi"
         Invoke-Checked "Compile NSIS Setup Installer" {
-            & $MakensisPath "/V3" "/DSTAGING_DIR=$StagingAppDir" "/DOUT_FILE=$SetupOut" $NsiScript
+            & $MakensisPath "/WX" "/V3" "/DSTAGING_DIR=$StagingAppDir" "/DOUT_FILE=$SetupOut" $NsiScript
         }
     } elseif ($AllowPortableAsSetupFallback) {
         $FallbackSetupUsed = $true
@@ -346,10 +346,10 @@ try {
                 & signtool.exe sign /fd SHA256 /f $env:CERT_PFX_PATH /p $env:CERT_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $bin
             }
         }
-        Set-Content -Path $SigningStatusPath -Value "SIGNED_AUTHENTICODE — Signed with caller-provided PFX certificate." -Encoding UTF8
+        Set-Content -Path $SigningStatusPath -Value "SIGNED_AUTHENTICODE -- Signed with caller-provided PFX certificate." -Encoding UTF8
     } else {
-        Write-Host "CODE SIGNING STATUS: UNSIGNED (No CERT_PFX_PATH provided — marked honestly per Section 27)."
-        Set-Content -Path $SigningStatusPath -Value "UNSIGNED — Built cleanly from source without Authenticode PFX certificate. Auto-update is disabled; verify SHA256_MANIFEST.txt before installation." -Encoding UTF8
+        Write-Host "CODE SIGNING STATUS: UNSIGNED (No CERT_PFX_PATH provided -- marked honestly per Section 27)."
+        Set-Content -Path $SigningStatusPath -Value "UNSIGNED -- Built cleanly from source without Authenticode PFX certificate. Auto-update is disabled; verify SHA256_MANIFEST.txt before installation." -Encoding UTF8
     }
 
     # 10. Emit Driver Provenance & License Attestation + Reproducible Build Provenance (F15, A02)
@@ -380,7 +380,13 @@ try {
     $FlutterVerJson = $null
     try { $FlutterVerJson = (& flutter --version --machine | Out-String | ConvertFrom-Json) } catch {}
     $ClangVer = if (Get-Command "clang" -ErrorAction SilentlyContinue) { (& clang --version | Select-Object -First 1 | Out-String).Trim() } else { "NOT_IN_PATH" }
-    $PythonVer = (& python --version 2>&1 | Out-String).Trim()
+    $PrevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $PythonVer = (& python --version 2>&1 | Out-String).Trim()
+    } finally {
+        $ErrorActionPreference = $PrevEap
+    }
 
     $BuildProv = [ordered]@{
         schema_version = 2

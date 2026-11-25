@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  DAUVERSE REMOTE DESKTOP V1.0 — Verified Transactional Windows Rollback & Ownership-Safe Service Recovery (RC2)
+  DAUVERSE REMOTE DESKTOP V1.0 -- Verified Transactional Windows Rollback & Ownership-Safe Service Recovery (RC2)
 .DESCRIPTION
   Remediates Codex Findings F03 & F11:
     1. Pre-validates backup directory integrity BEFORE mutating $InstallDir:
        - Requires and verifies every SHA-256 entry in BACKUP_SHA256_MANIFEST.txt (fail-closed on missing/corrupt/tampered backup).
        - Verifies valid MZ / PE\0\0 headers on backup DAUVERSE_REMOTE.exe and librustdesk.dll.
     2. Verifies SCM ImagePath ownership before stopping or restarting Windows Services (never touches external RustDesk).
-    3. Stops ONLY processes whose ExecutablePath resides under $InstallDir\ (never global Stop-Process by name).
+    3. Stops ONLY processes whose MainModule.FileName resides under $InstallDir\ (never global Stop-Process by name).
     4. Wraps quarantine + restore + post-restore SHA-256 verification in a transactional try/catch that automatically
        restores the quarantined installation if copy or verification fails.
 #>
@@ -19,7 +19,38 @@ param(
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
-Write-Host "=== DAUVERSE REMOTE DESKTOP — VERIFIED TRANSACTIONAL ROLLBACK ==="
+Write-Host "=== DAUVERSE REMOTE DESKTOP -- VERIFIED TRANSACTIONAL ROLLBACK ==="
+
+function Compute-FileSha256Hex {
+    param([Parameter(Mandatory = $true)][string]$FilePath)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $fs = [System.IO.File]::OpenRead($FilePath)
+        try {
+            $bytes = $sha.ComputeHash($fs)
+        } finally {
+            $fs.Dispose()
+        }
+        return [System.BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Clear-ReadOnlyRecursive {
+    param([string]$RootDir)
+    if (-not [System.IO.Directory]::Exists($RootDir)) {
+        return
+    }
+    foreach ($f in [System.IO.Directory]::GetFiles($RootDir, "*", [System.IO.SearchOption]::AllDirectories)) {
+        try {
+            $attr = [System.IO.File]::GetAttributes($f)
+            if (($attr -band [System.IO.FileAttributes]::ReadOnly) -ne 0) {
+                [System.IO.File]::SetAttributes($f, ($attr -band (-bnot [System.IO.FileAttributes]::ReadOnly)))
+            }
+        } catch {}
+    }
+}
 
 function Test-PeBinaryHeader {
     param([Parameter(Mandatory = $true)][string]$FilePath)
@@ -63,8 +94,9 @@ function Assert-BackupManifestIntegrity {
     }
     $Seen = @{}
     foreach ($line in $Lines) {
-        if ($line -notmatch '^([0-9a-fA-F]{64})\s\s(.+)$') {
-            throw "ROLLBACK_VALIDATION_FAILED: Malformed manifest line '$line' in '$ManifestPath'."
+        $cleanLine = $line.TrimStart([char]0xFEFF)
+        if ($cleanLine -notmatch '^([0-9a-fA-F]{64})\s\s(.+)$') {
+            throw "ROLLBACK_VALIDATION_FAILED: Malformed manifest line '$cleanLine' in '$ManifestPath'."
         }
         $expectedHash = $Matches[1].ToLowerInvariant()
         $relPath = $Matches[2].Trim()
@@ -85,7 +117,7 @@ function Assert-BackupManifestIntegrity {
         if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "ROLLBACK_VALIDATION_FAILED: Reparse point / symlink rejected in '$DirectoryToVerify': $relPath"
         }
-        $actualHash = (Get-FileHash -LiteralPath $targetFile -Algorithm SHA256).Hash.ToLowerInvariant()
+        $actualHash = Compute-FileSha256Hex -FilePath $targetFile
         if ($actualHash -ne $expectedHash) {
             throw "ROLLBACK_VALIDATION_FAILED: SHA-256 mismatch for '$relPath' in '$DirectoryToVerify' (expected $expectedHash, got $actualHash)."
         }
@@ -122,7 +154,7 @@ if ([string]::IsNullOrWhiteSpace($InstallDir)) {
         $InstallDir = "$env:ProgramFiles\DAUVERSE Remote Desktop"
     }
 }
-$InstallDir = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd('\')
+$InstallDir = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd('\', '/')
 $InstallPrefix = $InstallDir + "\"
 
 if ([string]::IsNullOrWhiteSpace($BackupDir)) {
@@ -142,13 +174,13 @@ if ([string]::IsNullOrWhiteSpace($BackupDir)) {
 if ([string]::IsNullOrWhiteSpace($BackupDir) -or -not (Test-Path -LiteralPath $BackupDir)) {
     throw "Rollback backup directory not found (checked E:\DAUVERSE_REMOTE_DESKTOP\BACKUP\previous_release and ${InstallDir}.rollback_backup). Nothing was modified."
 }
-$BackupDir = (Resolve-Path -LiteralPath $BackupDir).Path
+$BackupDir = [System.IO.Path]::GetFullPath($BackupDir).TrimEnd('\', '/')
 
 # 1. F11: Pre-validate backup manifest & PE headers BEFORE touching services, processes, or $InstallDir
 $VerifiedCount = Assert-BackupManifestIntegrity -DirectoryToVerify $BackupDir
 Write-Host "Pre-validated $VerifiedCount SHA-256 entries and PE headers in '$BackupDir'."
 
-# 2. F03: Check service ownership BEFORE stopping — preserve any external RustDesk service untouched
+# 2. F03: Check service ownership BEFORE stopping -- preserve any external RustDesk service untouched
 $ServicesToRestart = @()
 foreach ($svcName in @("RustDesk", "DauverseRemoteService")) {
     $Svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
@@ -165,17 +197,33 @@ foreach ($svcName in @("RustDesk", "DauverseRemoteService")) {
     }
 }
 
-# 3. F03: Stop ONLY processes whose ExecutablePath resides under $InstallPrefix
-Get-CimInstance Win32_Process | Where-Object {
-    $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallPrefix, [System.StringComparison]::OrdinalIgnoreCase)
-} | ForEach-Object {
-    Write-Host "Stopping owned process PID $($_.ProcessId) ($($_.ExecutablePath))..."
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+# 3. F03: Stop ONLY processes whose MainModule.FileName resides under $InstallPrefix
+$StoppedAny = $false
+foreach ($proc in [System.Diagnostics.Process]::GetProcesses()) {
+    try {
+        if ($proc.Id -eq $PID) { continue }
+        $exePath = $null
+        try { $exePath = $proc.MainModule.FileName } catch { $exePath = $null }
+        if ($exePath -and $exePath.StartsWith($InstallPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            Write-Host "Stopping owned process PID $($proc.Id) ($exePath)..."
+            try {
+                $proc.Kill()
+                $null = $proc.WaitForExit(5000)
+                $StoppedAny = $true
+            } catch {}
+        }
+    } finally {
+        $proc.Dispose()
+    }
+}
+if ($StoppedAny) {
+    [System.Threading.Thread]::Sleep(400)
 }
 
 # 4. F11: Transactional quarantine + copy + post-restore SHA-256 verification with automatic recovery on failure
 $BrokenHold = $null
 if (Test-Path -LiteralPath $InstallDir) {
+    Clear-ReadOnlyRecursive -RootDir $InstallDir
     $BrokenHold = "${InstallDir}_rollback_hold_" + (Get-Date -Format "yyyyMMdd_HHmmss_fff")
     Move-Item -LiteralPath $InstallDir -Destination $BrokenHold
     Write-Host "Quarantined previous installation at: $BrokenHold"
@@ -188,6 +236,7 @@ try {
 } catch {
     Write-Warning "Rollback copy/verification failed ($($_.Exception.Message)); restoring quarantined installation from '$BrokenHold'..."
     if (Test-Path -LiteralPath $InstallDir) {
+        Clear-ReadOnlyRecursive -RootDir $InstallDir
         Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($BrokenHold -and (Test-Path -LiteralPath $BrokenHold)) {
@@ -197,6 +246,7 @@ try {
 }
 
 if ($BrokenHold -and (-not $KeepQuarantineHold) -and (Test-Path -LiteralPath $BrokenHold)) {
+    Clear-ReadOnlyRecursive -RootDir $BrokenHold
     Remove-Item -LiteralPath $BrokenHold -Recurse -Force -ErrorAction SilentlyContinue
 }
 

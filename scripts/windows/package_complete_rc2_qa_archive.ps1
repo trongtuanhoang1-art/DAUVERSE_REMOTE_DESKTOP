@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  DAUVERSE REMOTE DESKTOP V1.0 — Unified Complete Windows RC2 QA Archive Packager & Clean-Room Auditor
+  DAUVERSE REMOTE DESKTOP V1.0 -- Unified Complete Windows RC2 QA Archive Packager & Clean-Room Auditor
 .DESCRIPTION
   Assembles the single self-contained deliverable DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip
-  covering all 17 mandatory QA handoff items (Codex §4.3, §14 & Task DREMOTE-V1-REMEDIATION-005):
+  covering all 17 mandatory QA handoff items (Codex Sec. 4.3, Sec. 14 & Task DREMOTE-V1-REMEDIATION-005):
     - RELEASE/: SETUP.exe, PORTABLE.exe, librustdesk.dll, dylib_virtual_display.dll, usbmmidd_v2/ (incl. License.txt),
       SIGNING_STATUS.txt, BUILD_PROVENANCE.json, DRIVER_PROVENANCE_AND_LICENSE.json, INITIAL_BUILD_SHA256_MANIFEST.txt
-    - LOGS/: WINDOWS_NATIVE_BUILD.log, WINDOWS_RC_VERIFICATION.log
+    - LOGS/: WINDOWS_NATIVE_BUILD.log, WINDOWS_RC_VERIFICATION.log, GitHub Actions console logs
     - EVIDENCE/: WINDOWS_RC_VERIFICATION_REPORT.{json,md}, QA_HARNESS_NEGATIVE_SELFTEST.json, Linux preflight evidence
     - QA/: Original untouched DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md (SHA-256 f07b61ed...),
       FINDINGS_REMEDIATION_MATRIX.md, CODEX_REQA_WINDOWS_RC2_HANDOFF.md
@@ -26,7 +26,6 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-try { Add-Type -AssemblyName System.IO.Compression.ZipFile } catch {}
 
 $RepoRoot      = (Resolve-Path -LiteralPath $RepoRoot).Path
 $WorkspaceRoot = (Resolve-Path -LiteralPath $WorkspaceRoot).Path
@@ -146,10 +145,18 @@ Assert-PackCondition ($LASTEXITCODE -eq 0) "git bundle create failed with exit c
 $BareVerifyDir = Join-Path $WorkspaceRoot "TEMP\rc2_bare_bundle_verify.git"
 if (Test-Path -LiteralPath $BareVerifyDir) { Remove-Item -LiteralPath $BareVerifyDir -Recurse -Force }
 & git init --bare $BareVerifyDir | Out-Null
-$BundleVerifyOut = (& git -C $BareVerifyDir bundle verify $BundlePath 2>&1 | Out-String)
-Assert-PackCondition ($LASTEXITCODE -eq 0) "Self-contained git bundle verify FAILED in empty bare repo: $BundleVerifyOut"
+
+$PrevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    $BundleVerifyOut = (& git -C $BareVerifyDir bundle verify $BundlePath 2>&1 | Out-String)
+    $BundleVerifyExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $PrevEap
+}
+Assert-PackCondition ($BundleVerifyExit -eq 0) "Self-contained git bundle verify FAILED in empty bare repo (exit $BundleVerifyExit): $BundleVerifyOut"
 Remove-Item -LiteralPath $BareVerifyDir -Recurse -Force -ErrorAction SilentlyContinue
-Set-Content -LiteralPath (Join-Path $PackStage "BUNDLE\BUNDLE_BARE_VERIFY.txt") -Value $BundleVerifyOut -Encoding UTF8
+[System.IO.File]::WriteAllText((Join-Path $PackStage "BUNDLE\BUNDLE_BARE_VERIFY.txt"), $BundleVerifyOut, (New-Object System.Text.UTF8Encoding($false)))
 
 $TempMainZip = Join-Path $WorkspaceRoot "TEMP\rc2_main_src.zip"
 $TempSubZip  = Join-Path $WorkspaceRoot "TEMP\rc2_sub_hbb.zip"
@@ -171,18 +178,18 @@ Remove-Item -LiteralPath $TempSubZip -Force
 
 Write-Host "=== [4/5] Generating Recursive SHA256_MANIFEST.txt & Zipping Complete RC2 Archive ==="
 $StageRootNorm = (Resolve-Path -LiteralPath $PackStage).Path.TrimEnd('\')
-$ManifestEntries = @()
+$ManifestEntries = New-Object System.Collections.Generic.List[string]
 $AllStageFiles = @(Get-ChildItem -LiteralPath $StageRootNorm -Recurse -File | Sort-Object FullName)
 foreach ($f in $AllStageFiles) {
     Assert-PackCondition ((($f.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) "Reparse point / symlink forbidden in QA archive: $($f.FullName)"
     $relPosix = $f.FullName.Substring($StageRootNorm.Length).TrimStart('\').Replace('\', '/')
     if ($relPosix -ne "SHA256_MANIFEST.txt") {
         $sha = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-        $ManifestEntries += "$sha  $relPosix"
+        $ManifestEntries.Add("$sha  $relPosix")
     }
 }
 $ArchiveManifestPath = Join-Path $StageRootNorm "SHA256_MANIFEST.txt"
-Set-Content -LiteralPath $ArchiveManifestPath -Value $ManifestEntries -Encoding UTF8
+[System.IO.File]::WriteAllLines($ArchiveManifestPath, $ManifestEntries, (New-Object System.Text.UTF8Encoding($false)))
 
 $ZipOutPath = Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip"
 if (Test-Path -LiteralPath $ZipOutPath) { Remove-Item -LiteralPath $ZipOutPath -Force }
@@ -194,12 +201,18 @@ try {
         $FilesToZip = @(Get-ChildItem -LiteralPath $StageRootNorm -Recurse -File | Sort-Object FullName)
         foreach ($zf in $FilesToZip) {
             $entryName = $zf.FullName.Substring($StageRootNorm.Length).TrimStart('\').Replace('\', '/')
-            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-                $ZipArchive,
-                $zf.FullName,
-                $entryName,
-                [System.IO.Compression.CompressionLevel]::Optimal
-            ) | Out-Null
+            $entry = $ZipArchive.CreateEntry($entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+            $inStream = [System.IO.File]::OpenRead($zf.FullName)
+            try {
+                $outStream = $entry.Open()
+                try {
+                    $inStream.CopyTo($outStream)
+                } finally {
+                    $outStream.Dispose()
+                }
+            } finally {
+                $inStream.Dispose()
+            }
         }
     } finally {
         $ZipArchive.Dispose()
@@ -230,7 +243,8 @@ try {
     $CleanLines = @(Get-Content -LiteralPath $CleanManifest | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $ListedSet = @{}
     foreach ($cl in $CleanLines) {
-        Assert-PackCondition ($cl -match '^([0-9a-f]{64})\s\s(.+)$') "Malformed manifest line in clean-room: $cl"
+        $clClean = $cl.TrimStart([char]0xFEFF)
+        Assert-PackCondition ($clClean -match '^([0-9a-f]{64})\s\s(.+)$') "Malformed manifest line in clean-room: $clClean"
         $expH = $Matches[1]
         $relP = $Matches[2]
         Assert-PackCondition (-not $ListedSet.ContainsKey($relP)) "Duplicate manifest path in clean-room: $relP"
@@ -273,13 +287,13 @@ $ZipSha = (Get-FileHash -LiteralPath $ZipOutPath -Algorithm SHA256).Hash.ToLower
 $SetupSha = (Get-FileHash -LiteralPath (Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
 $PortSha  = (Get-FileHash -LiteralPath (Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
 
-Set-Content -LiteralPath "$ZipOutPath.sha256" -Value "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip" -Encoding UTF8
+[System.IO.File]::WriteAllText("$ZipOutPath.sha256", "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip`n", (New-Object System.Text.UTF8Encoding($false)))
 $OuterLines = @(
     "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip",
     "$SetupSha  DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe",
     "$PortSha  DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe"
 )
-Set-Content -LiteralPath (Join-Path $OutputDir "FINAL_HANDOFF_SHA256_MANIFEST.txt") -Value $OuterLines -Encoding UTF8
+[System.IO.File]::WriteAllLines((Join-Path $OutputDir "FINAL_HANDOFF_SHA256_MANIFEST.txt"), [string[]]$OuterLines, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "=== COMPLETE RC2 QA ARCHIVE PACKAGED & CLEAN-ROOM VERIFIED ($($CleanLines.Count) inner files, 0 missing, 0 unlisted) ==="
 Get-Content -LiteralPath (Join-Path $OutputDir "FINAL_HANDOFF_SHA256_MANIFEST.txt")

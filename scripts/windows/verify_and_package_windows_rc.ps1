@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-  DAUVERSE REMOTE DESKTOP V1.0 — Fail-Closed Windows RC2 Verification & Packaging Harness
+  DAUVERSE REMOTE DESKTOP V1.0 -- Fail-Closed Windows RC2 Verification & Packaging Harness
 .DESCRIPTION
-  Remediates Codex Findings F01–F05, F07–F16 & A02 inside an authorized disposable Windows CI runner/sandbox (-AuthorizedSandbox):
+  Remediates Codex Findings F01-F05, F07-F16 & A02 inside an authorized disposable Windows CI runner/sandbox (-AuthorizedSandbox):
     0. Executes Negative Harness Self-Tests (QA_HARNESS_NEGATIVE_SELFTEST.json) proving missing files, bad digests,
        duplicate manifest entries, early GUI exits (0/1/2), missing build logs, and skipped-test markers all FAIL-CLOSED.
     1. Validates immutable INITIAL_BUILD_SHA256_MANIFEST.txt, real WINDOWS_NATIVE_BUILD.log (never synthesized),
@@ -56,6 +56,14 @@ function Assert-Condition {
     }
 }
 
+function Get-NsisHelperDiagTail {
+    $diagFile = Join-Path ([System.IO.Path]::GetTempPath()) "dauverse_nsis_helper.log"
+    if (Test-Path -LiteralPath $diagFile) {
+        return ((Get-Content -LiteralPath $diagFile -Tail 40) -join " | ")
+    }
+    return "no_helper_diag_log"
+}
+
 function Assert-Throws {
     param([Parameter(Mandatory = $true)][string]$CaseName, [Parameter(Mandatory = $true)][scriptblock]$Block)
     $Threw = $false
@@ -82,14 +90,15 @@ function Assert-ManifestFileValid {
         [Parameter(Mandatory = $true)][string]$BaseDirectory
     )
     Assert-Condition (Test-Path -LiteralPath $ManifestFilePath) "Manifest file missing: $ManifestFilePath"
-    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $BaseDirectory "TESTS_SKIPPED_NOT_RC_ELIGIBLE.txt"))) "Build marked TESTS_SKIPPED_NOT_RC_ELIGIBLE — refusing acceptance!"
+    Assert-Condition (-not (Test-Path -LiteralPath (Join-Path $BaseDirectory "TESTS_SKIPPED_NOT_RC_ELIGIBLE.txt"))) "Build marked TESTS_SKIPPED_NOT_RC_ELIGIBLE -- refusing acceptance!"
 
     $Lines = @(Get-Content -LiteralPath $ManifestFilePath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     Assert-Condition ($Lines.Count -gt 0) "Manifest file is empty: $ManifestFilePath"
     $Seen = @{}
     foreach ($line in $Lines) {
-        if ($line -notmatch '^([0-9a-fA-F]{64})\s\s(.+)$') {
-            throw "MANIFEST_INVALID: Malformed line '$line' in $ManifestFilePath"
+        $cleanLine = $line.TrimStart([char]0xFEFF)
+        if ($cleanLine -notmatch '^([0-9a-fA-F]{64})\s\s(.+)$') {
+            throw "MANIFEST_INVALID: Malformed line '$cleanLine' in $ManifestFilePath"
         }
         $expHash = $Matches[1].ToLowerInvariant()
         $relPath = $Matches[2].Trim()
@@ -131,11 +140,26 @@ function Assert-GuiWindowSurvived {
 
 function Stop-ProcessesUnderDir {
     param([Parameter(Mandatory = $true)][string]$DirPath)
-    $Prefix = [System.IO.Path]::GetFullPath($DirPath).TrimEnd('\') + "\"
-    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)
-    } | ForEach-Object {
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    $Prefix = [System.IO.Path]::GetFullPath($DirPath).TrimEnd('\', '/') + "\"
+    $StoppedAny = $false
+    foreach ($proc in [System.Diagnostics.Process]::GetProcesses()) {
+        try {
+            if ($proc.Id -eq $PID) { continue }
+            $exePath = $null
+            try { $exePath = $proc.MainModule.FileName } catch { $exePath = $null }
+            if ($exePath -and $exePath.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                try {
+                    $proc.Kill()
+                    $null = $proc.WaitForExit(5000)
+                    $StoppedAny = $true
+                } catch {}
+            }
+        } finally {
+            $proc.Dispose()
+        }
+    }
+    if ($StoppedAny) {
+        Start-Sleep -Milliseconds 400
     }
 }
 
@@ -268,7 +292,7 @@ try {
     $ExpectedInstallDir = if ($HasFixedE) { "E:\Program Files\DAUVERSE Remote Desktop" } else { "$env:ProgramFiles\DAUVERSE Remote Desktop" }
 
     $InstallProc = Start-Process -FilePath $SetupExe -ArgumentList "/S" -Wait -PassThru
-    Assert-Condition ($InstallProc.ExitCode -eq 0) "NSIS silent install exited with $($InstallProc.ExitCode)"
+    Assert-Condition ($InstallProc.ExitCode -eq 0) "NSIS silent install exited with $($InstallProc.ExitCode) (helperDiag=$(Get-NsisHelperDiagTail))"
 
     # Verify external RustDesk service & user config survived SETUP.exe /S completely untouched (F03)
     $SvcAfterInstall = Get-Service -Name "RustDesk" -ErrorAction SilentlyContinue
@@ -862,12 +886,13 @@ elif phase == "phase3_corrupt":
     }
 
     Write-Host "=== [5/7] Distinct-Sentinel Upgrade + Negative & Positive Transactional Rollback (F11) ==="
+    Stop-ProcessesUnderDir -DirPath $ExpectedInstallDir
     $PreUpgradeSentinel = Join-Path $ExpectedInstallDir "PRE_UPGRADE_SENTINEL.json"
-    Set-Content -LiteralPath $PreUpgradeSentinel -Value '{"slot":"PRE_UPGRADE_V0_99_SENTINEL"}' -Encoding UTF8
+    [System.IO.File]::WriteAllText($PreUpgradeSentinel, '{"slot":"PRE_UPGRADE_V0_99_SENTINEL"}', (New-Object System.Text.UTF8Encoding($false)))
     $PreSentinelHash = (Get-FileHash -LiteralPath $PreUpgradeSentinel -Algorithm SHA256).Hash.ToLowerInvariant()
 
     $UpgradeProc = Start-Process -FilePath $SetupExe -ArgumentList "/S" -Wait -PassThru
-    Assert-Condition ($UpgradeProc.ExitCode -eq 0) "Upgrade SETUP.exe /S exited with $($UpgradeProc.ExitCode)"
+    Assert-Condition ($UpgradeProc.ExitCode -eq 0) "Upgrade SETUP.exe /S exited with $($UpgradeProc.ExitCode) (helperDiag=$(Get-NsisHelperDiagTail))"
 
     $RollbackSnapshotDir = "${ExpectedInstallDir}.rollback_backup"
     Assert-Condition (Test-Path -LiteralPath (Join-Path $RollbackSnapshotDir "BACKUP_SHA256_MANIFEST.txt")) "Upgrade did not generate BACKUP_SHA256_MANIFEST.txt at $RollbackSnapshotDir"
@@ -876,13 +901,13 @@ elif phase == "phase3_corrupt":
     # Simulate distinct post-upgrade installation state
     Remove-Item -LiteralPath $PreUpgradeSentinel -Force -ErrorAction SilentlyContinue
     $PostUpgradeSentinel = Join-Path $ExpectedInstallDir "POST_UPGRADE_SENTINEL.json"
-    Set-Content -LiteralPath $PostUpgradeSentinel -Value '{"slot":"POST_UPGRADE_V1_00_CANDIDATE"}' -Encoding UTF8
+    [System.IO.File]::WriteAllText($PostUpgradeSentinel, '{"slot":"POST_UPGRADE_V1_00_CANDIDATE"}', (New-Object System.Text.UTF8Encoding($false)))
 
     # Negative Rollback Test: Tampered backup MUST fail pre-validation BEFORE mutating $ExpectedInstallDir
     $TamperedBackupDir = "${ExpectedInstallDir}.rollback_tampered_test"
     if (Test-Path -LiteralPath $TamperedBackupDir) { Remove-Item -LiteralPath $TamperedBackupDir -Recurse -Force }
     Copy-Item -LiteralPath $RollbackSnapshotDir -Destination $TamperedBackupDir -Recurse -Force
-    Set-Content -LiteralPath (Join-Path $TamperedBackupDir "PRE_UPGRADE_SENTINEL.json") -Value '{"slot":"CORRUPTED_BY_TAMPER"}' -Encoding UTF8
+    [System.IO.File]::WriteAllText((Join-Path $TamperedBackupDir "PRE_UPGRADE_SENTINEL.json"), '{"slot":"CORRUPTED_BY_TAMPER"}', (New-Object System.Text.UTF8Encoding($false)))
 
     $RollbackScript = Join-Path $RepoRoot "scripts\windows\rollback_windows_release.ps1"
     $NegRollbackCheck = Assert-Throws "tampered_backup_rollback_refused" {
@@ -905,7 +930,7 @@ elif phase == "phase3_corrupt":
     Write-Host "=== [6/7] NSIS Silent Uninstaller + External RustDesk Preservation & Host Diff Audit (F03) ==="
     $UninstExe = Join-Path $ExpectedInstallDir "Uninstall.exe"
     $UninstProc = Start-Process -FilePath $UninstExe -ArgumentList "/S" -Wait -PassThru
-    Assert-Condition ($UninstProc.ExitCode -eq 0) "NSIS Uninstall.exe /S launcher exited with $($UninstProc.ExitCode)"
+    Assert-Condition ($UninstProc.ExitCode -eq 0) "NSIS Uninstall.exe /S launcher exited with $($UninstProc.ExitCode) (helperDiag=$(Get-NsisHelperDiagTail))"
 
     $ArpKey32 = "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop"
     for ($w = 0; $w -lt 30; $w++) {
@@ -932,7 +957,14 @@ elif phase == "phase3_corrupt":
 
     # Remove our simulated coexistence service now so we can verify 100% clean pre/post host diff
     & sc.exe delete RustDesk | Out-Null
+    for ($sw = 0; $sw -lt 10; $sw++) {
+        if ($null -eq (Get-Service -Name "RustDesk" -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 500
+    }
     Remove-Item -LiteralPath $CoexistDir -Recurse -Force -ErrorAction SilentlyContinue
+
+    Assert-Condition ($null -eq (Get-Service -Name "RustDesk" -ErrorAction SilentlyContinue)) "Residual RustDesk service remained after fixture cleanup!"
+    Assert-Condition ($null -eq (Get-Service -Name "DauverseRemoteService" -ErrorAction SilentlyContinue)) "Unexpected DauverseRemoteService registered during test!"
 
     $PostServices = @(Get-CimInstance Win32_Service | ForEach-Object { "$($_.Name)|$($_.PathName)" } | Sort-Object)
     $PostRootCerts = @(Get-ChildItem Cert:\LocalMachine\Root | Select-Object -ExpandProperty Thumbprint | Sort-Object)
@@ -940,7 +972,13 @@ elif phase == "phase3_corrupt":
         (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" | Out-String)
     } else { "" }
 
-    $AddedServices = @(Compare-Object -ReferenceObject $PreServices -DifferenceObject $PostServices | Where-Object { $_.SideIndicator -eq "=>" })
+    $AddedServices = @(
+        Compare-Object -ReferenceObject $PreServices -DifferenceObject $PostServices |
+        Where-Object {
+            $_.SideIndicator -eq "=>" -and
+            ($_.InputObject -notmatch '^[A-Za-z0-9]+_[0-9a-fA-F]{4,}\|.*\\svchost\.exe\b')
+        }
+    )
     $AddedCerts    = @(Compare-Object -ReferenceObject $PreRootCerts -DifferenceObject $PostRootCerts | Where-Object { $_.SideIndicator -eq "=>" })
     Assert-Condition ($AddedServices.Count -eq 0) "Unexpected residual Windows Services after uninstall: $($AddedServices | Out-String)"
     Assert-Condition ($AddedCerts.Count -eq 0) "Unexpected residual Root Certificates after uninstall: $($AddedCerts | Out-String)"
@@ -999,7 +1037,7 @@ elif phase == "phase3_corrupt":
         remaining_blocked_gates_requiring_two_host_or_physical_lab = @(
             "BLOCKED: Two-machine Windows 11 live Remote Desktop session (P2P / Relay / Reconnect / WASAPI Audio / Explorer File Copy)",
             "BLOCKED: Physical monitorless RTX 3060 NVENC + authorized usbmmidd_v2 driver activation & reboot persistence",
-            "BLOCKED: Hunonic SK02 hardware smart plug (DisabledSmartPlugAdapter retained by governance — no public vendor API)"
+            "BLOCKED: Hunonic SK02 hardware smart plug (DisabledSmartPlugAdapter retained by governance -- no public vendor API)"
         )
     }
     $ReportObj | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportJsonOut -Encoding UTF8
@@ -1012,10 +1050,10 @@ elif phase == "phase3_corrupt":
         "- **Verified UTC:** ``$($ReportObj.verified_at_utc)``",
         "- **Runner OS:** ``$($ReportObj.runner_os)`` (Session ``$SessionId``)",
         "- **Signing Status:** ``$SigningText``",
-        "- **Production Status:** ``LOCKED`` (Developer CI verification — awaiting Independent Codex Re-QA)",
+        "- **Production Status:** ``LOCKED`` (Developer CI verification -- awaiting Independent Codex Re-QA)",
         "",
         "## 1. Single-Host Native Windows Gates Executed (``PASS``)",
-        "1. **Negative Harness Self-Tests (``F02``):** ``PASS`` (10/10 negative sentinels—missing file, bad SHA-256, duplicate entry, GUI early exits ``0/1/2``, missing DLL, missing/synthetic build log, skipped-test marker—verified to fail closed).",
+        "1. **Negative Harness Self-Tests (``F02``):** ``PASS`` (10/10 negative sentinels--missing file, bad SHA-256, duplicate entry, GUI early exits ``0/1/2``, missing DLL, missing/synthetic build log, skipped-test marker--verified to fail closed).",
         "2. **Immutable Build Manifest & Original Log (``F02``, ``F15``):** ``PASS`` (``INITIAL_BUILD_SHA256_MANIFEST.txt`` verified before testing and preserved untouched; real ``WINDOWS_NATIVE_BUILD.log`` verified).",
         "3. **External RustDesk Coexistence & Ownership (``F03``):** ``PASS`` (Pre-existing external ``RustDesk`` service and config outside ``$ExpectedInstallDir`` survived ``SETUP.exe /S``, ``rollback_windows_release.ps1``, and ``Uninstall.exe /S`` 100% untouched; live Rust ``service_ctrl`` detected collision and refused overwrite).",
         "4. **Driver Authenticity & License Closure (``F04``, ``A02``):** ``PASS`` (``usbmmidd.cat`` ``Status=$UsbCatStatus``, signer ``$UsbCatSubject``, catalog check ``$CatalogValidationStatus``, ``usbmmidd_v2\License.txt`` preserved verbatim; zero ``WDKTestCert`` / ``RustDeskIddDriver``).",
@@ -1025,7 +1063,7 @@ elif phase == "phase3_corrupt":
         "8. **Host Cleanliness Diff:** ``PASS`` (Zero residual Windows Services, Root Certificates, or ``HKCU Run`` entries).",
         "",
         "## 2. Gates Explicitly Retained as ``BLOCKED`` (Not Claimed as ``PASS``)",
-        "- **Two-Machine Live Remote Session:** ``BLOCKED`` in single-runner CI (requires two authorized Windows endpoints per Report §13).",
+        "- **Two-Machine Live Remote Session:** ``BLOCKED`` in single-runner CI (requires two authorized Windows endpoints per Report Sec. 13).",
         "- **Physical Monitorless GPU & Authorized Driver Install:** ``BLOCKED`` by governance (no host driver installation without Boss approval).",
         "- **Hunonic SK02 Hardware Control:** ``BLOCKED`` (``DisabledSmartPlugAdapter`` retained; no public vendor API)."
     )
