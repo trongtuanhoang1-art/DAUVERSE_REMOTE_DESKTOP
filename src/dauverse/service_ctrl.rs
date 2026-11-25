@@ -187,6 +187,13 @@ impl ServiceController {
         if !owner_authenticated {
             return Err("AUTH_REQUIRED_FOR_UNATTENDED_CONFIG".to_owned());
         }
+        let current = self.status();
+        if enable && current.external_service_collision_detected {
+            return Err(
+                "SERVICE_COLLISION_EXTERNAL_RUSTDESK_DETECTED: refusing unattended activation while an external RustDesk Windows service owns SCM 'RustDesk'"
+                    .to_owned(),
+            );
+        }
         let target_mode = if enable { "password" } else { "click" };
         hbb_common::config::Config::set_option("approve-mode".to_owned(), target_mode.to_owned());
         let actual_mode = hbb_common::config::Config::get_option("approve-mode");

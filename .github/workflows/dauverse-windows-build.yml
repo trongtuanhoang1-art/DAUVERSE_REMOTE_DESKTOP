@@ -40,13 +40,6 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
-      - name: Export GitHub Actions cache environment variables for vcpkg
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
       - name: Checkout full repository history and pinned submodules
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -70,6 +63,14 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           prefix-key: dauverse-win-x64-rc2
+          cache-on-failure: true
+
+      - name: Export GitHub Actions cache environment variables for vcpkg
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Setup vcpkg with GitHub Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -84,6 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           "$VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+          echo "ACTIONS_CACHE_URL=" >> "$GITHUB_ENV"
 
       - name: Install Flutter SDK (${{ env.FLUTTER_VERSION }})
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0

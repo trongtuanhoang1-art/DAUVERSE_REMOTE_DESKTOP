@@ -26,6 +26,7 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+try { Add-Type -AssemblyName System.IO.Compression.ZipFile } catch {}
 
 $RepoRoot      = (Resolve-Path -LiteralPath $RepoRoot).Path
 $WorkspaceRoot = (Resolve-Path -LiteralPath $WorkspaceRoot).Path

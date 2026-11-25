@@ -308,11 +308,86 @@ try {
     Assert-Condition ($UsbCatStatus -eq "Valid") "Expected Valid Authenticode status on usbmmidd.cat, got: $UsbCatStatus ($($UsbCatSig.StatusMessage))"
     Assert-Condition ($UsbCatSubject -match "Microsoft Windows Hardware Compatibility Publisher") "Expected Microsoft WHQL signer on usbmmidd.cat, got: $UsbCatSubject"
 
-    $CatCheckDll = Test-FileCatalog -CatalogFilePath $InstalledCatPath -Path (Join-Path $InstalledDriverDir "x64\usbmmIdd.dll") -Detailed
-    $CatCheckInf = Test-FileCatalog -CatalogFilePath $InstalledCatPath -Path (Join-Path $InstalledDriverDir "usbmmIdd.inf") -Detailed
-    $CatalogValidationStatus = "DLL=$([string]$CatCheckDll.Status);INF=$([string]$CatCheckInf.Status)"
-    Assert-Condition ([string]$CatCheckDll.Status -eq "Valid") "usbmmidd.cat failed catalog membership validation for x64\usbmmIdd.dll: $($CatCheckDll | Out-String)"
-    Assert-Condition ([string]$CatCheckInf.Status -eq "Valid") "usbmmidd.cat failed catalog membership validation for usbmmIdd.inf: $($CatCheckInf | Out-String)"
+    if (-not ("DauverseWinTrustCatalog" -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public static class DauverseWinTrustCatalog {
+    [DllImport("wintrust.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CryptCATAdminAcquireContext2(
+        out IntPtr phCatAdmin, IntPtr pgSubsystem, string pwszHashAlgorithm, IntPtr pStrongHashPolicy, uint dwFlags);
+
+    [DllImport("wintrust.dll", SetLastError = true)]
+    private static extern bool CryptCATAdminReleaseContext(IntPtr hCatAdmin, uint dwFlags);
+
+    [DllImport("wintrust.dll", SetLastError = true)]
+    private static extern bool CryptCATAdminCalcHashFromFileHandle2(
+        IntPtr hCatAdmin, IntPtr hFile, ref uint pcbHash, byte[] pbHash, uint dwFlags);
+
+    [DllImport("wintrust.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CryptCATOpen(
+        string pwszFileName, uint fdwOpenFlags, IntPtr hProv, uint dwPublicVersion, uint dwEncodingType);
+
+    [DllImport("wintrust.dll", SetLastError = true)]
+    private static extern bool CryptCATClose(IntPtr hCatalog);
+
+    [DllImport("wintrust.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CryptCATGetMemberInfo(IntPtr hCatalog, string pwszReferenceTag);
+
+    public static string VerifyMemberSha256InCatalog(string catalogPath, string targetFilePath) {
+        IntPtr hCatAdmin = IntPtr.Zero;
+        if (!CryptCATAdminAcquireContext2(out hCatAdmin, IntPtr.Zero, "SHA256", IntPtr.Zero, 0)) {
+            throw new InvalidOperationException("CryptCATAdminAcquireContext2(SHA256) failed: " + Marshal.GetLastWin32Error());
+        }
+        try {
+            string hexTag;
+            using (FileStream fs = File.OpenRead(targetFilePath)) {
+                uint cbHash = 0;
+                CryptCATAdminCalcHashFromFileHandle2(hCatAdmin, fs.SafeFileHandle.DangerousGetHandle(), ref cbHash, null, 0);
+                if (cbHash == 0) {
+                    throw new InvalidOperationException("CryptCATAdminCalcHashFromFileHandle2 size query failed: " + Marshal.GetLastWin32Error());
+                }
+                byte[] hashBytes = new byte[cbHash];
+                if (!CryptCATAdminCalcHashFromFileHandle2(hCatAdmin, fs.SafeFileHandle.DangerousGetHandle(), ref cbHash, hashBytes, 0)) {
+                    throw new InvalidOperationException("CryptCATAdminCalcHashFromFileHandle2 hash failed: " + Marshal.GetLastWin32Error());
+                }
+                StringBuilder sb = new StringBuilder((int)cbHash * 2);
+                for (int i = 0; i < cbHash; i++) {
+                    sb.Append(hashBytes[i].ToString("X2"));
+                }
+                hexTag = sb.ToString();
+            }
+
+            IntPtr hCat = CryptCATOpen(catalogPath, 2, IntPtr.Zero, 0, 0);
+            if (hCat == IntPtr.Zero || hCat == new IntPtr(-1)) {
+                throw new InvalidOperationException("CryptCATOpen failed on " + catalogPath + ": " + Marshal.GetLastWin32Error());
+            }
+            try {
+                IntPtr memberInfo = CryptCATGetMemberInfo(hCat, hexTag);
+                if (memberInfo == IntPtr.Zero) {
+                    throw new InvalidOperationException("Member SHA256 tag " + hexTag + " NOT FOUND in WHQL catalog " + catalogPath);
+                }
+                return "VALID_WINTRUST_MEMBER_SHA256:" + hexTag;
+            } finally {
+                CryptCATClose(hCat);
+            }
+        } finally {
+            CryptCATAdminReleaseContext(hCatAdmin, 0);
+        }
+    }
+}
+"@
+    }
+
+    $CatTagDll = [DauverseWinTrustCatalog]::VerifyMemberSha256InCatalog($InstalledCatPath, (Join-Path $InstalledDriverDir "x64\usbmmIdd.dll"))
+    $CatTagInf = [DauverseWinTrustCatalog]::VerifyMemberSha256InCatalog($InstalledCatPath, (Join-Path $InstalledDriverDir "usbmmIdd.inf"))
+    $Null = Assert-Throws "non_member_binary_rejected_by_whql_catalog" {
+        [DauverseWinTrustCatalog]::VerifyMemberSha256InCatalog($InstalledCatPath, (Join-Path $ExpectedInstallDir "DAUVERSE_REMOTE.exe"))
+    }
+    $CatalogValidationStatus = "DLL=$CatTagDll;INF=$CatTagInf;NON_MEMBER_REJECTED=PASS"
     Assert-Condition ((Get-FileHash -LiteralPath (Join-Path $InstalledDriverDir "License.txt") -Algorithm SHA256).Hash.ToLowerInvariant() -eq "44c73fc4110979899dbb5054662de581f7d4350939f19bb2d50574f613314ba2") "usbmmidd_v2\License.txt SHA-256 mismatch!"
 
     $ArpKey64 = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop"
