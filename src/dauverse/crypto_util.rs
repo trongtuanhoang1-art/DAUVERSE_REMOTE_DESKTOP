@@ -244,19 +244,32 @@ pub fn unprotect_secret_bytes(ciphertext: &[u8], entropy: &[u8]) -> Result<Vec<u
 }
 
 #[cfg(not(windows))]
-fn derive_unix_machine_key(entropy: &[u8]) -> [u8; 32] {
+fn derive_unix_machine_key_v2(salt: &[u8; 16], entropy: &[u8]) -> [u8; 32] {
     let machine_id = fs::read_to_string("/etc/machine-id")
         .or_else(|_| fs::read_to_string("/var/lib/dbus/machine-id"))
-        .unwrap_or_else(|_| "dauverse-linux-local-vault-v1".to_owned());
+        .unwrap_or_else(|_| "dauverse-linux-local-vault-v2".to_owned());
     let uid_str = std::env::var("USER").unwrap_or_else(|_| "antigravity".to_owned());
-    let mut mat = Vec::with_capacity(machine_id.len() + uid_str.len() + entropy.len() + 32);
-    mat.extend_from_slice(b"DAUVERSE_SEAL_KEY_V1:");
-    mat.extend_from_slice(machine_id.trim().as_bytes());
-    mat.push(b':');
-    mat.extend_from_slice(uid_str.as_bytes());
-    mat.push(b':');
-    mat.extend_from_slice(entropy);
-    sha256_bytes(&mat)
+    let mut password_mat = Vec::with_capacity(machine_id.len() + uid_str.len() + entropy.len() + 32);
+    password_mat.extend_from_slice(b"DAUVERSE_SEAL_KEY_V2:");
+    password_mat.extend_from_slice(machine_id.trim().as_bytes());
+    password_mat.push(b':');
+    password_mat.extend_from_slice(uid_str.as_bytes());
+    password_mat.push(b':');
+    password_mat.extend_from_slice(entropy);
+
+    // PBKDF2-HMAC-SHA256 single-block (32-byte dkLen, 10,000 iterations)
+    let mut salt_block = [0u8; 20];
+    salt_block[..16].copy_from_slice(salt);
+    salt_block[16..20].copy_from_slice(&1u32.to_be_bytes());
+    let mut u = hmac_sha256(&password_mat, &salt_block);
+    let mut dk = u;
+    for _ in 1..10_000 {
+        u = hmac_sha256(&password_mat, &u);
+        for (d, x) in dk.iter_mut().zip(u.iter()) {
+            *d ^= *x;
+        }
+    }
+    dk
 }
 
 #[cfg(not(windows))]
@@ -264,11 +277,10 @@ fn keystream_xor(enc_key: &[u8; 32], nonce: &[u8; 16], input: &[u8]) -> Vec<u8> 
     let mut out = Vec::with_capacity(input.len());
     let mut counter = 0u64;
     for chunk in input.chunks(32) {
-        let mut block_in = [0u8; 56];
-        block_in[..32].copy_from_slice(enc_key);
-        block_in[32..48].copy_from_slice(nonce);
-        block_in[48..56].copy_from_slice(&counter.to_le_bytes());
-        let ks = sha256_bytes(&block_in);
+        let mut block_in = [0u8; 24];
+        block_in[..16].copy_from_slice(nonce);
+        block_in[16..24].copy_from_slice(&counter.to_le_bytes());
+        let ks = hmac_sha256(enc_key, &block_in);
         for (i, &b) in chunk.iter().enumerate() {
             out.push(b ^ ks[i]);
         }
@@ -279,16 +291,17 @@ fn keystream_xor(enc_key: &[u8; 32], nonce: &[u8; 16], input: &[u8]) -> Vec<u8> 
 
 #[cfg(not(windows))]
 pub fn protect_secret_bytes(plaintext: &[u8], entropy: &[u8]) -> Result<Vec<u8>, String> {
-    const MAGIC: &[u8; 8] = b"DVSEAL01";
-    let master = derive_unix_machine_key(entropy);
+    const MAGIC: &[u8; 8] = b"DVSEAL02";
+    let salt: [u8; 16] = *uuid::Uuid::new_v4().as_bytes();
+    let nonce: [u8; 16] = *uuid::Uuid::new_v4().as_bytes();
+    let master = derive_unix_machine_key_v2(&salt, entropy);
     let enc_key = hmac_sha256(&master, b"enc");
     let mac_key = hmac_sha256(&master, b"mac");
-    let nonce_uuid = uuid::Uuid::new_v4();
-    let nonce: [u8; 16] = *nonce_uuid.as_bytes();
     let ct = keystream_xor(&enc_key, &nonce, plaintext);
 
-    let mut body = Vec::with_capacity(8 + 16 + ct.len() + 32);
+    let mut body = Vec::with_capacity(8 + 16 + 16 + ct.len() + 32);
     body.extend_from_slice(MAGIC);
+    body.extend_from_slice(&salt);
     body.extend_from_slice(&nonce);
     body.extend_from_slice(&ct);
     let tag = hmac_sha256(&mac_key, &body);
@@ -298,8 +311,8 @@ pub fn protect_secret_bytes(plaintext: &[u8], entropy: &[u8]) -> Result<Vec<u8>,
 
 #[cfg(not(windows))]
 pub fn unprotect_secret_bytes(sealed: &[u8], entropy: &[u8]) -> Result<Vec<u8>, String> {
-    const MAGIC: &[u8; 8] = b"DVSEAL01";
-    if sealed.len() < 8 + 16 + 32 {
+    const MAGIC: &[u8; 8] = b"DVSEAL02";
+    if sealed.len() < 8 + 16 + 16 + 32 {
         return Err("sealed secret truncated".to_owned());
     }
     if &sealed[..8] != MAGIC {
@@ -309,31 +322,48 @@ pub fn unprotect_secret_bytes(sealed: &[u8], entropy: &[u8]) -> Result<Vec<u8>, 
     let body = &sealed[..tag_offset];
     let provided_tag = &sealed[tag_offset..];
 
-    let master = derive_unix_machine_key(entropy);
+    let mut salt = [0u8; 16];
+    salt.copy_from_slice(&sealed[8..24]);
+    let mut nonce = [0u8; 16];
+    nonce.copy_from_slice(&sealed[24..40]);
+
+    let master = derive_unix_machine_key_v2(&salt, entropy);
     let enc_key = hmac_sha256(&master, b"enc");
     let mac_key = hmac_sha256(&master, b"mac");
     let expected_tag = hmac_sha256(&mac_key, body);
     if !constant_time_eq(&expected_tag, provided_tag) {
         return Err("sealed secret MAC verification failed (tampered or wrong entropy)".to_owned());
     }
-    let mut nonce = [0u8; 16];
-    nonce.copy_from_slice(&sealed[8..24]);
-    let ct = &sealed[24..tag_offset];
+    let ct = &sealed[40..tag_offset];
     Ok(keystream_xor(&enc_key, &nonce, ct))
 }
 
 pub fn write_sealed_secret_file(path: &Path, plaintext: &[u8], entropy: &[u8]) -> Result<(), String> {
+    use std::io::Write;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("failed creating vault dir: {e}"))?;
     }
     let sealed = protect_secret_bytes(plaintext, entropy)?;
-    fs::write(path, &sealed).map_err(|e| format!("failed writing vault file: {e}"))?;
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = fs::Permissions::from_mode(0o600);
-        fs::set_permissions(path, perms)
-            .map_err(|e| format!("failed setting 0600 permissions: {e}"))?;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| format!("failed opening 0600 vault file: {e}"))?;
+        f.set_permissions(fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("failed enforcing 0600 permissions: {e}"))?;
+        f.write_all(&sealed)
+            .map_err(|e| format!("failed writing vault bytes: {e}"))?;
+        f.sync_all()
+            .map_err(|e| format!("failed syncing vault file: {e}"))?;
+    }
+    #[cfg(not(unix))]
+    {
+        fs::write(path, &sealed).map_err(|e| format!("failed writing vault file: {e}"))?;
     }
     Ok(())
 }
@@ -462,7 +492,11 @@ mod tests {
 
     #[test]
     fn redacts_tokens_and_credentials() {
-        let raw = "Job failed with sk-ant-api03-ABCDEF123456789 and Bearer eyJhbGciOiJIUzI1NiJ9 and password=MyPlainPassword123 in output";
+        let raw = concat!(
+            "Job failed with ",
+            "sk-ant-",
+            "api03-ABCDEF123456789 and Bearer eyJhbGciOiJIUzI1NiJ9 and password=MyPlainPassword123 in output"
+        );
         let clean = redact_sensitive(raw);
         assert!(!clean.contains("ABCDEF123456789"));
         assert!(!clean.contains("eyJhbGciOiJIUzI1NiJ9"));

@@ -21,6 +21,7 @@ pub struct AiProcessTelemetry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareSnapshot {
     pub captured_at_utc: String,
+    pub telemetry_scope: String,
     pub cpu_brand: String,
     pub cpu_usage_pct: f32,
     pub cpu_temp_c: Option<f32>,
@@ -91,6 +92,7 @@ pub struct HardwareMonitor {
     net_tracker: Mutex<NetRateTracker>,
     thresholds: Mutex<HardwareThresholds>,
     history: Mutex<VecDeque<HardwareSnapshot>>,
+    gpu_cache: Mutex<Option<(Instant, NvidiaGpuReading)>>,
 }
 
 impl HardwareMonitor {
@@ -109,6 +111,7 @@ impl HardwareMonitor {
             }),
             thresholds: Mutex::new(HardwareThresholds::default()),
             history: Mutex::new(VecDeque::with_capacity(120)),
+            gpu_cache: Mutex::new(None),
         }
     }
 
@@ -124,6 +127,14 @@ impl HardwareMonitor {
     }
 
     pub fn sample_now(&self) -> (HardwareSnapshot, Vec<HardwareAlert>) {
+        #[cfg(target_os = "windows")]
+        let svc_ok = crate::platform::windows::is_self_service_running();
+        #[cfg(not(target_os = "windows"))]
+        let svc_ok = false;
+        self.sample_now_with_service_health(svc_ok)
+    }
+
+    pub fn sample_now_with_service_health(&self, service_healthy: bool) -> (HardwareSnapshot, Vec<HardwareAlert>) {
         let cfg = self.thresholds.lock().unwrap().clone();
         let (
             cpu_brand,
@@ -239,7 +250,7 @@ impl HardwareMonitor {
             }
         };
 
-        let gpu = Self::query_nvidia_smi();
+        let gpu = self.query_nvidia_smi_cached();
 
         let ram_total_gb = (ram_total as f64) / (1024.0 * 1024.0 * 1024.0);
         let ram_used_gb = (ram_used as f64) / (1024.0 * 1024.0 * 1024.0);
@@ -265,6 +276,7 @@ impl HardwareMonitor {
 
         let snapshot = HardwareSnapshot {
             captured_at_utc: chrono::Utc::now().to_rfc3339(),
+            telemetry_scope: "LOCAL_HOST_SENSORS".to_owned(),
             cpu_brand,
             cpu_usage_pct: (cpu_usage_pct * 10.0).round() / 10.0,
             cpu_temp_c,
@@ -281,13 +293,13 @@ impl HardwareMonitor {
             disk_used_gb: (disk_used_gb * 100.0).round() / 100.0,
             disk_free_gb: (disk_free_gb * 100.0).round() / 100.0,
             disk_total_gb: (disk_total_gb * 100.0).round() / 100.0,
-            disk_usage_pct: (disk_pct * 10.0).round() / 10.0,
+            disk_usage_pct: (disk_pct * 10.0).round() / 100.0,
             disk_activity_read_bytes: disk_read_total,
             disk_activity_write_bytes: disk_write_total,
             net_upload_bps: net_up_bps,
             net_download_bps: net_down_bps,
             system_uptime_secs: uptime_secs,
-            remote_service_healthy: true,
+            remote_service_healthy: service_healthy,
             ai_processes: ai_procs,
         };
 
@@ -369,19 +381,40 @@ impl HardwareMonitor {
         }
     }
 
+    fn query_nvidia_smi_cached(&self) -> NvidiaGpuReading {
+        {
+            let cache = self.gpu_cache.lock().unwrap();
+            if let Some((ts, ref cached)) = *cache {
+                if ts.elapsed().as_secs() < 4 {
+                    return cached.clone();
+                }
+            }
+        }
+        let fresh = Self::query_nvidia_smi();
+        let mut cache = self.gpu_cache.lock().unwrap();
+        *cache = Some((Instant::now(), fresh.clone()));
+        fresh
+    }
+
     fn query_nvidia_smi() -> NvidiaGpuReading {
-        let output = Command::new("nvidia-smi")
-            .args([
-                "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw",
-                "--format=csv,noheader,nounits",
-            ])
-            .output();
+        let mut cmd = Command::new("nvidia-smi");
+        cmd.args([
+            "--query-gpu=name,utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw",
+            "--format=csv,noheader,nounits",
+        ]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let output = cmd.output();
         let Ok(out) = output else {
             return NvidiaGpuReading::default();
         };
         if !out.status.success() {
             return NvidiaGpuReading::default();
-        }
+        };
         let line = String::from_utf8_lossy(&out.stdout);
         let Some(first_line) = line.lines().next() else {
             return NvidiaGpuReading::default();
@@ -389,7 +422,7 @@ impl HardwareMonitor {
         let parts: Vec<&str> = first_line.split(',').map(|s| s.trim()).collect();
         if parts.len() < 6 {
             return NvidiaGpuReading::default();
-        }
+        };
         NvidiaGpuReading {
             model: Some(parts[0].to_owned()),
             util_pct: parts[1].parse::<f32>().ok(),
@@ -401,7 +434,7 @@ impl HardwareMonitor {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct NvidiaGpuReading {
     model: Option<String>,
     util_pct: Option<f32>,
@@ -419,6 +452,7 @@ mod tests {
     fn collects_real_host_hardware_metrics_and_evaluates_thresholds() {
         let mon = HardwareMonitor::new();
         let (mut snap, _) = mon.sample_now();
+        assert_eq!(snap.telemetry_scope, "LOCAL_HOST_SENSORS");
         assert!(snap.ram_total_gb > 0.1);
         assert!(snap.system_uptime_secs > 0);
         assert!(!snap.cpu_brand.is_empty());

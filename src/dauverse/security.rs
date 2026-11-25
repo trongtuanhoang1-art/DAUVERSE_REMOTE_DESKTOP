@@ -131,6 +131,7 @@ pub struct DeviceShieldSecurityCenter {
     rate_limiter: Mutex<HashMap<String, AuthAttemptState>>,
     seen_auth_nonces: Mutex<VecDeque<String>>,
     audit_chain: Mutex<Vec<AuditLogEntry>>,
+    audit_log_path: Option<std::path::PathBuf>,
 }
 
 const MAX_FAILED_ATTEMPTS_PER_MIN: usize = 5;
@@ -139,6 +140,21 @@ const BASE_LOCKOUT_MS: i64 = 120_000;
 
 impl DeviceShieldSecurityCenter {
     pub fn new() -> Self {
+        Self::with_audit_log_path(None)
+    }
+
+    pub fn with_audit_log_path(audit_path: Option<std::path::PathBuf>) -> Self {
+        let mut loaded_chain: Vec<AuditLogEntry> = Vec::new();
+        if let Some(ref p) = audit_path {
+            if let Ok(raw) = std::fs::read_to_string(p) {
+                for line in raw.lines() {
+                    if let Ok(entry) = serde_json::from_str::<AuditLogEntry>(line) {
+                        loaded_chain.push(entry);
+                    }
+                }
+            }
+        }
+        let had_existing = !loaded_chain.is_empty();
         let center = Self {
             allowlist_enforced: Mutex::new(true),
             mfa_required_for_unattended: Mutex::new(false),
@@ -147,17 +163,20 @@ impl DeviceShieldSecurityCenter {
             sessions: Mutex::new(HashMap::new()),
             rate_limiter: Mutex::new(HashMap::new()),
             seen_auth_nonces: Mutex::new(VecDeque::with_capacity(512)),
-            audit_chain: Mutex::new(Vec::new()),
+            audit_chain: Mutex::new(loaded_chain),
+            audit_log_path: audit_path,
         };
-        center.append_audit(
-            "SYSTEM",
-            "SECURITY_CENTER_INIT",
-            "OK",
-            &format!(
-                "Initialized Device Shield (vault={}, allowlist=true, telemetry=false)",
-                active_vault_backend().as_str()
-            ),
-        );
+        if !had_existing {
+            center.append_audit(
+                "SYSTEM",
+                "SECURITY_CENTER_INIT",
+                "OK",
+                &format!(
+                    "Initialized Device Shield (vault={}, allowlist=true, telemetry=false)",
+                    active_vault_backend().as_str()
+                ),
+            );
+        }
         center
     }
 
@@ -184,8 +203,81 @@ impl DeviceShieldSecurityCenter {
             "revoked_devices_count": devices.iter().filter(|d| d.revoked).count(),
             "active_sessions_count": active_sessions,
             "audit_chain_intact": chain_ok,
+            "step_up_pin_configured": self.is_step_up_passcode_configured(),
             "trusted_devices": devices,
         })
+    }
+
+    fn step_up_vault_path(&self) -> std::path::PathBuf {
+        self.audit_log_path
+            .as_ref()
+            .and_then(|p| p.parent().map(|dir| dir.join("step_up_pin.vault")))
+            .unwrap_or_else(|| std::env::temp_dir().join("dauverse_step_up_pin.vault"))
+    }
+
+    pub fn is_step_up_passcode_configured(&self) -> bool {
+        if self.step_up_vault_path().is_file() {
+            return true;
+        }
+        std::env::var("DAUVERSE_BOSS_STEP_UP_PIN")
+            .map(|s| s.trim().len() >= 6)
+            .unwrap_or(false)
+    }
+
+    pub fn set_step_up_passcode(&self, new_pin: &str) -> Result<(), String> {
+        let trimmed = new_pin.trim();
+        if trimmed.len() < 6 {
+            return Err("STEP_UP_PIN_TOO_SHORT: Minimum 6 characters required".to_owned());
+        }
+        let vp = self.step_up_vault_path();
+        super::crypto_util::write_sealed_secret_file(
+            &vp,
+            trimmed.as_bytes(),
+            b"dauverse-boss-step-up-pin-v1",
+        )?;
+        self.append_audit("BOSS", "SET_STEP_UP_PIN", "OK", "Sealed Step-Up PIN updated in vault");
+        Ok(())
+    }
+
+    pub fn verify_step_up_passcode(&self, candidate: &str) -> bool {
+        let cand = candidate.trim().as_bytes();
+        if cand.len() < 6 {
+            self.append_audit("BOSS", "VERIFY_STEP_UP_PIN", "DENIED", "Empty or short Step-Up PIN");
+            return false;
+        }
+        let vp = self.step_up_vault_path();
+        if let Ok(expected) =
+            super::crypto_util::read_sealed_secret_file(&vp, b"dauverse-boss-step-up-pin-v1")
+        {
+            let ok = super::crypto_util::constant_time_eq(&expected, cand);
+            self.append_audit(
+                "BOSS",
+                "VERIFY_STEP_UP_PIN",
+                if ok { "ALLOWED" } else { "DENIED" },
+                "Verified against sealed step_up_pin.vault",
+            );
+            return ok;
+        }
+        if let Ok(env_pin) = std::env::var("DAUVERSE_BOSS_STEP_UP_PIN") {
+            let trimmed = env_pin.trim().as_bytes();
+            if trimmed.len() >= 6 {
+                let ok = super::crypto_util::constant_time_eq(trimmed, cand);
+                self.append_audit(
+                    "BOSS",
+                    "VERIFY_STEP_UP_PIN",
+                    if ok { "ALLOWED" } else { "DENIED" },
+                    "Verified against DAUVERSE_BOSS_STEP_UP_PIN",
+                );
+                return ok;
+            }
+        }
+        self.append_audit(
+            "BOSS",
+            "VERIFY_STEP_UP_PIN",
+            "DENIED",
+            "No Step-Up PIN enrolled in vault",
+        );
+        false
     }
 
     pub fn pair_trusted_device(
@@ -390,7 +482,7 @@ impl DeviceShieldSecurityCenter {
     pub fn append_audit(&self, actor: &str, action: &str, outcome: &str, detail: &str) {
         let clean_detail = redact_sensitive(detail);
         let mut chain = self.audit_chain.lock().unwrap();
-        let seq = (chain.len() as u64) + 1;
+        let seq = chain.last().map(|e| e.seq + 1).unwrap_or(1);
         let prev_hash = chain
             .last()
             .map(|e| e.entry_hash.clone())
@@ -398,10 +490,7 @@ impl DeviceShieldSecurityCenter {
         let ts = chrono::Utc::now().to_rfc3339();
         let material = format!("{seq}|{ts}|{actor}|{action}|{outcome}|{clean_detail}|{prev_hash}");
         let entry_hash = sha256_hex(material.as_bytes());
-        if chain.len() >= 2_000 {
-            chain.remove(0);
-        }
-        chain.push(AuditLogEntry {
+        let entry = AuditLogEntry {
             seq,
             timestamp_utc: ts,
             actor: actor.to_owned(),
@@ -410,7 +499,38 @@ impl DeviceShieldSecurityCenter {
             detail: clean_detail,
             prev_hash,
             entry_hash,
-        });
+        };
+        if let Some(ref p) = self.audit_log_path {
+            if let Ok(line) = serde_json::to_string(&entry) {
+                use std::io::Write;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .mode(0o600)
+                        .open(p)
+                    {
+                        let _ = writeln!(f, "{line}");
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    if let Ok(mut f) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(p)
+                    {
+                        let _ = writeln!(f, "{line}");
+                    }
+                }
+            }
+        }
+        if chain.len() >= 2_000 {
+            chain.remove(0);
+        }
+        chain.push(entry);
     }
 
     pub fn verify_audit_chain(&self) -> Result<usize, String> {

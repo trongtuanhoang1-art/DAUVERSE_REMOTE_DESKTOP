@@ -1,67 +1,51 @@
 # HƯỚNG DẪN SỬ DỤNG & VẬN HÀNH DÀNH CHO BOSS
-## DAUVERSE REMOTE DESKTOP V1.0 (`DAUVERSE REMOTE`)
+## DAUVERSE REMOTE DESKTOP V1.0 (`DAUVERSE REMOTE`) — BẢN CẬP NHẬT RC1 REMEDIATED
+
+> **Trạng thái Phê duyệt Hệ thống (`Section 7` — `DREMOTE-V1-RC1-NEXT-002`):**
+> - Bản phát hành hiện tại là **Bản thử nghiệm kỹ thuật `UNSIGNED` (Chưa ký chứng chỉ Code Signing thương mại)**, phục vụ **Codex QA độc lập** và kiểm tra an toàn.
+> - **Chưa cài đặt** Windows Service, Virtual Display Driver, Unattended Access hoặc khởi động lại trên máy tính thật của Boss khi chưa có phê duyệt tiếp theo của Boss.
+> - **Auto-update tự động** đối với gói `UNSIGNED` đã bị khóa cứng (`HARD-BLOCKED`) để đảm bảo an toàn tuyệt đối.
 
 ---
 
 ## 1. Tổng quan nhanh cho Boss
 
-**DAUVERSE REMOTE DESKTOP V1.0** được thiết kế chuyên biệt để Boss ngồi tại công ty và điều khiển toàn diện dàn máy AI tại nhà (**Intel Core i5-12400F • ASUS PRIME H610M-K D4 • NVIDIA RTX 3060 12GB • 16GB RAM • Windows 11 Pro**) mà:
-- **Không cần bật màn hình vật lý ở nhà** (Headless Mode với `RustDeskIddDriver` v0.4).
-- **Không cần người ở nhà bấm xác nhận** sau khi Boss đã ghép nối thiết bị vào **Trusted Devices Allowlist**.
-- **Không làm gián đoạn công việc tại công ty** nhờ cửa sổ nổi **Mini Control** (tự hạ FPS khi rảnh, không cướp bàn phím) và **Thông báo nổi góc màn hình (Corner Toast 5–8 giây)** báo ngay khi Claude, Codex, Antigravity hoặc ComfyUI hoàn thành tác vụ.
-- **Hoàn toàn tách biệt với `DAUVERSE AI` production** (chỉ đọc trạng thái qua Event Bridge đã ký xác thực HMAC-SHA256, tuyệt đối không can thiệp Controller hay tranh chấp workspace).
+**DAUVERSE REMOTE DESKTOP V1.0** kế thừa trực tiếp nhân truyền hình/điều khiển RustDesk `v1.5.3` và tích hợp lớp điều hành chuyên biệt cho dàn máy AI tại nhà (**Intel Core i5-12400F • ASUS PRIME H610M-K D4 • NVIDIA RTX 3060 12GB • 16GB RAM • Windows 11 Pro**):
+- **Kết nối phiên Remote & Truyền File thật:** Bấm **Kết nối nhanh** hoặc **Truyền File 2 ngăn** tại Dashboard / My Devices / File Transfer sẽ gọi trực tiếp nhân kết nối P2P/Relay mã hóa đầu-cuối của RustDesk (`connect()`), được kiểm soát bởi chính sách **Clipboard Guard** và **Transfer Guard** ngay trong đường ống dữ liệu.
+- **Cửa sổ nổi Mini Control thật (`window_manager`):** Ghim nổi (`Always-On-Top`), thu phóng kích thước, Snap 4 góc màn hình, chỉnh độ trong suốt (`Opacity`), hạ xung nhịp khi rảnh và chế độ **Compact Status Mode** không chiếm bàn phím khi Boss làm việc công ty.
+- **Thông báo AI xác thực HMAC-SHA256 (`127.0.0.1:21188`):** Tự động lắng nghe sự kiện thật từ Claude Code, Codex CLI, script build và ComfyUI mà **không can thiệp `DAUVERSE AI` production** và **không bao giờ tự ý bấm Approve thay Boss**.
+- **An toàn Driver Headless (`Section 7`):** Qua kiểm định mật mã học X.509/PKCS#7, gói `RustDeskIddDriver v0.4` dùng chứng chỉ tự ký `WDKTestCert` (SHA-1) đã bị **CHẶN CỨNG (`BLOCKED_DO_NOT_INSTALL`)**. Khi Boss phê duyệt Headless sau này, chỉ sử dụng **`usbmmidd_v2` có chữ ký Microsoft WHQL chính hãng** (giữ nguyên Secure Boot & Driver Signature Enforcement) hoặc **HDMI 2.0 Dummy Plug** (không cần cài driver).
+- **Ổ cắm thông minh `Hunonic SK02` (`Section 6`):** Hunonic không công bố API công khai chính thức (HTTP/MQTT/OpenAPI). Tuân thủ nguyên tắc an toàn, phần mềm giữ **`DisabledSmartPlugAdapter` (`BLOCKED`)**, không dùng API dịch ngược và không thu thập tài khoản Hunonic của Boss.
 
 ---
 
-## 2. Cách tạo Bộ cài Windows (`.exe`) bằng 1 lệnh duy nhất
+## 2. Cách tạo Bộ cài Windows (`.exe` `UNSIGNED`) không tốn chi phí (`0 VNĐ`)
 
-Do Antigravity Remote Agent vận hành trên máy ảo Linux đám mây để đảm bảo cô lập tuyệt đối với máy tính của Boss, mã nguồn tích hợp đã được kiểm thử đầy đủ trên Linux và chuẩn bị sẵn **2 cách tạo file `.exe` Windows chính thức** để Boss chọn cách thuận tiện nhất:
-
-### Cách 1 — Chạy GitHub Actions trên kho `DAUVERSE_REMOTE_DESKTOP` (Không cần cài công cụ build trên máy Boss)
-1. Mở kho GitHub `trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP` -> tab **Actions**.
-2. Chọn workflow **`DAUVERSE Windows Release Build (Manual Dispatch Only)`** trên nhánh `develop/dauverse-remote-v1`.
-3. Nhấn **Run workflow** -> sau khi hoàn tất, tải gói artifact `DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_UNSIGNED` gồm:
-   - `DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe` (Bộ cài đặt đầy đủ + Uninstaller + Rollback)
-   - `DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe` (Bản chạy ngay không cần cài đặt cho máy công ty)
+### Cách 1 — Chạy GitHub Actions miễn phí trên kho công khai `trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP`
+1. Sau khi đồng bộ nhánh `develop/dauverse-remote-v1` lên kho `trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP`, mở tab **Actions**.
+2. Chọn workflow **`DAUVERSE Windows Release Build (Manual Dispatch Only)`** -> nhấn **Run workflow** trên nhánh `develop/dauverse-remote-v1`.
+3. Tải artifact `DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_UNSIGNED` gồm:
+   - `DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe` (Bộ cài đặt NSIS đầy đủ + Uninstaller + Rollback, không tự cài driver)
+   - `DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe` (Bản chạy độc lập cho máy công ty)
    - `SHA256_MANIFEST.txt` (Mã băm kiểm tra toàn vẹn)
 
-### Cách 2 — Build trực tiếp trên máy Windows của Boss vào ổ `E:\` (1 lệnh PowerShell)
+### Cách 2 — Build native trực tiếp trên máy Windows vào ổ `E:\` (1 lệnh PowerShell)
 Mở PowerShell tại thư mục mã nguồn `E:\DAUVERSE_REMOTE_DESKTOP\SOURCE`:
 ```powershell
 .\scripts\windows\build_windows_release.ps1 -WorkspaceRoot "E:\DAUVERSE_REMOTE_DESKTOP"
 ```
-Toàn bộ thư mục trung gian (`BUILD`, `CACHE`, `TEMP`, `STAGING`, `RELEASE`) được tự động lưu sang ổ **`E:\DAUVERSE_REMOTE_DESKTOP\`**, không làm đầy ổ `C:\`.
+- Mọi thư mục trung gian (`BUILD`, `CACHE`, `TEMP`, `STAGING`, `RELEASE`) đều ghi vào `E:\DAUVERSE_REMOTE_DESKTOP\`, không làm đầy ổ `C:\`.
+- Bộ cài NSIS kiểm tra ổ đĩa cố định (`DRIVE_FIXED`), từ chối đường dẫn mạng UNC/ổ đĩa rời và đồng bộ chính xác thư mục sao lưu với `rollback_windows_release.ps1`.
 
 ---
 
-## 3. Thiết lập lần đầu tại máy ở nhà (Home AI Rig)
+## 3. Quy trình vận hành an toàn với `Hunonic SK02` & ASUS PRIME H610M-K D4
 
-1. **Cấu hình BIOS ASUS PRIME H610M-K D4 (Bật máy từ xa qua ổ cắm thông minh / Wake-on-LAN):**
-   - Khởi động máy bấm `Del` -> `F7 (Advanced Mode)` -> `Advanced > APM Configuration`:
-     - `Restore AC Power Loss` -> **`Power On`** *(Lưu ý: Boss kiểm tra đúng tên mục trên phiên bản BIOS thực tế trước khi nhấn F10 lưu)*.
-     - `Power On By PCI-E` -> **`Enabled`**, `ErP Ready` -> **`Disabled`**.
-   - Xem chi tiết tại [`DOCS/SMART_POWER_AND_BIOS_GUIDE.md`](DOCS/SMART_POWER_AND_BIOS_GUIDE.md).
-2. **Cài đặt Host & Ghép nối Thiết bị Tin cậy (Device Shield):**
-   - Chạy `DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe` trên máy nhà (ưu tiên đường dẫn `E:\Program Files\DAUVERSE Remote Desktop`).
-   - Mở mục **Khiên bảo mật (Security Center)** -> ghép nối mã định danh máy công ty vào **Device Allowlist** và phân quyền chi tiết (Remote Control, Clipboard, File Transfer, Audio, Smart Power, AI Notification).
-   - Bật **Unattended Access** có xác thực. Nếu cần ngắt quyền ngay lập tức bất kỳ lúc nào, nhấn nút đỏ **Thu hồi khẩn cấp mọi truy cập (Emergency Revoke All Access)**.
-3. **Kết nối Hook thông báo AI thật (Claude Code / Codex / Build / ComfyUI):**
-   - Xem hướng dẫn cấu hình 3 bước tại [`DOCS/AI_INTEGRATION_AND_NOTIFICATION_GUIDE.md`](DOCS/AI_INTEGRATION_AND_NOTIFICATION_GUIDE.md).
-
----
-
-## 4. Sử dụng hàng ngày tại Công ty
-
-1. **Mở phiên nhanh hoặc chạy bản Portable:** Mở `DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe` -> tại **Dashboard**, nhấn **Kết nối một chạm** vào `BOSS-HOME-AI-RIG`.
-2. **Chế độ hiệu năng khi máy nhà đang chạy nặng ComfyUI / AI:**
-   - Trên **Floating Toolbar** (thanh nổi phía trên phiên Remote), chọn **`Auto Adaptive`** hoặc **`AI Workload Priority`** để ưu tiên tối đa nhân CUDA & 12GB VRAM của RTX 3060 cho ComfyUI.
-3. **Thu nhỏ sang Mini Control để làm việc công ty:**
-   - Nhấn nút **Mini Control** trên thanh nổi (hoặc menu trái).
-   - Kéo thả, ghim góc màn hình (**Snap góc**), chỉnh độ trong suốt, hoặc bật **Chỉ hiện trạng thái (Tắt truyền hình)** để chỉ theo dõi Ping, CPU/GPU/VRAM/Nhiệt độ và số tác vụ AI mà không tốn băng thông.
-   - **Nháy đúp (Double-click)** vào Mini Control để phóng to lại phiên điều khiển đầy đủ ngay lập tức.
-4. **Nhận thông báo AI góc màn hình:**
-   - Khi Antigravity, Claude, Codex hoặc ComfyUI hoàn tất lệnh/nhiệm vụ hoặc cần Boss duyệt, hộp thoại nhỏ xuất hiện ở góc phải dưới màn hình trong 5–8 giây mà **không làm mất con trỏ bàn phím** đang gõ dở của Boss.
-   - Vì lý do an toàn, thông báo không bao giờ tự ý bấm Approve thay Boss — Boss nhấn **Mở Remote** trên Toast để kiểm tra và phê duyệt trực tiếp.
-5. **Tắt máy an toàn cuối ngày:**
-   - Vào mục **Điều khiển nguồn thông minh (Smart Power)** -> nhấn **Safe Windows Shutdown**.
-   - Hệ thống sẽ tự động kiểm tra: nếu **AI đang chạy**, **ComfyUI đang render** hoặc **File đang truyền dở**, phần mềm sẽ chặn lệnh tắt và hiện cảnh báo rõ ràng để bảo vệ dữ liệu của Boss!
+1. **Bật máy từ xa:**
+   - Sau khi Boss tự kiểm tra và bật `Restore AC Power Loss = Power On` + `Power On By PCI-E = Enabled` + `ErP Ready = Disabled` trong BIOS `ASUS PRIME H610M-K D4` (chi tiết tại [`DOCS/SMART_POWER_AND_BIOS_GUIDE.md`](DOCS/SMART_POWER_AND_BIOS_GUIDE.md)), Boss có thể bật nguồn qua **Wake-on-LAN** hoặc bật ổ cắm **`Hunonic SK02`** ngay trên ứng dụng điện thoại Hunonic chính thức (không bị văng phiên đăng nhập).
+2. **Làm việc hàng ngày & Theo dõi AI:**
+   - Nhập Peer ID tại **Dashboard** -> nhấn **Kết nối nhanh** (mở phiên điều khiển thật) hoặc **Truyền File** (mở trình quản lý file 2 ngăn thật).
+   - Chọn chế độ **`AI Workload Priority`** khi máy nhà đang render video ComfyUI trên RTX 3060 12GB.
+   - Chuyển sang **Mini Control** để cửa sổ thu nhỏ ghim góc màn hình khi làm việc tại công ty.
+3. **Tắt máy an toàn cuối ngày:**
+   - Sử dụng **Safe Windows Shutdown** trong mục **Smart Power** (có khóa xác thực Step-Up và tự động chặn nếu phát hiện AI đang chạy, ComfyUI đang render hoặc File đang truyền dở). Chỉ tắt nguồn ổ cắm `Hunonic SK02` sau khi xác nhận Windows đã tắt hoàn toàn.

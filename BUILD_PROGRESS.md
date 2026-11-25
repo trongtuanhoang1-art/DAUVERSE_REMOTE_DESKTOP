@@ -1,48 +1,45 @@
-# DAUVERSE REMOTE DESKTOP V1 — BUILD PROGRESS CHECKPOINT
+# DAUVERSE REMOTE DESKTOP V1 — BUILD & REMEDIATION PROGRESS CHECKPOINT
 
-**Task ID:** `DREMOTE-V1-MASTER-001`  
+**Primary Task ID:** `DREMOTE-V1-MASTER-001`  
+**QA & Remediation Task ID:** `DREMOTE-V1-RC1-NEXT-002`  
 **Product:** `DAUVERSE REMOTE DESKTOP V1.0` (`DAUVERSE REMOTE`)  
 **Repository:** `https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP`  
 **Development Branch:** `develop/dauverse-remote-v1`  
 **Upstream Base Commit:** `a0c0963c483fc8f1aeed4547787d1673adcb583c` (`rustdesk/rustdesk` v1.5.3)  
-**Submodule `libs/hbb_common`:** `450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb`
+**Submodule `libs/hbb_common`:** `450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb`  
+**Preserved Immutable RC1 Baseline:** `35027150fcc497ade9145fcb4ea5cbc625035630` (tag `rc1-baseline-35027150`, backup `/home/antigravity/BACKUP_RC1_35027150/`)
 
 ---
 
 ## 1. Current Work Package
-- **Status:** `WP15 — Final Release Candidate Completed (Ready for Codex Independent QA & Boss Approval)`
+- **Status:** `WP16 — RC1 Targeted QA, Engine Wiring Remediation, Security Audit & Re-QA Completed (Awaiting External Neon / Codex QA & Boss Decision)`
 
-## 2. Completed Work Packages (`WP01` – `WP15`)
-- [x] **WP01 — Environment & Upstream:** Verified Linux x86_64 VM, Rust `1.100.0`, Flutter `3.50.0` (Dart `3.14.0`), disabled `upstream` git push (`DISABLED_NO_PUSH`), pinned all 7 upstream repos in `UPSTREAM_MANIFEST.json`, generated `LICENSE`, `THIRD_PARTY_NOTICES`, `LICENSE_COMPLIANCE_REPORT.md`, and `SBOM.spdx.json` (1,239 SPDX entries).
-- [x] **WP02 — Baseline Build:** Passed upstream Rust unit suites (`base`: 24/24, `clipboard`: 21/21, `enigo`: 12/12) and upstream Flutter test suite (`184/184` tests passed).
-- [x] **WP03 — Remote Core & Guards:** Integrated upstream remote engine with `src/dauverse/clipboard_guard.rs` and `src/dauverse/transfer_guard.rs` (path traversal, UNC, reserved device names, symlink & NTFS reparse defense, SHA-256 verification, transfer queue).
-- [x] **WP04 — Windows Integration & Headless:** Implemented `src/dauverse/headless.rs` and `src/dauverse/service_ctrl.rs` enforcing signed `RustDeskIddDriver` v0.4 policy, Secure Boot/DSE preservation, topology restore, privilege separation, and instant access revocation.
-- [x] **WP05 — DAUVERSE Premium UI:** Built all 16 mandatory Executive SaaS screens (`flutter/lib/dauverse/`), Dark & Light modes, `Be Vietnam Pro` + `Inter` tabular KPIs, Vietnamese default + English toggle, 18-control non-focus-stealing `DauverseFloatingToolbar`, 5-mode `MiniControl`, and custom SVG/PNG/ICO branding (`res/icon.ico`, `res/tray-icon.ico`).
-- [x] **WP06 — Performance Engine:** Implemented 6 adaptive profiles (`src/dauverse/performance.rs`) including `AI Workload Priority` (protecting RTX 3060 12GB VRAM for ComfyUI) and Mini Control idle FPS decimation, verified with live release `.so` benchmark.
-- [x] **WP07 — Smart Power:** Implemented `src/dauverse/smart_power.rs` with UDP Wake-on-LAN magic packet broadcaster, AI/ComfyUI/Transfer safety interlocks, network-loss vs OS-shutdown protection, `SmartPlugAdapter` (`DisabledSmartPlugAdapter` `BLOCKED` default + `SIMULATED` test mock), and ASUS PRIME H610M-K D4 BIOS guide.
-- [x] **WP08 — AI Event Bridge:** Implemented 15-field `AiEvent` engine (`src/dauverse/ai_bridge.rs`) with constant-time HMAC-SHA256 verification, replay cache, anti-fake-completion process-exit rules, loopback HTTP gateway, and official Claude Code, Codex CLI, and PowerShell job adapters (`scripts/hooks/`).
-- [x] **WP09 — Notification Center:** Implemented 22-category notification engine (`src/dauverse/notifications.rs`) with 5–8s non-focus-stealing Corner Toast, deduplication, persistent offline journal + reconnect replay, token redaction, and hard block against notification AI auto-approval.
-- [x] **WP10 — AI Live Status & Hardware Monitor:** Implemented `src/dauverse/hardware.rs` (`hbb_common::sysinfo` + `nvidia-smi` NVML query + threshold alerts) and wired live FFI telemetry to Dashboard, Mini Control, AI Live Status, and Hardware Monitor.
-- [x] **WP11 — Security Hardening:** Implemented `src/dauverse/security.rs` (10 granular permissions, allowlist, brute-force lockout, TLS channel binding, Windows DPAPI / Unix `0600` Encrypt-then-MAC vault, SHA-256 hash-chained Audit Log) and passed negative security tests.
-- [x] **WP12 — Network & Server:** Delivered pinned `rustdesk-server:1.1.16` `hbbs`/`hbbr` self-host config (`deploy/self-host/docker-compose.yml`), TCP probe diagnostics, and hardening/troubleshooting documentation.
-- [x] **WP13 — Full Integration & Live UI Verification:** Built release `target/release/liblibrustdesk.so` (38 MB) + native Linux desktop bundle `flutter/build/linux/x64/release/bundle/rustdesk`, verified live C-ABI FFI, and captured 10 real Xvfb desktop screenshots (`ARTIFACTS/screenshots/01..10_*.png`).
-- [x] **WP14 — Windows CI & Packaging:** Created 1-command `scripts/windows/build_windows_release.ps1` (targeting `E:\DAUVERSE_REMOTE_DESKTOP\`), `scripts/windows/rollback_windows_release.ps1`, `installer/nsis/dauverse_setup.nsi`, and gated manual SHA-pinned `.github/workflows/dauverse-windows-build.yml`.
-- [x] **WP15 — Final Release Candidate & QA Handoff:** Packaged `/home/antigravity/RELEASE_PACKAGES/DAUVERSE_REMOTE_DESKTOP_V1_RC1_QA.zip` (digest recorded in `SHA256_MANIFEST.txt`), portable Git bundle `/home/antigravity/RELEASE_PACKAGES/DAUVERSE_REMOTE_DESKTOP_V1_RC1.bundle`, `SHA256_MANIFEST.txt`, `HUONG_DAN_BOSS.md`, `QA/CODEX_INDEPENDENT_QA_HANDOFF.md`, and `DAUVERSE_REMOTE_V1_MASTER_BUILD_REPORT.md`.
+## 2. Completed Work Packages (`WP01` – `WP16`)
+- [x] **WP01 — Environment & Upstream:** Verified Linux x86_64 VM, Rust `1.100.0`, Flutter `3.50.0` (Dart `3.14.0`), disabled `upstream` git push (`DISABLED_NO_PUSH`), pinned upstreams in `UPSTREAM_MANIFEST.json`, generated `LICENSE`, `THIRD_PARTY_NOTICES` (incl. Amyuni `usbmmidd_v2` attribution), `LICENSE_COMPLIANCE_REPORT.md`, and `SBOM.spdx.json`.
+- [x] **WP02 — Baseline Build:** Passed upstream Rust unit suites (`base`: 24/24, `clipboard`: 21/21, `enigo`: 12/12) and upstream + DAUVERSE Flutter test suite (`187 passed, 0 failed, 1 Web-only skipped`).
+- [x] **WP03 — Remote Core & Engine-Wired Guards:** Wired `clipboard_guard` directly into `src/clipboard.rs` (`read_clipboard_message` & `do_update_clipboard_`) and `transfer_guard::validate_and_resolve_destination` directly into `src/ui_cm_interface.rs` (`ipc::FS::NewWrite`); wired Flutter Quick Connect & File Transfer directly to RustDesk's `connect()` & `RemotePage` (`gFFI.peerTabModel`).
+- [x] **WP04 — Windows Integration & Cryptographic Headless Audit:** Audited `RustDeskIddDriver v0.4` (`WDKTestCert` SHA-1 -> **HARD-BLOCKED** in `src/dauverse/headless.rs`) vs WHQL-signed `usbmmidd_v2` (`Microsoft Windows Hardware Compatibility Publisher`, wired via `#[cfg(windows)]` to `crate::virtual_display_manager`); aligned SCM name `"RustDesk"` and wired emergency access revocation to `Config` + `update_temporary_password()`.
+- [x] **WP05 — DAUVERSE Premium UI & Window Chrome:** Built all 16 mandatory Executive SaaS screens (`flutter/lib/dauverse/`) with zero fake demo data, custom draggable header (`windowManager.startDragging()`) + Minimize/Maximize/Close buttons, Dark/Light & VI/EN toggles, and real `windowManager` Always-On-Top/Resize/Snap/Opacity Mini Control.
+- [x] **WP06 — Performance Engine:** Implemented 6 adaptive profiles (`src/dauverse/performance.rs`) synced to `LocalConfig`, eliminated fake disconnected metrics (`0 ms` / `0 FPS` / `DISCONNECTED`), and labeled `benchmark_scope = "LOCAL_PIPELINE_MICROBENCHMARK_ONLY"`.
+- [x] **WP07 — Smart Power & `Hunonic SK02` Survey:** Implemented UDP Wake-on-LAN, Step-Up Auth + AI/ComfyUI/Transfer interlocks, real OS lock/sleep/reboot/shutdown hooks (`dry_run_only == false`), and surveyed `Hunonic SK02` (zero official public API -> retained `DisabledSmartPlugAdapter` per Section 6).
+- [x] **WP08 — AI Event Bridge (`:21188` Auto-Started):** Auto-started `127.0.0.1:21188` HTTP gateway in `DauverseRuntime::init_default()` with `bridge_hmac.vault` sealed secret, full `Content-Length` body reading, HMAC-SHA256 + anti-replay + exit-code truth, and live `ctypes` `.so` hook verification (`TESTS/test_e2e_hooks_and_secrets.py`).
+- [x] **WP09 — Notification Center:** Connected `AiEventBridge` sink to `NotificationCenter`, persistent offline journal, Quiet/DND FFI, 5–8s non-focus-stealing Corner Toast, and hard-blocked auto-approve.
+- [x] **WP10 — AI Live Status & Hardware Monitor:** Query real local host `sysinfo` + `nvidia-smi` (`CREATE_NO_WINDOW` on Windows, 4s TTL cache, `telemetry_scope = "LOCAL_HOST_SENSORS"`).
+- [x] **WP11 — Security Hardening:** Added `winapi` `"dpapi"` + `"winbase"` features in `Cargo.toml`, upgraded Unix vault (`DVSEAL02`) to atomic `0600` + 10,000-round PBKDF2-HMAC-SHA256, and persisted SHA-256 hash-chained `security_audit_chain.jsonl`.
+- [x] **WP12–WP16 — Self-Host Server, Live Xvfb UI, Hardened Windows CI/NSIS & RC1 Multi-Round Remediation:** Hardened `build_windows_release.ps1` (`Invoke-Checked` `$LASTEXITCODE`, fresh-clone `flutter_rust_bridge_codegen` + Dart 3 `ffi.Uint8` patch, CMake `librustdesk.dll` copy, WHQL `usbmmidd_v2` SHA-256 verification), `dauverse_setup.nsi` (`DRIVE_FIXED`, `RustDesk` SCM, synced rollback path `E:\DAUVERSE_REMOTE_DESKTOP\BACKUP\previous_release`), `.github/workflows/dauverse-windows-build.yml` (`FLUTTER_VERSION: "3.50.0"` verified in Google `releases_windows.json`, `runVcpkgInstall: false`, `VCPKG_BINARY_SOURCES`, manual-only sibling workflows), and `QA/RC1_QA_AND_REMEDIATION_REPORT.md`.
 
-## 3. Build & Test Commands
+## 3. Reproducible Build & Test Commands (`set -euo pipefail`)
 ```bash
+set -euo pipefail
 export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 cargo test --locked --features linux-pkg-config --lib dauverse::
 cargo build --locked --features flutter,linux-pkg-config --lib --release
-(cd flutter && flutter test && flutter build linux --release)
 python3 TESTS/test_e2e_hooks_and_secrets.py
+(cd flutter && flutter test --reporter expanded && flutter build linux --release)
 ```
 
-## 4. Remaining Blockers Requiring Windows Host / Boss Decision
-1. **GitHub Cloud Push Scope (`HTTP 403` Until Attached to Project):** `trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP` is not yet attached to `<project_resources>` in this Antigravity Project, so direct `git push` from the cloud VM is denied by the scoped proxy. Branch `develop/dauverse-remote-v1` is committed cleanly locally and exported to `/home/antigravity/RELEASE_PACKAGES/DAUVERSE_REMOTE_DESKTOP_V1_RC1.bundle`; Boss can attach the repository to the Antigravity Project for instant cloud push or push from the bundle.
-2. **Native Windows `.exe` Compilation & 2-PC Live Windows Runtime Test (`BLOCKED` on Linux Cloud VM):** Execute `.\scripts\windows\build_windows_release.ps1` on Windows or trigger `.github/workflows/dauverse-windows-build.yml` (`workflow_dispatch`).
-3. **Smart Plug Live Hardware Adapter (`BLOCKED`):** Specify smart plug brand/model when ready to enable official vendor API adapter.
-4. **Code Signing Certificate (`UNSIGNED`):** Provide Authenticode `.pfx` if signed installer/auto-update is desired.
-
-## 5. Next Action
-Attach `trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP` to the Antigravity Project (or import `DAUVERSE_REMOTE_DESKTOP_V1_RC1.bundle`) to push `develop/dauverse-remote-v1`, then hand off to **Codex Independent QA** (read-only audit), followed by **Boss** final approval.
+## 4. Remaining Blockers
+1. **GitHub Push Attachment (`HTTP 403`):** Attach single repository `trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP` to Antigravity Project Resources (or push `DAUVERSE_REMOTE_DESKTOP_V1_RC1_REMEDIATED.bundle` locally) so free `windows-2022` GitHub Actions (`0 VNĐ`) can compile `DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe` & `PORTABLE.exe` (`UNSIGNED`).
+2. **Windows Native Runtime & Section 7 Hold:** Live 2-PC Windows E2E test requires Windows hosts; Windows Service, driver (`usbmmidd_v2`), and Unattended Access remain uninstalled until Boss approves.
+3. **`Hunonic SK02` Direct API (`BLOCKED`):** No official public vendor API; `DisabledSmartPlugAdapter` retained.
+4. **Named Cross-Family Model Routing (`MODEL_ROUTING_UNSUPPORTED`):** Standalone QA bundle prepared for external `Neon` & `Codex` sessions.

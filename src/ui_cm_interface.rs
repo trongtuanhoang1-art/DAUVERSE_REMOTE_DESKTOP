@@ -1107,11 +1107,39 @@ async fn handle_fs(
                 send_raw(fs::new_error(id, e, file_num), tx);
                 return;
             }
+            for entry in job.files() {
+                if let Err(guard_err) = crate::dauverse::transfer_guard::validate_and_resolve_destination(
+                    std::path::Path::new(&path),
+                    &entry.name,
+                    crate::dauverse::transfer_guard::DuplicateFileStrategy::OverwriteConfirmed,
+                ) {
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "INCOMING_FILE_WRITE_GUARD",
+                        "DENIED",
+                        &guard_err,
+                    );
+                    log::warn!("DAUVERSE transfer_guard rejected incoming file '{}': {}", entry.name, guard_err);
+                    send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(guard_err), file_num), tx);
+                    return;
+                }
+            }
+            let first_rel = job
+                .files()
+                .first()
+                .map(|f| f.name.clone())
+                .unwrap_or_else(|| "transfer_batch".to_owned());
             job.total_size = total_size;
             job.conn_id = conn_id;
+            crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .track_engine_receive_start(id, conn_id, &path, &first_rel, total_size);
             write_jobs.push(job);
         }
         ipc::FS::CancelWrite { id } => {
+            crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .track_engine_receive_finish(id, false, true, Some("Cancelled by peer"));
             if let Some(job) = fs::remove_job(id, write_jobs) {
                 #[cfg(target_os = "android")]
                 let mut job = job;
@@ -1128,6 +1156,9 @@ async fn handle_fs(
             }
         }
         ipc::FS::WriteDone { id, file_num } => {
+            crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .track_engine_receive_finish(id, true, false, None);
             if let Some(job) = fs::remove_job(id, write_jobs) {
                 #[cfg(target_os = "android")]
                 let mut job = job;
@@ -1142,6 +1173,9 @@ async fn handle_fs(
             }
         }
         ipc::FS::WriteError { id, file_num, err } => {
+            crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .track_engine_receive_finish(id, false, false, Some(&err));
             if let Some(job) = fs::remove_job(id, write_jobs) {
                 #[cfg(target_os = "android")]
                 let mut job = job;

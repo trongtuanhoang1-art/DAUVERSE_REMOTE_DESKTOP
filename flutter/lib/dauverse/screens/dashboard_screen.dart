@@ -12,7 +12,13 @@ class DauverseDashboardScreen extends StatefulWidget {
 }
 
 class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
-  final TextEditingController _peerIdCtrl = TextEditingController(text: '892 441 109');
+  late final TextEditingController _peerIdCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _peerIdCtrl = TextEditingController(text: widget.controller.targetPeerId);
+  }
 
   @override
   void dispose() {
@@ -30,22 +36,28 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
     final perf = snap['performance'] as Map<String, dynamic>? ?? const {};
     final ai = snap['ai_summary'] as Map<String, dynamic>? ?? const {};
     final notif = snap['notifications'] as Map<String, dynamic>? ?? const {};
-    final sec = snap['security'] as Map<String, dynamic>? ?? const {};
+    final secWrap = snap['security'] as Map<String, dynamic>? ?? const {};
+    final sec = secWrap['summary'] as Map<String, dynamic>? ?? secWrap;
 
+    final localId = snap['local_peer_id']?.toString() ?? '';
+    final bridgeUrl = snap['bridge_endpoint']?.toString() ?? 'http://127.0.0.1:21188/v1/events';
+    final sessionConnected = perf['session_connected'] == true;
     final cpuPct = (hw['cpu_usage_pct'] as num?)?.toStringAsFixed(1) ?? '0.0';
     final ramUsed = (hw['ram_used_gb'] as num?)?.toStringAsFixed(1) ?? '0.0';
     final ramTotal = (hw['ram_total_gb'] as num?)?.toStringAsFixed(1) ?? '0.0';
-    final pingMs = perf['ping_rtt_ms']?.toString() ?? '14';
+    final pingLabel = sessionConnected ? '${perf['ping_rtt_ms']} ms' : 'IDLE';
+    final routeLabel = perf['connection_route']?.toString() ?? 'DISCONNECTED';
     final aiRunning = ai['running']?.toString() ?? '0';
     final aiCompleted = ai['completed']?.toString() ?? '0';
     final unread = notif['unread_count']?.toString() ?? '0';
+    final cachedPeers = c.peersProvider?.call() ?? const <Map<String, String>>[];
+    final trustedCount = (sec['trusted_devices_count'] as num?)?.toInt() ?? cachedPeers.length;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Executive Quick Connect Hero Banner
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -68,17 +80,21 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
                         DauverseStatusBadge(
-                          label: i18n.t('SẴN SÀNG KẾT NỐI P2P', 'DIRECT P2P READY'),
+                          label: localId.isNotEmpty ? 'LOCAL ID: $localId' : 'ENGINE READY',
                           color: p.success,
                         ),
-                        const SizedBox(width: 10),
                         DauverseStatusBadge(
-                          label: 'AGPL-3.0 • V1.0',
+                          label: 'AI BRIDGE: $bridgeUrl',
                           color: p.cyan,
+                        ),
+                        DauverseStatusBadge(
+                          label: 'AGPL-3.0 • V1.0 RC1',
+                          color: p.purple,
                         ),
                       ],
                     ),
@@ -93,27 +109,30 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                     const SizedBox(height: 4),
                     Text(
                       i18n.t(
-                        'Kết nối một chạm, truyền hình ảnh mượt 60 FPS, Mini Control không gián đoạn và cầu nối thông báo AI thời gian thực.',
-                        'One-touch remote control, low-latency 60 FPS streaming, non-intrusive Mini Control, and live AI Event Bridge.',
+                        'Nhập Peer ID thực tế để khởi chạy phiên kết nối P2P/Relay gốc hoặc truyền file hai chiều trực tiếp.',
+                        'Enter a real Peer ID to launch native P2P/Relay remote control or dual-pane file transfer.',
                       ),
                       style: DauverseTypography.caption(p, size: 13),
                     ),
                   ],
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     SizedBox(
-                      width: 210,
+                      width: 220,
                       child: TextField(
                         controller: _peerIdCtrl,
+                        onChanged: (v) => c.targetPeerId = v.trim(),
                         style: DauverseTypography.kpi(p, size: 15),
                         decoration: InputDecoration(
                           isDense: true,
                           filled: true,
                           fillColor: p.surface,
                           prefixIcon: Icon(Icons.desktop_windows, size: 18, color: p.cyan),
-                          hintText: 'Remote ID / Host',
+                          hintText: i18n.t('Nhập Peer ID / IP...', 'Enter Peer ID / IP...'),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide(color: p.border),
@@ -121,7 +140,6 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: p.blue,
@@ -129,11 +147,10 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: () => c.selectScreen(DauverseScreenId.remoteSession),
+                      onPressed: () => c.launchRealRemoteSession(context, _peerIdCtrl.text),
                       icon: const Icon(Icons.bolt, size: 18),
                       label: Text(i18n.t('Kết nối nhanh', 'Quick Connect')),
                     ),
-                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: p.cyan,
@@ -141,11 +158,10 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      onPressed: () => c.selectScreen(DauverseScreenId.fileTransfer),
+                      onPressed: () => c.launchRealFileTransfer(context, _peerIdCtrl.text),
                       icon: const Icon(Icons.folder_open, size: 17),
                       label: Text(i18n.t('Truyền File', 'File Transfer')),
                     ),
-                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: p.purple,
@@ -164,7 +180,6 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
           ),
           const SizedBox(height: 18),
 
-          // 6 KPI Executive Strip
           LayoutBuilder(
             builder: (context, constraints) {
               final cols = constraints.maxWidth > 1100 ? 6 : (constraints.maxWidth > 700 ? 3 : 2);
@@ -173,20 +188,21 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _kpiTile(p, itemW, i18n.t('Thiết bị tin cậy', 'Trusted Devices'), '2 Online',
-                      'HOME-RTX3060 • LAN/P2P', Icons.devices, p.success,
+                  _kpiTile(p, itemW, i18n.t('Thiết bị đã lưu', 'Saved Peers'), '$trustedCount Peers',
+                      cachedPeers.isEmpty ? i18n.t('Chưa lưu thiết bị', 'No saved peers yet') : cachedPeers.first['id'] ?? '',
+                      Icons.devices, p.success,
                       onTap: () => c.selectScreen(DauverseScreenId.myDevices)),
-                  _kpiTile(p, itemW, 'Ping / RTT', '$pingMs ms',
-                      '${perf['connection_route'] ?? 'Direct P2P'} • 60 FPS', Icons.network_check, p.cyan,
+                  _kpiTile(p, itemW, 'Session RTT', pingLabel,
+                      routeLabel, Icons.network_check, p.cyan,
                       onTap: () => c.selectScreen(DauverseScreenId.networkDiagnostics)),
-                  _kpiTile(p, itemW, i18n.t('Phần cứng (Host)', 'Hardware Status'), 'CPU $cpuPct%',
+                  _kpiTile(p, itemW, i18n.t('Phần cứng máy này', 'Local Host Sensors'), 'CPU $cpuPct%',
                       'RAM $ramUsed / $ramTotal GB', Icons.memory, p.blue,
                       onTap: () => c.selectScreen(DauverseScreenId.hardwareMonitor)),
                   _kpiTile(p, itemW, 'AI Running', aiRunning,
-                      i18n.t('Claude • Codex • AGY • ComfyUI', 'Active AI Pipelines'), Icons.auto_awesome, p.purple,
+                      i18n.t('Sự kiện thực qua HTTP 21188', 'Verified Bridge Events'), Icons.auto_awesome, p.purple,
                       onTap: () => c.selectScreen(DauverseScreenId.aiLiveStatus)),
                   _kpiTile(p, itemW, 'AI Completed', aiCompleted,
-                      i18n.t('Chỉ tính có bằng chứng xác thực', 'Verified evidence only'), Icons.verified, p.success,
+                      i18n.t('Chỉ tính có chứng cứ xác thực', 'Verified evidence only'), Icons.verified, p.success,
                       onTap: () => c.selectScreen(DauverseScreenId.aiLiveStatus)),
                   _kpiTile(p, itemW, i18n.t('Thông báo & Bảo mật', 'Alerts & Shield'), '$unread Unread',
                       sec['allowlist_enforced'] == true ? 'Shield: ENFORCED' : 'Shield: OPEN', Icons.shield, p.warning,
@@ -197,7 +213,6 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
           ),
           const SizedBox(height: 18),
 
-          // Main 2-column executive workspace
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -211,7 +226,7 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              i18n.t('Máy tính AI được cấp quyền', 'Authorized AI Workstations'),
+                              i18n.t('Danh bạ Thiết bị thực tế (RustDesk Engine)', 'Live Peer Directory (RustDesk Engine)'),
                               style: DauverseTypography.heading(p, size: 16),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -224,29 +239,42 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      _workstationRow(
-                        p,
-                        i18n,
-                        name: 'BOSS-HOME-AI-RIG (Windows 11 Pro)',
-                        spec: 'Intel Core i5-12400F • NVIDIA RTX 3060 12GB • 16GB DDR4 • LAN',
-                        online: true,
-                        ping: '$pingMs ms',
-                        onConnect: () => c.selectScreen(DauverseScreenId.remoteSession),
-                        onMini: () => c.selectScreen(DauverseScreenId.miniControl),
-                        onPower: () => c.selectScreen(DauverseScreenId.smartPower),
-                      ),
-                      const Divider(height: 22),
-                      _workstationRow(
-                        p,
-                        i18n,
-                        name: 'OFFICE-CLIENT-WORKSTATION',
-                        spec: 'Windows 11 Enterprise • Receiver & Mini Control Host',
-                        online: true,
-                        ping: '1 ms (Local)',
-                        onConnect: () => c.selectScreen(DauverseScreenId.myDevices),
-                        onMini: () => c.selectScreen(DauverseScreenId.notificationCenter),
-                        onPower: () => c.selectScreen(DauverseScreenId.securityCenter),
-                      ),
+                      if (cachedPeers.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: p.surfaceElevated,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: p.border),
+                          ),
+                          child: Text(
+                            i18n.t(
+                              'Chưa có thiết bị nào trong lịch sử kết nối cục bộ. Nhập Peer ID vào ô Kết nối nhanh phía trên hoặc mở Engine Gốc để thêm máy ở nhà.',
+                              'No peers saved in local connection cache yet. Enter a Peer ID above or open Native Connector to pair your home workstation.',
+                            ),
+                            style: DauverseTypography.body(p, size: 13),
+                          ),
+                        )
+                      else
+                        for (var i = 0; i < cachedPeers.take(4).length; i++) ...[
+                          _workstationRow(
+                            p,
+                            i18n,
+                            name: cachedPeers[i]['alias']?.isNotEmpty == true
+                                ? cachedPeers[i]['alias']!
+                                : '${cachedPeers[i]['hostname'] ?? 'Peer'} (${cachedPeers[i]['id']})',
+                            spec: '${cachedPeers[i]['platform'] ?? 'Desktop'} • User: ${cachedPeers[i]['username'] ?? '-'}',
+                            id: cachedPeers[i]['id'] ?? '',
+                            onConnect: () => c.launchRealRemoteSession(context, cachedPeers[i]['id'] ?? ''),
+                            onMini: () {
+                              c.targetPeerId = cachedPeers[i]['id'] ?? '';
+                              c.selectScreen(DauverseScreenId.miniControl);
+                            },
+                            onPower: () => c.selectScreen(DauverseScreenId.smartPower),
+                          ),
+                          if (i + 1 < cachedPeers.take(4).length) const Divider(height: 20),
+                        ],
                     ],
                   ),
                 ),
@@ -262,7 +290,7 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              i18n.t('Biểu đồ Tài nguyên & Sự kiện AI', 'Live Telemetry & AI Event Bridge'),
+                              i18n.t('Biểu đồ Tài nguyên Cục bộ & Kiểm thử AI Bridge', 'Local Host Telemetry & Live AI Bridge Probe'),
                               style: DauverseTypography.heading(p, size: 16),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -274,27 +302,22 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                               foregroundColor: Colors.white,
                               visualDensity: VisualDensity.compact,
                             ),
-                            onPressed: () {
-                              c.triggerCornerToastPreview(
-                                title: 'Antigravity đã hoàn thành nhiệm vụ',
-                                aiSource: 'Antigravity',
-                                project: 'DAUVERSE FT004',
-                                body: 'Build & Regression Verification hoàn tất an toàn.',
-                                verifiedEvidence: '128/128 tests PASS',
-                              );
-                            },
-                            child: Text(i18n.t('Thử Toast AI', 'Test AI Toast'), style: const TextStyle(fontSize: 12)),
+                            onPressed: () => c.sendSignedLoopbackAiProbe(),
+                            child: Text(
+                              i18n.t('Gửi Probe HMAC thật', 'Send Signed Probe'),
+                              style: const TextStyle(fontSize: 12),
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Text('CPU Telemetry ($cpuPct%)', style: DauverseTypography.caption(p)),
+                      Text('Local CPU Telemetry ($cpuPct%)', style: DauverseTypography.caption(p)),
                       const SizedBox(height: 6),
-                      DauverseSparkline(values: c.cpuHistory, color: p.cyan),
+                      DauverseSparkline(values: c.cpuHistory.isEmpty ? const [0, 0] : c.cpuHistory, color: p.cyan),
                       const SizedBox(height: 12),
-                      Text('RAM Telemetry ($ramUsed / $ramTotal GB)', style: DauverseTypography.caption(p)),
+                      Text('Local RAM Telemetry ($ramUsed / $ramTotal GB)', style: DauverseTypography.caption(p)),
                       const SizedBox(height: 6),
-                      DauverseSparkline(values: c.ramHistory, color: p.purple),
+                      DauverseSparkline(values: c.ramHistory.isEmpty ? const [0, 0] : c.ramHistory, color: p.purple),
                     ],
                   ),
                 ),
@@ -351,8 +374,7 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
     DauverseI18n i18n, {
     required String name,
     required String spec,
-    required bool online,
-    required String ping,
+    required String id,
     required VoidCallback onConnect,
     required VoidCallback onMini,
     required VoidCallback onPower,
@@ -379,7 +401,7 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                     child: Text(name, style: DauverseTypography.body(p, size: 14, weight: FontWeight.w700)),
                   ),
                   const SizedBox(width: 8),
-                  DauverseStatusBadge(label: online ? 'ONLINE • $ping' : 'OFFLINE', color: online ? p.success : p.danger),
+                  DauverseStatusBadge(label: 'ID: $id', color: p.cyan),
                 ],
               ),
               const SizedBox(height: 3),

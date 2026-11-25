@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'bridge/dauverse_bridge.dart';
 import 'l10n/dauverse_i18n.dart';
@@ -14,12 +15,16 @@ import 'widgets/corner_toast_overlay.dart';
 
 class DauverseExecutiveShell extends StatefulWidget {
   final Widget Function(BuildContext)? classicRustDeskBuilder;
+  final RealSessionLauncher? onLaunchRealSession;
+  final List<Map<String, String>> Function()? peersProvider;
   final DauverseScreenId? overrideInitialScreen;
   final bool? overrideDarkMode;
 
   const DauverseExecutiveShell({
     Key? key,
     this.classicRustDeskBuilder,
+    this.onLaunchRealSession,
+    this.peersProvider,
     this.overrideInitialScreen,
     this.overrideDarkMode,
   }) : super(key: key);
@@ -59,16 +64,15 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
     _controller = DauverseController(
       initialScreen: _resolveInitialScreen(widget.overrideInitialScreen),
       isDarkMode: _resolveInitialDarkMode(widget.overrideDarkMode),
+      onLaunchRealSession: widget.onLaunchRealSession,
+      peersProvider: widget.peersProvider,
     );
     _controller.startPolling();
     if (!kIsWeb && Platform.environment['DAUVERSE_SHOW_SAMPLE_TOAST'] == '1') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _controller.triggerCornerToastPreview(
-          title: 'Antigravity đã hoàn thành nhiệm vụ',
-          aiSource: 'Antigravity',
-          project: 'DAUVERSE FT004',
-          body: 'Kiểm thử tự động hoàn tất với đầy đủ bằng chứng xác thực.',
-          verifiedEvidence: '128/128 tests PASS',
+        _controller.sendSignedLoopbackAiProbe(
+          source: 'codex_cli',
+          summary: 'Sự kiện kiểm thử chữ ký HMAC-SHA256 thật qua HTTP 127.0.0.1.',
         );
       });
     }
@@ -235,7 +239,7 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
               Expanded(
                 child: Column(
                   children: [
-                    // Top Executive Status Header
+                    // Top Executive Status Header (Draggable Window Chrome + Controls)
                     Container(
                       height: 54,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -245,21 +249,47 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
                       ),
                       child: Row(
                         children: [
-                          Text(
-                            i18n.screenTitle(_controller.currentScreen),
-                            style: DauverseTypography.heading(p, size: 16),
-                          ),
-                          const SizedBox(width: 14),
-                          if (_controller.lastActionBanner.isNotEmpty)
-                            Expanded(
-                              child: Text(
-                                _controller.lastActionBanner,
-                                style: DauverseTypography.caption(p, size: 12),
-                                overflow: TextOverflow.ellipsis,
+                          Expanded(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onPanStart: (_) async {
+                                try {
+                                  await windowManager.startDragging();
+                                } catch (_) {}
+                              },
+                              onDoubleTap: () async {
+                                try {
+                                  if (await windowManager.isMaximized()) {
+                                    await windowManager.unmaximize();
+                                  } else {
+                                    await windowManager.maximize();
+                                  }
+                                } catch (_) {}
+                              },
+                              child: SizedBox(
+                                height: double.infinity,
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      i18n.screenTitle(_controller.currentScreen),
+                                      style: DauverseTypography.heading(p, size: 16),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    if (_controller.lastActionBanner.isNotEmpty)
+                                      Expanded(
+                                        child: Text(
+                                          _controller.lastActionBanner,
+                                          style: DauverseTypography.caption(p, size: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      )
+                                    else
+                                      const Spacer(),
+                                  ],
+                                ),
                               ),
-                            )
-                          else
-                            const Spacer(),
+                            ),
+                          ),
                           DauverseStatusBadge(
                             label: _controller.performanceMode,
                             color: p.cyan,
@@ -278,6 +308,41 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
                               size: 18,
                               color: p.textPrimary,
                             ),
+                          ),
+                          const VerticalDivider(width: 12, indent: 14, endIndent: 14),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Minimize',
+                            onPressed: () async {
+                              try {
+                                await windowManager.minimize();
+                              } catch (_) {}
+                            },
+                            icon: Icon(Icons.minimize, size: 16, color: p.textSecondary),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Maximize / Restore',
+                            onPressed: () async {
+                              try {
+                                if (await windowManager.isMaximized()) {
+                                  await windowManager.unmaximize();
+                                } else {
+                                  await windowManager.maximize();
+                                }
+                              } catch (_) {}
+                            },
+                            icon: Icon(Icons.crop_square, size: 15, color: p.textSecondary),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Close',
+                            onPressed: () async {
+                              try {
+                                await windowManager.close();
+                              } catch (_) {}
+                            },
+                            icon: Icon(Icons.close, size: 17, color: p.danger),
                           ),
                         ],
                       ),

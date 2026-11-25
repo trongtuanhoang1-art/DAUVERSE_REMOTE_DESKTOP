@@ -1,211 +1,454 @@
 {
-  "ai_summary": {
-    "comfyui_rendering": false,
-    "completed": 0,
-    "live_tasks": [],
-    "running": 0,
-    "sources_catalog": [
-      {
-        "display_name": "Claude Code CLI",
-        "notes": "Official Claude Code Stop/Notification/SubagentStop JSON hook adapter.",
-        "source_id": "claude_code",
-        "support_status": "OFFICIAL_HOOK"
+  "data": {
+    "ai_summary": {
+      "comfyui_rendering": false,
+      "completed": 2,
+      "live_tasks": [
+        {
+          "approval_requested": false,
+          "artifact_reference": null,
+          "device_id": "devbox",
+          "elapsed_seconds": 0,
+          "latest_error": null,
+          "latest_event_summary": "All 16 security negative tests verified PASS",
+          "project_id": "DAUVERSE_REMOTE_DESKTOP",
+          "source": "codex_cli",
+          "started_at_utc": "2026-11-25T03:10:20.904146Z",
+          "status": "COMPLETED",
+          "support_status": "OFFICIAL_HOOK",
+          "task_id": "codex-thread",
+          "task_name": "Codex (DAUVERSE_REMOTE_DESKTOP)",
+          "updated_at_utc": "2026-11-25T03:10:20.904146Z",
+          "verified_progress": null,
+          "verified_test_evidence": null
+        },
+        {
+          "approval_requested": false,
+          "artifact_reference": null,
+          "device_id": "devbox",
+          "elapsed_seconds": 0,
+          "latest_error": null,
+          "latest_event_summary": "Claude Code completed turn (Stop) in DAUVERSE_REMOTE_DESKTOP",
+          "project_id": "DAUVERSE_REMOTE_DESKTOP",
+          "source": "claude_code",
+          "started_at_utc": "2026-11-25T03:10:20.752375Z",
+          "status": "COMPLETED",
+          "support_status": "OFFICIAL_HOOK",
+          "task_id": "claude-live-rust-01",
+          "task_name": "Claude Code (DAUVERSE_REMOTE_DESKTOP)",
+          "updated_at_utc": "2026-11-25T03:10:20.752375Z",
+          "verified_progress": null,
+          "verified_test_evidence": "Hook: Stop"
+        }
+      ],
+      "recent_events": [
+        {
+          "artifact_reference": null,
+          "confidence": 1.0,
+          "device_id": "devbox",
+          "event_id": "f8738293-8a29-46c6-b12d-97019f76aa76",
+          "event_type": "COMMAND_COMPLETED",
+          "progress": null,
+          "project_id": "DAUVERSE_REMOTE_DESKTOP",
+          "provenance": {
+            "adapter_type": "OFFICIAL_HOOK",
+            "evidence_badge": "Hook: Stop",
+            "evidence_verified": true,
+            "exit_code": 0
+          },
+          "severity": "SUCCESS",
+          "source": "claude_code",
+          "status": "COMPLETED",
+          "summary": "Claude Code completed turn (Stop) in DAUVERSE_REMOTE_DESKTOP",
+          "task_id": "claude-live-rust-01",
+          "task_name": "Claude Code (DAUVERSE_REMOTE_DESKTOP)",
+          "timestamp": "2026-11-25T03:10:20.752375Z"
+        },
+        {
+          "artifact_reference": null,
+          "confidence": 1.0,
+          "device_id": "devbox",
+          "event_id": "9f10ebab-2db0-44be-8a67-85da1c463c14",
+          "event_type": "COMMAND_COMPLETED",
+          "progress": null,
+          "project_id": "DAUVERSE_REMOTE_DESKTOP",
+          "provenance": {
+            "adapter_type": "OFFICIAL_HOOK",
+            "evidence_badge": null,
+            "evidence_verified": true,
+            "exit_code": 0
+          },
+          "severity": "SUCCESS",
+          "source": "codex_cli",
+          "status": "COMPLETED",
+          "summary": "All 16 security negative tests verified PASS",
+          "task_id": "codex-thread",
+          "task_name": "Codex (DAUVERSE_REMOTE_DESKTOP)",
+          "timestamp": "2026-11-25T03:10:20.904146Z"
+        }
+      ],
+      "rejected_security_count": 1,
+      "running": 0,
+      "sources_catalog": [
+        {
+          "display_name": "Claude Code CLI",
+          "notes": "Official Claude Code Stop/Notification/SubagentStop JSON hook adapter.",
+          "source_id": "claude_code",
+          "support_status": "OFFICIAL_HOOK"
+        },
+        {
+          "display_name": "Claude Desktop",
+          "notes": "No official completion webhook; reported UNKNOWN unless read-only MCP/log adapter is configured (never reads cookies/tokens).",
+          "source_id": "claude_desktop",
+          "support_status": "UNKNOWN"
+        },
+        {
+          "display_name": "Codex CLI",
+          "notes": "Official Codex CLI notify hook adapter.",
+          "source_id": "codex_cli",
+          "support_status": "OFFICIAL_HOOK"
+        },
+        {
+          "display_name": "Codex Desktop",
+          "notes": "Read-only process/log observer; reports UNKNOWN when structured completion event is absent.",
+          "source_id": "codex_desktop",
+          "support_status": "READ_ONLY_PROCESS_MONITOR"
+        },
+        {
+          "display_name": "Antigravity Desktop",
+          "notes": "Strictly read-only status interface; zero modification or workspace contention with DAUVERSE AI.",
+          "source_id": "antigravity_desktop",
+          "support_status": "STRUCTURED_LOGS_READ_ONLY"
+        },
+        {
+          "display_name": "Antigravity CLI",
+          "notes": "Supported via approved read-only wrapper / structured output.",
+          "source_id": "antigravity_cli",
+          "support_status": "APPROVED_WRAPPER_ADAPTER"
+        },
+        {
+          "display_name": "Antigravity Remote Agent",
+          "notes": "Structured checkpoint/status reader.",
+          "source_id": "antigravity_remote",
+          "support_status": "STRUCTURED_LOGS_READ_ONLY"
+        },
+        {
+          "display_name": "DAUVERSE AI Controller",
+          "notes": "Consumes existing Controller events read-only; never creates a second Controller.",
+          "source_id": "dauverse_ai_controller",
+          "support_status": "EXISTING_CONTROLLER_EVENTS_READ_ONLY"
+        },
+        {
+          "display_name": "ComfyUI Render Engine",
+          "notes": "Read-only localhost /queue and /history observer for video/image render jobs.",
+          "source_id": "comfyui",
+          "support_status": "OFFICIAL_LOCAL_HTTP_READ_ONLY"
+        },
+        {
+          "display_name": "Build / QA / Render / PowerShell Jobs",
+          "notes": "Signed wrapper scripts emitting verified exit codes and test counts.",
+          "source_id": "build_qa_powershell",
+          "support_status": "APPROVED_WRAPPER_ADAPTER"
+        }
+      ],
+      "waiting_approval": 0
+    },
+    "bridge_endpoint": "http://127.0.0.1:44429/v1/events",
+    "bridge_port": 44429,
+    "clipboard": {
+      "blocked_loops_count": 0,
+      "policy": {
+        "allow_files": true,
+        "allow_images": true,
+        "allow_rich_html": true,
+        "allow_text_unicode": true,
+        "direction": "BIDIRECTIONAL",
+        "enabled": true,
+        "loop_window_ms": 1500,
+        "max_binary_bytes": 67108864,
+        "max_text_bytes": 8388608,
+        "never_auto_execute": true,
+        "never_log_content": true
       },
-      {
-        "display_name": "Claude Desktop",
-        "notes": "No official completion webhook; reported UNKNOWN unless read-only MCP/log adapter is configured (never reads cookies/tokens).",
-        "source_id": "claude_desktop",
-        "support_status": "UNKNOWN"
+      "synced_items_count": 0
+    },
+    "engine_base": "1.5.3",
+    "hardware": {
+      "ai_processes": [],
+      "captured_at_utc": "2026-11-25T03:10:21.010894349+00:00",
+      "cpu_brand": "Intel(R) Xeon(R) CPU @ 2.30GHz",
+      "cpu_temp_c": null,
+      "cpu_usage_pct": 46.79999923706055,
+      "disk_activity_read_bytes": 0,
+      "disk_activity_write_bytes": 0,
+      "disk_free_gb": 2291.87,
+      "disk_total_gb": 2501.31,
+      "disk_usage_pct": 0.8399999737739563,
+      "disk_used_gb": 209.43,
+      "gpu_model": null,
+      "gpu_power_watts": null,
+      "gpu_temp_c": null,
+      "gpu_usage_pct": null,
+      "net_download_bps": 14194,
+      "net_upload_bps": 14194,
+      "ram_total_gb": 7.77,
+      "ram_usage_pct": 15.59999942779541,
+      "ram_used_gb": 1.21,
+      "remote_service_healthy": false,
+      "system_uptime_secs": 14295,
+      "telemetry_scope": "LOCAL_HOST_SENSORS",
+      "vram_total_mb": null,
+      "vram_usage_pct": null,
+      "vram_used_mb": null
+    },
+    "hardware_alerts": [],
+    "headless": {
+      "active_preset": {
+        "dpi_scale_pct": 100,
+        "height": 1080,
+        "refresh_hz": 60,
+        "width": 1920
       },
-      {
-        "display_name": "Codex CLI",
-        "notes": "Official Codex CLI notify hook adapter.",
-        "source_id": "codex_cli",
-        "support_status": "OFFICIAL_HOOK"
+      "auto_restore_on_disconnect": true,
+      "boss_driver_install_approved": false,
+      "display_state": "PHYSICAL_MONITOR_ACTIVE",
+      "driver_signature_enforcement_preserved": true,
+      "fallback_driver": "VirtualDrivers/Virtual-Display-Driver 25.7.23 (SignPath Authenticode x64; non-WHQL on Win11 ARM64)",
+      "hardware_fallback": "HDMI 2.0 / DP EDID Dummy Plug on NVIDIA RTX 3060 (Zero OS Driver Required)",
+      "primary_driver": "Amyuni USB Mobile Monitor Virtual Display (usbmmidd_v2 \u2014 Microsoft WHQL Signed: CN=Microsoft Windows Hardware Compatibility Publisher, SHA-256 RSA)",
+      "require_signed_whql_driver": true,
+      "rtx_3060_compatible": true,
+      "rustdesk_idd_v04_audit": "BLOCKED_DO_NOT_INSTALL: RustDeskIddDriver v0.4 (SHA-256 e0f88754...) uses anonymous self-signed WDKTestCert (SHA-1 D1:DB:B6:72:D5:A5:00:B9:80:96:89:CA:EA:1C:E4:9E:79:97:67:F0) requiring LocalMachine\\Root import.",
+      "saved_physical_topology": null,
+      "secure_boot_preserved": true,
+      "virtual_display_active": false,
+      "virtual_display_supported_by_os": false
+    },
+    "local_peer_id": "1",
+    "notifications": {
+      "active_toasts": [
+        {
+          "ai_source": "claude_code",
+          "artifact_reference": null,
+          "auto_hide_seconds": 6,
+          "available_actions": [
+            "OPEN_REMOTE",
+            "VIEW_STATUS",
+            "VIEW_REPORT",
+            "MARK_READ",
+            "CLOSE_TOAST"
+          ],
+          "body": "Claude Code completed turn (Stop) in DAUVERSE_REMOTE_DESKTOP",
+          "category": "CLAUDE_COMMAND_COMPLETED",
+          "created_at_utc": "2026-11-25T03:10:20.794621761+00:00",
+          "device_id": "devbox",
+          "is_read": false,
+          "notification_id": "34154bc4-ef0e-4e60-b955-ac9e717a3d30",
+          "priority_alert": false,
+          "project_name": "DAUVERSE_REMOTE_DESKTOP",
+          "severity": "SUCCESS",
+          "severity_color_hex": "#10B981",
+          "status": "COMPLETED",
+          "steal_focus": false,
+          "title": "Claude \u0111\u00e3 ho\u00e0n th\u00e0nh c\u00e2u l\u1ec7nh",
+          "verified_evidence_line": "Hook: Stop"
+        },
+        {
+          "ai_source": "codex_cli",
+          "artifact_reference": null,
+          "auto_hide_seconds": 6,
+          "available_actions": [
+            "OPEN_REMOTE",
+            "VIEW_STATUS",
+            "VIEW_REPORT",
+            "MARK_READ",
+            "CLOSE_TOAST"
+          ],
+          "body": "All 16 security negative tests verified PASS",
+          "category": "CODEX_COMMAND_COMPLETED",
+          "created_at_utc": "2026-11-25T03:10:20.946653308+00:00",
+          "device_id": "devbox",
+          "is_read": false,
+          "notification_id": "f86299fa-5a4d-4546-87ad-3a33ef6d23a5",
+          "priority_alert": false,
+          "project_name": "DAUVERSE_REMOTE_DESKTOP",
+          "severity": "SUCCESS",
+          "severity_color_hex": "#10B981",
+          "status": "COMPLETED",
+          "steal_focus": false,
+          "title": "Codex \u0111\u00e3 ho\u00e0n th\u00e0nh c\u00e2u l\u1ec7nh",
+          "verified_evidence_line": null
+        }
+      ],
+      "preferences": {
+        "auto_hide_seconds": 6,
+        "dedup_window_ms": 10000,
+        "do_not_disturb": false,
+        "enabled": true,
+        "hide_sensitive_by_default": true,
+        "max_history_items": 500,
+        "max_offline_buffered_events": 250,
+        "play_sound": false,
+        "quiet_mode": false
       },
-      {
-        "display_name": "Codex Desktop",
-        "notes": "Read-only process/log observer; reports UNKNOWN when structured completion event is absent.",
-        "source_id": "codex_desktop",
-        "support_status": "READ_ONLY_PROCESS_MONITOR"
+      "recent_items": [
+        {
+          "ai_source": "codex_cli",
+          "artifact_reference": null,
+          "auto_hide_seconds": 6,
+          "available_actions": [
+            "OPEN_REMOTE",
+            "VIEW_STATUS",
+            "VIEW_REPORT",
+            "MARK_READ",
+            "CLOSE_TOAST"
+          ],
+          "body": "All 16 security negative tests verified PASS",
+          "category": "CODEX_COMMAND_COMPLETED",
+          "created_at_utc": "2026-11-25T03:10:20.946653308+00:00",
+          "device_id": "devbox",
+          "is_read": false,
+          "notification_id": "f86299fa-5a4d-4546-87ad-3a33ef6d23a5",
+          "priority_alert": false,
+          "project_name": "DAUVERSE_REMOTE_DESKTOP",
+          "severity": "SUCCESS",
+          "severity_color_hex": "#10B981",
+          "status": "COMPLETED",
+          "steal_focus": false,
+          "title": "Codex \u0111\u00e3 ho\u00e0n th\u00e0nh c\u00e2u l\u1ec7nh",
+          "verified_evidence_line": null
+        },
+        {
+          "ai_source": "claude_code",
+          "artifact_reference": null,
+          "auto_hide_seconds": 6,
+          "available_actions": [
+            "OPEN_REMOTE",
+            "VIEW_STATUS",
+            "VIEW_REPORT",
+            "MARK_READ",
+            "CLOSE_TOAST"
+          ],
+          "body": "Claude Code completed turn (Stop) in DAUVERSE_REMOTE_DESKTOP",
+          "category": "CLAUDE_COMMAND_COMPLETED",
+          "created_at_utc": "2026-11-25T03:10:20.794621761+00:00",
+          "device_id": "devbox",
+          "is_read": false,
+          "notification_id": "34154bc4-ef0e-4e60-b955-ac9e717a3d30",
+          "priority_alert": false,
+          "project_name": "DAUVERSE_REMOTE_DESKTOP",
+          "severity": "SUCCESS",
+          "severity_color_hex": "#10B981",
+          "status": "COMPLETED",
+          "steal_focus": false,
+          "title": "Claude \u0111\u00e3 ho\u00e0n th\u00e0nh c\u00e2u l\u1ec7nh",
+          "verified_evidence_line": "Hook: Stop"
+        }
+      ],
+      "unread_count": 2
+    },
+    "performance": {
+      "active_mode": "AUTO_ADAPTIVE",
+      "applied_params": {
+        "encoder_preference": "NVENC_LOW_BITRATE",
+        "file_transfer_bw_cap_kbps": 8000,
+        "idle_fps": 2,
+        "max_bitrate_kbps": 1800,
+        "min_bitrate_kbps": 400,
+        "mode": "AUTO_ADAPTIVE",
+        "preferred_codec": "H265",
+        "prioritize_input_latency": true,
+        "rationale": "Auto-Adaptive detected high RTT / packet loss / Relay path -> shifted to Low Bandwidth resilient profile.",
+        "resolution_scale_pct": 75,
+        "static_frame_decimation": true,
+        "target_fps": 24
       },
-      {
-        "display_name": "Antigravity Desktop",
-        "notes": "Strictly read-only status interface; zero modification or workspace contention with DAUVERSE AI.",
-        "source_id": "antigravity_desktop",
-        "support_status": "STRUCTURED_LOGS_READ_ONLY"
-      },
-      {
-        "display_name": "Antigravity CLI",
-        "notes": "Supported via approved read-only wrapper / structured output.",
-        "source_id": "antigravity_cli",
-        "support_status": "APPROVED_WRAPPER_ADAPTER"
-      },
-      {
-        "display_name": "Antigravity Remote Agent",
-        "notes": "Structured checkpoint/status reader.",
-        "source_id": "antigravity_remote",
-        "support_status": "STRUCTURED_LOGS_READ_ONLY"
-      },
-      {
-        "display_name": "DAUVERSE AI Controller",
-        "notes": "Consumes existing Controller events read-only; never creates a second Controller.",
-        "source_id": "dauverse_ai_controller",
-        "support_status": "EXISTING_CONTROLLER_EVENTS_READ_ONLY"
-      },
-      {
-        "display_name": "ComfyUI Render Engine",
-        "notes": "Read-only localhost /queue and /history observer for video/image render jobs.",
-        "source_id": "comfyui",
-        "support_status": "OFFICIAL_LOCAL_HTTP_READ_ONLY"
-      },
-      {
-        "display_name": "Build / QA / Render / PowerShell Jobs",
-        "notes": "Signed wrapper scripts emitting verified exit codes and test counts.",
-        "source_id": "build_qa_powershell",
-        "support_status": "APPROVED_WRAPPER_ADAPTER"
+      "bitrate_kbps": 0,
+      "codec": "H265",
+      "connection_route": "DISCONNECTED (No Active Remote Session)",
+      "cpu_usage_pct": 46.79999923706055,
+      "encoder": "NVENC_LOW_BITRATE",
+      "fps": 0,
+      "gpu_usage_pct": 0.0,
+      "network_quality_label": "Idle (No Session)",
+      "network_quality_score": 0,
+      "packet_loss_pct": null,
+      "ping_rtt_ms": 0,
+      "session_connected": false
+    },
+    "product": "DAUVERSE REMOTE DESKTOP",
+    "release": {
+      "auto_update_enabled": false,
+      "auto_update_policy": "Disabled until official Authenticode certificate is provisioned; manual SHA-256 verified update and rollback supported.",
+      "code_signing_status": "UNSIGNED",
+      "product_name": "DAUVERSE REMOTE DESKTOP",
+      "product_version": "1.0.0",
+      "rollback_supported": true,
+      "short_name": "DAUVERSE REMOTE",
+      "upstream_engine_base": "1.5.3"
+    },
+    "security": {
+      "recent_audit": [
+        {
+          "action": "SECURITY_CENTER_INIT",
+          "actor": "SYSTEM",
+          "detail": "Initialized Device Shield (vault=UNIX_SEALED_0600_ENCRYPT_THEN_MAC, allowlist=true, telemetry=false)",
+          "entry_hash": "dcb88345919a774952e86ae35a56ab28f0c118db25ae715f955bd3719b7b446b",
+          "outcome": "OK",
+          "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "seq": 1,
+          "timestamp_utc": "2026-11-25T03:10:20.639140517+00:00"
+        }
+      ],
+      "summary": {
+        "active_sessions_count": 0,
+        "allowlist_enforced": true,
+        "audit_chain_intact": true,
+        "credential_vault": "UNIX_SEALED_0600_ENCRYPT_THEN_MAC",
+        "encryption": "End-to-End NaCl/Curve25519 + XSalsa20-Poly1305 (RustDesk Protocol) + HMAC-SHA256 IPC/Events",
+        "mfa_required": false,
+        "revoked_devices_count": 0,
+        "step_up_pin_configured": false,
+        "telemetry_enabled": false,
+        "trusted_devices": [],
+        "trusted_devices_count": 0
       }
-    ],
-    "waiting_approval": 0
-  },
-  "engine_base": "1.5.3",
-  "hardware": {
-    "ai_processes": [],
-    "captured_at_utc": "2026-11-24T17:26:42.437783756+00:00",
-    "cpu_brand": "Intel(R) Xeon(R) CPU @ 2.30GHz",
-    "cpu_temp_c": null,
-    "cpu_usage_pct": 0.0,
-    "disk_activity_read_bytes": 700416,
-    "disk_activity_write_bytes": 36864,
-    "disk_free_gb": 2307.68,
-    "disk_total_gb": 2501.31,
-    "disk_usage_pct": 7.699999809265137,
-    "disk_used_gb": 193.63,
-    "gpu_model": null,
-    "gpu_power_watts": null,
-    "gpu_temp_c": null,
-    "gpu_usage_pct": null,
-    "net_download_bps": 0,
-    "net_upload_bps": 0,
-    "ram_total_gb": 7.77,
-    "ram_usage_pct": 10.5,
-    "ram_used_gb": 0.82,
-    "remote_service_healthy": true,
-    "system_uptime_secs": 5258,
-    "vram_total_mb": null,
-    "vram_usage_pct": null,
-    "vram_used_mb": null
-  },
-  "hardware_alerts": [],
-  "headless": {
-    "active_preset": {
-      "dpi_scale_pct": 100,
-      "height": 1080,
-      "refresh_hz": 60,
-      "width": 1920
     },
-    "auto_restore_on_disconnect": true,
-    "boss_driver_install_approved": false,
-    "display_state": "PHYSICAL_MONITOR_ACTIVE",
-    "driver_signature_enforcement_preserved": true,
-    "fallback_driver": "VirtualDrivers/Virtual-Display-Driver 25.7.23 (MttVDD)",
-    "hardware_fallback": "HDMI 2.0 EDID Dummy Plug (Hardware Fallback Only)",
-    "primary_driver": "RustDeskIddDriver v0.4 (Signed UMDF Indirect Display Driver)",
-    "require_signed_whql_driver": true,
-    "rtx_3060_compatible": true,
-    "saved_physical_topology": "Primary-DP1-1920x1080@60Hz",
-    "secure_boot_preserved": true,
-    "virtual_display_active": false
-  },
-  "notifications": {
-    "active_toasts": [],
-    "preferences": {
-      "auto_hide_seconds": 6,
-      "dedup_window_ms": 10000,
-      "do_not_disturb": false,
-      "enabled": true,
-      "hide_sensitive_by_default": true,
-      "max_history_items": 500,
-      "max_offline_buffered_events": 250,
-      "play_sound": false,
-      "quiet_mode": false
+    "service": {
+      "active_remote_banner_visible": true,
+      "auto_start_with_windows": false,
+      "boss_service_install_approved": false,
+      "defender_av_untouched": true,
+      "last_health_check_utc": "2026-11-25T03:10:21.011016274+00:00",
+      "no_hidden_persistence": true,
+      "pre_login_session_helper_enabled": false,
+      "privilege_separation_enforced": true,
+      "recovery_restart_count": 0,
+      "scm_display_name": "DAUVERSE Remote Desktop Service (RustDesk Engine)",
+      "scm_service_name": "RustDesk",
+      "service_state": "NOT_INSTALLED_PORTABLE_MODE",
+      "system_tray_indicator_visible": true,
+      "unattended_access_enabled": false
     },
-    "unread_count": 0
-  },
-  "performance": {
-    "active_mode": "AUTO_ADAPTIVE",
-    "applied_params": {
-      "encoder_preference": "NVENC_LOW_LATENCY_P1",
-      "file_transfer_bw_cap_kbps": 40000,
-      "idle_fps": 10,
-      "max_bitrate_kbps": 12000,
-      "min_bitrate_kbps": 2500,
-      "mode": "AUTO_ADAPTIVE",
-      "preferred_codec": "H264",
-      "prioritize_input_latency": true,
-      "rationale": "Auto-Adaptive detected fast Direct P2P LAN/low-RTT path -> enabled 60 FPS Ultra Low Latency.",
-      "resolution_scale_pct": 100,
-      "static_frame_decimation": true,
-      "target_fps": 60
+    "smart_power": {
+      "host_state": "ONLINE",
+      "recent_events": [],
+      "smart_plug": {
+        "adapter_name": "DisabledSmartPlugAdapter (Hunonic SK02 Surveyed)",
+        "blocker_note": "BLOCKED (Hunonic SK02 Surveyed): Hunonic SK02 (90-240VAC 16A, Wi-Fi 2.4GHz) operates exclusively via proprietary Hunonic Cloud/Mobile App with no official public HTTP, MQTT, or OpenAPI documentation. Per Section 6, undocumented/reverse-engineered APIs and credential extraction are prohibited; DisabledSmartPlugAdapter remains active. Use UDP Wake-on-LAN for daily wake and Hunonic mobile app + BIOS Restore AC Power Loss = Power On for cold recovery.",
+        "evidence_class": "BLOCKED",
+        "integration_state": "BLOCKED",
+        "power_watts": null,
+        "relay_on": null
+      }
     },
-    "bitrate_kbps": 7250,
-    "codec": "H264",
-    "connection_route": "Direct P2P",
-    "cpu_usage_pct": 0.0,
-    "encoder": "NVENC_LOW_LATENCY_P1",
-    "fps": 60,
-    "gpu_usage_pct": 0.0,
-    "network_quality_label": "Excellent",
-    "network_quality_score": 98,
-    "packet_loss_pct": 0.0,
-    "ping_rtt_ms": 14
+    "transfer_queue": {
+      "active_count": 0,
+      "authorized_root": "/tmp/dauverse_e2e_rust_f8_q9mo8/received_files",
+      "bandwidth_limit_kbps": null,
+      "jobs": []
+    },
+    "version": "1.0.0"
   },
-  "product": "DAUVERSE REMOTE DESKTOP",
-  "release": {
-    "auto_update_enabled": false,
-    "auto_update_policy": "Disabled until official Authenticode certificate is provisioned; manual SHA-256 verified update and rollback supported.",
-    "code_signing_status": "UNSIGNED",
-    "product_name": "DAUVERSE REMOTE DESKTOP",
-    "product_version": "1.0.0",
-    "rollback_supported": true,
-    "short_name": "DAUVERSE REMOTE",
-    "upstream_engine_base": "1.5.3"
-  },
-  "security": {
-    "active_sessions_count": 0,
-    "allowlist_enforced": true,
-    "audit_chain_intact": true,
-    "credential_vault": "UNIX_SEALED_0600_ENCRYPT_THEN_MAC",
-    "encryption": "End-to-End NaCl/Curve25519 + XSalsa20-Poly1305 (RustDesk Protocol) + HMAC-SHA256 IPC/Events",
-    "mfa_required": false,
-    "revoked_devices_count": 0,
-    "telemetry_enabled": false,
-    "trusted_devices": [],
-    "trusted_devices_count": 0
-  },
-  "service": {
-    "active_remote_banner_visible": true,
-    "auto_start_with_windows": false,
-    "defender_av_untouched": true,
-    "last_health_check_utc": "2026-11-24T17:26:42.437883605+00:00",
-    "no_hidden_persistence": true,
-    "pre_login_session_helper_enabled": false,
-    "privilege_separation_enforced": true,
-    "recovery_restart_count": 0,
-    "service_state": "NOT_INSTALLED_PORTABLE_MODE",
-    "system_tray_indicator_visible": true,
-    "unattended_access_enabled": false
-  },
-  "smart_power": {
-    "host_state": "ONLINE",
-    "smart_plug": {
-      "adapter_name": "DisabledSmartPlugAdapter",
-      "blocker_note": "BLOCKED: Smart plug brand/model not specified yet. Interface ready; Boss may continue using vendor app to toggle AC power.",
-      "evidence_class": "BLOCKED",
-      "integration_state": "BLOCKED",
-      "power_watts": null,
-      "relay_on": null
-    }
-  },
-  "version": "1.0.0"
+  "ok": true
 }

@@ -472,6 +472,73 @@ impl TransferQueueManager {
         self.jobs.lock().unwrap().clone()
     }
 
+    pub fn track_engine_receive_start(
+        &self,
+        engine_job_id: i32,
+        conn_id: i32,
+        dest_dir: &str,
+        relative_path: &str,
+        total_bytes: u64,
+    ) {
+        let job_id = format!("engine-fs-{engine_job_id}");
+        let now = chrono::Utc::now().to_rfc3339();
+        let resolved = Path::new(dest_dir)
+            .join(relative_path)
+            .to_string_lossy()
+            .into_owned();
+        let mut jobs = self.jobs.lock().unwrap();
+        if let Some(existing) = jobs.iter_mut().find(|j| j.job_id == job_id) {
+            existing.status = TransferStatus::Active;
+            existing.total_bytes = total_bytes;
+            existing.updated_at_utc = now;
+            return;
+        }
+        jobs.push(TransferJob {
+            job_id,
+            peer_id: format!("conn-{conn_id}"),
+            direction: TransferDirection::DownloadToLocal,
+            relative_path: relative_path.to_owned(),
+            resolved_target_path: resolved,
+            total_bytes,
+            transferred_bytes: 0,
+            resume_offset: 0,
+            expected_sha256: None,
+            verified_sha256: None,
+            status: TransferStatus::Active,
+            speed_bytes_per_sec: 0,
+            eta_seconds: None,
+            error_message: None,
+            created_at_utc: now.clone(),
+            updated_at_utc: now,
+            auto_open_disabled: true,
+        });
+    }
+
+    pub fn track_engine_receive_finish(
+        &self,
+        engine_job_id: i32,
+        completed: bool,
+        cancelled: bool,
+        error_message: Option<&str>,
+    ) {
+        let job_id = format!("engine-fs-{engine_job_id}");
+        let mut jobs = self.jobs.lock().unwrap();
+        if let Some(job) = jobs.iter_mut().find(|j| j.job_id == job_id) {
+            if completed {
+                job.status = TransferStatus::Completed;
+                job.transferred_bytes = job.total_bytes;
+                job.eta_seconds = Some(0);
+            } else if cancelled {
+                job.status = TransferStatus::Cancelled;
+            } else {
+                job.status = TransferStatus::Failed;
+                job.error_message = error_message.map(|s| s.to_owned());
+            }
+            job.speed_bytes_per_sec = 0;
+            job.updated_at_utc = chrono::Utc::now().to_rfc3339();
+        }
+    }
+
     fn transition<F>(&self, job_id: &str, f: F) -> Result<TransferJob, String>
     where
         F: FnOnce(&mut TransferJob) -> Result<(), String>,

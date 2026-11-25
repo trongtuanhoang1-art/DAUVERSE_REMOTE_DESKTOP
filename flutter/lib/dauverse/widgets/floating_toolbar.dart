@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:window_manager/window_manager.dart';
 import '../bridge/dauverse_bridge.dart';
 import '../l10n/dauverse_i18n.dart';
 import '../theme/dauverse_theme.dart';
@@ -18,12 +19,29 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
   bool _fullScreen = false;
   bool _showStatsPopup = false;
 
+  Future<void> _setFullScreen(bool enable) async {
+    setState(() => _fullScreen = enable);
+    try {
+      await windowManager.setFullScreen(enable);
+    } catch (_) {}
+  }
+
+  Future<void> _togglePinWindow() async {
+    final next = !_pinnedWindow;
+    setState(() => _pinnedWindow = next);
+    try {
+      await windowManager.setAlwaysOnTop(next);
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = DauversePalette.of(context);
     final c = widget.controller;
     final i18n = c.i18n;
     final visibleOpacity = (c.toolbarAutoHide && !_hovered) ? 0.22 : 1.0;
+    final perf = c.snapshot['performance'] as Map<String, dynamic>? ?? const {};
+    final connected = perf['session_connected'] == true;
 
     return FocusScope(
       canRequestFocus: false,
@@ -32,7 +50,7 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
           Positioned(
             top: _dragOffset.dy.clamp(4.0, 420.0),
             left: c.toolbarPinnedTop ? null : _dragOffset.dx.clamp(8.0, 900.0),
-            right: c.toolbarPinnedTop ? null : null,
+            right: null,
             child: Align(
               alignment: Alignment.topCenter,
               child: MouseRegion(
@@ -95,19 +113,19 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                               children: [
                                 _btn(p, Icons.fullscreen, i18n.t('Toàn màn hình', 'Full Screen'),
                                     active: _fullScreen,
-                                    onTap: () => setState(() => _fullScreen = true)),
+                                    onTap: () => _setFullScreen(true)),
                                 _btn(p, Icons.fullscreen_exit, i18n.t('Cửa sổ', 'Window Mode'),
                                     active: !_fullScreen,
-                                    onTap: () => setState(() => _fullScreen = false)),
+                                    onTap: () => _setFullScreen(false)),
                                 _btn(p, Icons.picture_in_picture_alt, 'Mini Control',
                                     onTap: () => c.selectScreen(DauverseScreenId.miniControl)),
                                 _btn(p, Icons.push_pin_outlined, i18n.t('Ghim cửa sổ', 'Pin Window'),
                                     active: _pinnedWindow,
-                                    onTap: () => setState(() => _pinnedWindow = !_pinnedWindow)),
+                                    onTap: _togglePinWindow),
                                 _btn(p, Icons.content_paste, 'Clipboard',
                                     onTap: () => c.selectScreen(DauverseScreenId.clipboardSettings)),
                                 _btn(p, Icons.swap_horiz, i18n.t('Truyền file', 'File Transfer'),
-                                    onTap: () => c.selectScreen(DauverseScreenId.fileTransfer)),
+                                    onTap: () => c.launchRealFileTransfer(context, c.targetPeerId)),
                                 _btn(
                                     p,
                                     c.audioEnabled ? Icons.volume_up : Icons.volume_off,
@@ -117,8 +135,23 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                                 _btn(p, Icons.monitor, i18n.t('Chuyển màn hình', 'Monitor Switch'),
                                     onTap: () => setState(
                                         () => c.selectedMonitorIndex = (c.selectedMonitorIndex + 1) % 3)),
-                                _btn(p, Icons.aspect_ratio, i18n.t('Độ phân giải', 'Resolution'),
-                                    onTap: () {}),
+                                PopupMenuButton<String>(
+                                  tooltip: i18n.t('Độ phân giải', 'Resolution Preset'),
+                                  onSelected: (preset) {
+                                    setState(() => c.selectedResolutionPreset = preset);
+                                    c.lastActionBanner = 'Resolution preset: $preset';
+                                    c.refreshSnapshot();
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(value: '1920x1080@60', child: Text('1920x1080 @ 60Hz (FHD)')),
+                                    PopupMenuItem(value: '2560x1440@60', child: Text('2560x1440 @ 60Hz (2K)')),
+                                    PopupMenuItem(value: '3840x2160@60', child: Text('3840x2160 @ 60Hz (4K)')),
+                                  ],
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(6),
+                                    child: Icon(Icons.aspect_ratio, size: 17, color: p.textPrimary),
+                                  ),
+                                ),
                                 _btn(p, Icons.speed, i18n.t('Hiệu năng', 'Performance Mode'),
                                     onTap: () {
                                   const modes = [
@@ -133,12 +166,15 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                                   c.setPerformanceProfile(modes[(idx + 1) % modes.length]);
                                 }),
                                 _btn(p, Icons.camera_alt_outlined, 'Screenshot', onTap: () {
-                                  c.triggerCornerToastPreview(
-                                    title: i18n.t('Đã chụp ảnh màn hình phiên', 'Session Screenshot Saved'),
-                                    aiSource: 'SessionTools',
-                                    project: 'HOME-RTX3060',
-                                    body: 'capture_${DateTime.now().millisecondsSinceEpoch}.png',
-                                  );
+                                  if (c.targetPeerId.isNotEmpty && c.onLaunchRealSession != null) {
+                                    c.launchRealRemoteSession(context, c.targetPeerId);
+                                  } else {
+                                    c.lastActionBanner = i18n.t(
+                                      'NO_ACTIVE_REMOTE_SESSION: Mở phiên kết nối thực tới máy đích trước khi chụp ảnh khung hình.',
+                                      'NO_ACTIVE_REMOTE_SESSION: Connect to a live remote peer before capturing stream frames.',
+                                    );
+                                    c.refreshSnapshot();
+                                  }
                                 }),
                                 _btn(
                                     p,
@@ -150,13 +186,11 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                                 _btn(p, Icons.keyboard_alt_outlined, i18n.t('Phím tắt', 'Shortcuts'),
                                     onTap: () => c.selectScreen(DauverseScreenId.settings)),
                                 _btn(p, Icons.security_update_warning, 'Ctrl+Alt+Del', onTap: () {
-                                  c.triggerCornerToastPreview(
-                                    title: 'SAS Ctrl+Alt+Del',
-                                    aiSource: 'WindowsService',
-                                    project: 'HOME-RTX3060',
-                                    body: i18n.t('Đã gửi tín hiệu SAS hợp lệ qua Windows Service.',
-                                        'Dispatched OS-supported SAS via Windows Service.'),
+                                  c.lastActionBanner = i18n.t(
+                                    'Ctrl+Alt+Del SAS chỉ khả dụng trong cửa sổ phiên kết nối thực tới Windows Service đã cấp quyền.',
+                                    'Ctrl+Alt+Del SAS requires an active native session connected to an authorized Windows Service.',
                                   );
+                                  c.refreshSnapshot();
                                 }),
                                 _btn(p, Icons.auto_awesome, 'AI Status',
                                     onTap: () => c.selectScreen(DauverseScreenId.aiLiveStatus)),
@@ -168,7 +202,10 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                                     onTap: () => c.selectScreen(DauverseScreenId.smartPower)),
                                 _btn(p, Icons.call_end, i18n.t('Ngắt kết nối', 'Disconnect'),
                                     danger: true,
-                                    onTap: () => c.selectScreen(DauverseScreenId.dashboard)),
+                                    onTap: () {
+                                      c.targetPeerId = '';
+                                      c.selectScreen(DauverseScreenId.dashboard);
+                                    }),
                                 const SizedBox(width: 4),
                                 _btn(p, Icons.vertical_align_top, i18n.t('Ghim cạnh trên', 'Pin Edge'),
                                     active: c.toolbarPinnedTop,
@@ -197,7 +234,9 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                 padding: const EdgeInsets.all(12),
                 accentBorder: p.cyan,
                 child: Text(
-                  'Codec: H265 (NVENC)  |  60 FPS  |  RTT: 14 ms  |  6.8 Mbps  |  Loss: 0.0%  |  Direct P2P',
+                  connected
+                      ? 'Codec: ${perf['codec']} (${perf['encoder']})  |  ${perf['fps']} FPS  |  RTT: ${perf['ping_rtt_ms']} ms  |  ${perf['bitrate_kbps']} kbps  |  ${perf['connection_route']}'
+                      : 'Session: DISCONNECTED  |  Profile: ${perf['active_mode'] ?? c.performanceMode}  |  Preferred Codec: ${perf['codec'] ?? "H265"} (${perf['encoder'] ?? "NVENC"})',
                   style: DauverseTypography.kpi(p, size: 12, color: p.cyan),
                 ),
               ),

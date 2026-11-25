@@ -35,5 +35,8 @@ Ask the maintainers of file_picker to either avoid referencing a default impleme
 Package file_picker:windows references file_picker:windows as the default plugin, but it does not provide an inline implementation.
 Ask the maintainers of file_picker to either avoid referencing a default implementation via `platforms: windows: default_package: file_picker` or add an inline implementation to file_picker via `platforms: windows:` `pluginClass` or `dartPluginClass`.
 
-00:00 +0: Renders all 16 mandatory DAUVERSE screens in Dark and Light modes with VI/EN i18n
-00:13 +1: All tests passed!
+00:00 +0: Renders all 16 mandatory DAUVERSE screens in Dark/Light & VI/EN without fake mock data
+00:05 +1: Quick Connect and Dual-Pane File Transfer invoke real session launcher with user Peer ID
+00:05 +2: Mini Control modes, window controls, and Smart Power Hunonic SK02 status render accurately
+00:06 +3: Signed HTTP AI event renders Corner Toast, AI Live Status, and Notification Center without null fields
+00:06 +4: All tests passed!

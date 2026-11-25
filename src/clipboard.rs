@@ -92,6 +92,62 @@ pub fn peek_clipboard(
 }
 
 #[cfg(not(target_os = "android"))]
+fn dauverse_filter_clipboard_items(
+    items: Vec<ClipboardData>,
+    origin_peer: &str,
+    is_incoming_from_host: bool,
+) -> Vec<ClipboardData> {
+    use crate::dauverse::{clipboard_guard::ClipboardPayloadKind, DauverseRuntime};
+    let guard = &DauverseRuntime::global().clipboard_guard;
+    let now_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
+    items
+        .into_iter()
+        .filter(|item| match item {
+            ClipboardData::Special(_) => true,
+            ClipboardData::Text(t) => guard
+                .inspect_and_record(
+                    origin_peer,
+                    is_incoming_from_host,
+                    ClipboardPayloadKind::PlainTextUtf8,
+                    t.as_bytes(),
+                    now_ms,
+                )
+                .allowed,
+            ClipboardData::Html(h) | ClipboardData::Rtf(h) => guard
+                .inspect_and_record(
+                    origin_peer,
+                    is_incoming_from_host,
+                    ClipboardPayloadKind::RichTextHtml,
+                    h.as_bytes(),
+                    now_ms,
+                )
+                .allowed,
+            ClipboardData::Image(img) => guard
+                .inspect_and_record(
+                    origin_peer,
+                    is_incoming_from_host,
+                    ClipboardPayloadKind::ImageBytes,
+                    &img.bytes(),
+                    now_ms,
+                )
+                .allowed,
+            #[cfg(feature = "unix-file-copy-paste")]
+            ClipboardData::FileUrl(u) => guard
+                .inspect_and_record(
+                    origin_peer,
+                    is_incoming_from_host,
+                    ClipboardPayloadKind::FileList,
+                    u.as_bytes(),
+                    now_ms,
+                )
+                .allowed,
+            #[allow(unreachable_patterns)]
+            _ => true,
+        })
+        .collect()
+}
+
+#[cfg(not(target_os = "android"))]
 fn read_clipboard_message(
     ctx: &mut Option<ClipboardContext>,
     side: ClipboardSide,
@@ -103,9 +159,14 @@ fn read_clipboard_message(
     let ctx2 = ctx.as_mut()?;
     match ctx2.get(side, force) {
         Ok(content) => {
-            if !content.is_empty() {
+            let filtered = dauverse_filter_clipboard_items(
+                content,
+                "local_clipboard_reader",
+                side == ClipboardSide::Host,
+            );
+            if !filtered.is_empty() {
                 let mut msg = Message::new();
-                let clipboards = proto::create_multi_clipboards(content);
+                let clipboards = proto::create_multi_clipboards(filtered);
                 msg.set_multi_clipboards(clipboards.clone());
                 return Some((msg, clipboards));
             }
@@ -257,6 +318,14 @@ fn update_clipboard_(multi_clipboards: Vec<Clipboard>, side: ClipboardSide) {
 
 #[cfg(not(target_os = "android"))]
 fn do_update_clipboard_(mut to_update_data: Vec<ClipboardData>, side: ClipboardSide) {
+    to_update_data = dauverse_filter_clipboard_items(
+        to_update_data,
+        "remote_clipboard_peer",
+        side == ClipboardSide::Client,
+    );
+    if to_update_data.is_empty() {
+        return;
+    }
     let mut ctx = CLIPBOARD_CTX.lock().unwrap();
     if ctx.is_none() {
         match ClipboardContext::new() {

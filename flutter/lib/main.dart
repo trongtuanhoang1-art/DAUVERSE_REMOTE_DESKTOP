@@ -108,11 +108,26 @@ Future<void> main(List<String> args) async {
   } else if (args.contains('--install')) {
     runInstallPage();
   } else if (args.contains('--dauverse-ui')) {
-    runApp(const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'DAUVERSE REMOTE DESKTOP V1.0',
-      home: DauverseExecutiveShell(),
-    ));
+    desktopType = DesktopType.main;
+    await windowManager.ensureInitialized();
+    if (Platform.environment['DAUVERSE_XVFB_CAPTURE'] == '1') {
+      runApp(MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'DAUVERSE REMOTE DESKTOP V1.0',
+        home: DauverseExecutiveShell(
+          classicRustDeskBuilder: (_) => const DesktopTabPage(),
+          onLaunchRealSession: (ctx, peerId, {bool isFileTransfer = false}) async {
+            await connect(ctx, peerId, isFileTransfer: isFileTransfer);
+          },
+        ),
+      ));
+    } else {
+      windowManager.setPreventClose(true);
+      if (isMacOS) {
+        disableWindowMovable(kWindowId);
+      }
+      runMainApp(false);
+    }
   } else {
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
@@ -511,6 +526,22 @@ class _AppState extends State<App> with WidgetsBindingObserver {
           home: isDesktop
               ? DauverseExecutiveShell(
                   classicRustDeskBuilder: (_) => const DesktopTabPage(),
+                  onLaunchRealSession: (ctx, peerId, {bool isFileTransfer = false}) async {
+                    await connect(
+                      ctx,
+                      peerId,
+                      isFileTransfer: isFileTransfer,
+                    );
+                  },
+                  peersProvider: () => gFFI.peerTabModel.currentTabCachedPeers
+                      .map((p) => <String, String>{
+                            'id': p.id,
+                            'username': p.username,
+                            'hostname': p.hostname,
+                            'platform': p.platform,
+                            'alias': p.alias,
+                          })
+                      .toList(),
                 )
               : isWeb
                   ? WebHomePage()

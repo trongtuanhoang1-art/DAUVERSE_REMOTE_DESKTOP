@@ -70,24 +70,24 @@ pub struct DisabledSmartPlugAdapter;
 impl SmartPlugAdapter for DisabledSmartPlugAdapter {
     fn status(&self) -> SmartPlugStatus {
         SmartPlugStatus {
-            adapter_name: "DisabledSmartPlugAdapter".to_owned(),
+            adapter_name: "DisabledSmartPlugAdapter (Hunonic SK02 Surveyed)".to_owned(),
             integration_state: "BLOCKED".to_owned(),
             relay_on: None,
             power_watts: None,
             evidence_class: "BLOCKED".to_owned(),
             blocker_note: Some(
-                "BLOCKED: Smart plug brand/model not specified yet. Interface ready; Boss may continue using vendor app to toggle AC power."
+                "BLOCKED (Hunonic SK02 Surveyed): Hunonic SK02 (90-240VAC 16A, Wi-Fi 2.4GHz) operates exclusively via proprietary Hunonic Cloud/Mobile App with no official public HTTP, MQTT, or OpenAPI documentation. Per Section 6, undocumented/reverse-engineered APIs and credential extraction are prohibited; DisabledSmartPlugAdapter remains active. Use UDP Wake-on-LAN for daily wake and Hunonic mobile app + BIOS Restore AC Power Loss = Power On for cold recovery."
                     .to_owned(),
             ),
         }
     }
 
     fn turn_on(&self) -> Result<SmartPlugStatus, String> {
-        Err("BLOCKED_SMART_PLUG_UNCONFIGURED: Configure official smart plug adapter model and credentials first.".to_owned())
+        Err("BLOCKED_HUNONIC_SK02_NO_OFFICIAL_PUBLIC_API: Hunonic SK02 provides no official public LAN/Cloud API; use Hunonic mobile app or Wake-on-LAN.".to_owned())
     }
 
     fn turn_off_verified_safe(&self) -> Result<SmartPlugStatus, String> {
-        Err("BLOCKED_SMART_PLUG_UNCONFIGURED: Smart plug live hardware control is disabled.".to_owned())
+        Err("BLOCKED_HUNONIC_SK02_NO_OFFICIAL_PUBLIC_API: Smart plug live hardware control remains disabled per Section 6.".to_owned())
     }
 }
 
@@ -339,18 +339,69 @@ impl SmartPowerController {
                 }
             }
             PowerOperation::LockWorkstation => {
-                self.log_event("OS_LOCK_REQUESTED".to_owned());
-                PowerActionOutcome {
-                    allowed: true,
-                    executed: !ctx.dry_run_only,
-                    status_code: "OS_LOCK_ACCEPTED".to_owned(),
-                    warnings,
-                    message: if ctx.dry_run_only {
-                        "Dry-run: workstation lock validated.".to_owned()
-                    } else {
-                        "Workstation lock command dispatched.".to_owned()
-                    },
-                    evidence_class: "REAL_VERIFIED".to_owned(),
+                if ctx.dry_run_only {
+                    self.log_event("OS_LOCK_DRY_RUN_VALIDATED".to_owned());
+                    return PowerActionOutcome {
+                        allowed: true,
+                        executed: false,
+                        status_code: "OS_LOCK_DRY_RUN_VALIDATED".to_owned(),
+                        warnings,
+                        message: "Dry-run: workstation lock validated (interlocks passed).".to_owned(),
+                        evidence_class: "REAL_VERIFIED".to_owned(),
+                    };
+                }
+                let exec_res: Result<(), String> = {
+                    #[cfg(windows)]
+                    {
+                        let ok = unsafe { winapi::um::winuser::LockWorkStation() };
+                        if ok != 0 {
+                            Ok(())
+                        } else {
+                            Err("Win32 LockWorkStation() returned 0".to_owned())
+                        }
+                    }
+                    #[cfg(target_os = "linux")]
+                    {
+                        std::process::Command::new("loginctl")
+                            .arg("lock-session")
+                            .status()
+                            .map_err(|e| format!("loginctl lock-session error: {e}"))
+                            .and_then(|st| {
+                                if st.success() {
+                                    Ok(())
+                                } else {
+                                    Err(format!("loginctl lock-session exited with {st}"))
+                                }
+                            })
+                    }
+                    #[cfg(not(any(windows, target_os = "linux")))]
+                    {
+                        Err("OS lock not supported on this platform".to_owned())
+                    }
+                };
+                match exec_res {
+                    Ok(()) => {
+                        self.log_event("OS_LOCK_EXECUTED".to_owned());
+                        PowerActionOutcome {
+                            allowed: true,
+                            executed: true,
+                            status_code: "OS_LOCK_EXECUTED".to_owned(),
+                            warnings,
+                            message: "Workstation lock command executed by OS.".to_owned(),
+                            evidence_class: "REAL_VERIFIED".to_owned(),
+                        }
+                    }
+                    Err(e) => {
+                        self.log_event(format!("OS_LOCK_FAILED err={e}"));
+                        PowerActionOutcome {
+                            allowed: true,
+                            executed: false,
+                            status_code: "OS_LOCK_EXECUTION_FAILED".to_owned(),
+                            warnings,
+                            message: format!("OS lock failed: {e}"),
+                            evidence_class: "REAL_VERIFIED".to_owned(),
+                        }
+                    }
                 }
             }
             PowerOperation::Sleep | PowerOperation::Restart | PowerOperation::SafeShutdown => {
@@ -364,17 +415,55 @@ impl SmartPowerController {
                         evidence_class: "REAL_VERIFIED".to_owned(),
                     };
                 }
-                self.log_event(format!("OS_POWER_VALIDATED op={op:?} dry_run={}", ctx.dry_run_only));
-                PowerActionOutcome {
-                    allowed: true,
-                    executed: !ctx.dry_run_only,
-                    status_code: "SAFE_OS_POWER_COMMAND_ACCEPTED".to_owned(),
-                    warnings,
-                    message: format!(
-                        "Graceful OS {:?} validated (dry_run={}).",
-                        op, ctx.dry_run_only
-                    ),
-                    evidence_class: "REAL_VERIFIED".to_owned(),
+                if ctx.dry_run_only {
+                    self.log_event(format!("OS_POWER_DRY_RUN_VALIDATED op={op:?}"));
+                    return PowerActionOutcome {
+                        allowed: true,
+                        executed: false,
+                        status_code: "SAFE_OS_POWER_DRY_RUN_VALIDATED".to_owned(),
+                        warnings,
+                        message: format!(
+                            "Dry-run: graceful OS {:?} validated (no OS shutdown invoked).",
+                            op
+                        ),
+                        evidence_class: "REAL_VERIFIED".to_owned(),
+                    };
+                }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                let exec_res = match op {
+                    PowerOperation::Sleep => system_shutdown::sleep(),
+                    PowerOperation::Restart => system_shutdown::reboot(),
+                    PowerOperation::SafeShutdown => system_shutdown::shutdown(),
+                    _ => unreachable!(),
+                };
+                #[cfg(any(target_os = "android", target_os = "ios"))]
+                let exec_res: Result<(), std::io::Error> = Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "OS power transition is unsupported on mobile targets",
+                ));
+                match exec_res {
+                    Ok(()) => {
+                        self.log_event(format!("OS_POWER_EXECUTED op={op:?}"));
+                        PowerActionOutcome {
+                            allowed: true,
+                            executed: true,
+                            status_code: "SAFE_OS_POWER_COMMAND_EXECUTED".to_owned(),
+                            warnings,
+                            message: format!("Graceful OS {:?} executed via system_shutdown.", op),
+                            evidence_class: "REAL_VERIFIED".to_owned(),
+                        }
+                    }
+                    Err(e) => {
+                        self.log_event(format!("OS_POWER_FAILED op={op:?} err={e}"));
+                        PowerActionOutcome {
+                            allowed: true,
+                            executed: false,
+                            status_code: "OS_POWER_EXECUTION_FAILED".to_owned(),
+                            warnings,
+                            message: format!("OS {:?} failed: {e}", op),
+                            evidence_class: "REAL_VERIFIED".to_owned(),
+                        }
+                    }
                 }
             }
         }

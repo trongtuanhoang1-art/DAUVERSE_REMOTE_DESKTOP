@@ -307,6 +307,16 @@ impl AiEventBridge {
         Ok(())
     }
 
+    pub fn sign_with_runtime_secret(
+        &self,
+        event: AiEvent,
+        issued_at_ms: i64,
+        nonce: String,
+    ) -> SignedAiEventEnvelope {
+        let secret = self.hmac_secret.lock().unwrap();
+        sign_event_envelope(event, &secret, issued_at_ms, nonce)
+    }
+
     pub fn ingest_signed_envelope(
         &self,
         envelope: SignedAiEventEnvelope,
@@ -479,6 +489,15 @@ impl AiEventBridge {
         bind_port: u16,
         stop_flag: Arc<AtomicBool>,
     ) -> Result<(u16, std::thread::JoinHandle<()>), String> {
+        Self::spawn_loopback_http_gateway_with_sink(bridge, bind_port, stop_flag, None)
+    }
+
+    pub fn spawn_loopback_http_gateway_with_sink(
+        bridge: Arc<Self>,
+        bind_port: u16,
+        stop_flag: Arc<AtomicBool>,
+        on_accepted: Option<Arc<dyn Fn(&AiEvent, i64) + Send + Sync>>,
+    ) -> Result<(u16, std::thread::JoinHandle<()>), String> {
         let listener = TcpListener::bind(("127.0.0.1", bind_port))
             .map_err(|e| format!("failed binding loopback AI Event Bridge: {e}"))?;
         listener
@@ -493,7 +512,7 @@ impl AiEventBridge {
             while !stop_flag.load(Ordering::Relaxed) {
                 match listener.accept() {
                     Ok((stream, _peer)) => {
-                        let _ = Self::handle_http_conn(stream, &bridge);
+                        let _ = Self::handle_http_conn(stream, &bridge, on_accepted.as_deref());
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         std::thread::sleep(Duration::from_millis(15));
@@ -506,29 +525,102 @@ impl AiEventBridge {
         Ok((actual_port, handle))
     }
 
-    fn handle_http_conn(mut stream: TcpStream, bridge: &Self) -> Result<(), String> {
+    fn read_full_http_request(stream: &mut TcpStream) -> Result<(String, Vec<u8>), String> {
+        let mut raw = Vec::with_capacity(4096);
+        let mut chunk = [0u8; 4096];
+        let mut header_end: Option<usize> = None;
+        let mut content_len: usize = 0;
+
+        for _ in 0..32 {
+            match stream.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => {
+                    raw.extend_from_slice(&chunk[..n]);
+                    if raw.len() > 256 * 1024 {
+                        return Err("PAYLOAD_TOO_LARGE".to_owned());
+                    }
+                    if header_end.is_none() {
+                        if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                            header_end = Some(pos);
+                            let hdr_str = String::from_utf8_lossy(&raw[..pos]);
+                            for line in hdr_str.lines() {
+                                if let Some((k, v)) = line.split_once(':') {
+                                    if k.trim().eq_ignore_ascii_case("content-length") {
+                                        content_len = v.trim().parse::<usize>().unwrap_or(0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if let Some(pos) = header_end {
+                        if raw.len() >= pos + 4 + content_len {
+                            break;
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(e) => return Err(format!("read error: {e}")),
+            }
+        }
+
+        let Some(pos) = header_end else {
+            return Err("BAD_HTTP_HEADERS".to_owned());
+        };
+        let header_part = String::from_utf8_lossy(&raw[..pos]).into_owned();
+        let body_start = pos + 4;
+        let body_end = (body_start + content_len).min(raw.len());
+        let body_bytes = if content_len > 0 {
+            raw[body_start..body_end].to_vec()
+        } else {
+            raw[body_start..].to_vec()
+        };
+        Ok((header_part, body_bytes))
+    }
+
+    fn handle_http_conn(
+        mut stream: TcpStream,
+        bridge: &Self,
+        on_accepted: Option<&(dyn Fn(&AiEvent, i64) + Send + Sync)>,
+    ) -> Result<(), String> {
+        stream.set_nonblocking(false).ok();
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .ok();
-        let mut buf = vec![0u8; 64 * 1024];
-        let n = stream
-            .read(&mut buf)
-            .map_err(|e| format!("read error: {e}"))?;
-        if n == 0 {
-            return Ok(());
-        }
-        let req = String::from_utf8_lossy(&buf[..n]);
-        let Some(split_idx) = req.find("\r\n\r\n") else {
-            return Self::write_json_resp(&mut stream, 400, r#"{"ok":false,"error":"BAD_HTTP"}"#);
+        let (header_part, body_bytes) = match Self::read_full_http_request(&mut stream) {
+            Ok(v) => v,
+            Err(e) => {
+                return Self::write_json_resp(
+                    &mut stream,
+                    400,
+                    &serde_json::json!({"ok": false, "error": e}).to_string(),
+                );
+            }
         };
-        let header_part = &req[..split_idx];
-        let body_part = &req[split_idx + 4..];
+
+        if header_part.starts_with("GET /v1/health") {
+            let (running, waiting, comfy) = bridge.active_counts();
+            return Self::write_json_resp(
+                &mut stream,
+                200,
+                &serde_json::json!({
+                    "ok": true,
+                    "service": "DAUVERSE_AI_EVENT_BRIDGE",
+                    "running": running,
+                    "waiting_approval": waiting,
+                    "comfyui_rendering": comfy,
+                })
+                .to_string(),
+            );
+        }
 
         if !header_part.starts_with("POST /v1/events") {
             return Self::write_json_resp(&mut stream, 404, r#"{"ok":false,"error":"NOT_FOUND"}"#);
         }
 
-        let env: SignedAiEventEnvelope = match serde_json::from_str(body_part.trim()) {
+        let body_str = String::from_utf8_lossy(&body_bytes);
+        let env: SignedAiEventEnvelope = match serde_json::from_str(body_str.trim()) {
             Ok(v) => v,
             Err(e) => {
                 return Self::write_json_resp(
@@ -542,12 +634,17 @@ impl AiEventBridge {
 
         let now_ms = chrono::Utc::now().timestamp_millis();
         match bridge.ingest_signed_envelope(env, now_ms) {
-            Ok(ev) => Self::write_json_resp(
-                &mut stream,
-                200,
-                &serde_json::json!({"ok": true, "event_id": ev.event_id, "status": ev.status})
-                    .to_string(),
-            ),
+            Ok(ev) => {
+                if let Some(cb) = on_accepted {
+                    cb(&ev, now_ms);
+                }
+                Self::write_json_resp(
+                    &mut stream,
+                    200,
+                    &serde_json::json!({"ok": true, "event_id": ev.event_id, "status": ev.status})
+                        .to_string(),
+                )
+            }
             Err(err) => Self::write_json_resp(
                 &mut stream,
                 401,

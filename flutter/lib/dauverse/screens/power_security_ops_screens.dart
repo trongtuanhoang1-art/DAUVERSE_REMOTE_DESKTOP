@@ -2,17 +2,36 @@ import 'package:flutter/material.dart';
 import '../bridge/dauverse_bridge.dart';
 import '../theme/dauverse_theme.dart';
 
-class DauverseSmartPowerScreen extends StatelessWidget {
+class DauverseSmartPowerScreen extends StatefulWidget {
   final DauverseController controller;
   const DauverseSmartPowerScreen({Key? key, required this.controller}) : super(key: key);
 
   @override
+  State<DauverseSmartPowerScreen> createState() => _DauverseSmartPowerScreenState();
+}
+
+class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
+  final TextEditingController _macCtrl = TextEditingController();
+  final TextEditingController _wolTargetCtrl = TextEditingController(text: '255.255.255.255:9');
+  final TextEditingController _stepUpPinCtrl = TextEditingController();
+  bool _liveOsExecution = false;
+
+  @override
+  void dispose() {
+    _macCtrl.dispose();
+    _wolTargetCtrl.dispose();
+    _stepUpPinCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = DauversePalette.of(context);
-    final c = controller;
+    final c = widget.controller;
     final i18n = c.i18n;
     final sp = c.snapshot['smart_power'] as Map<String, dynamic>? ?? const {};
     final plug = sp['smart_plug'] as Map<String, dynamic>? ?? const {};
+    final events = (sp['recent_events'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -23,34 +42,128 @@ class DauverseSmartPowerScreen extends StatelessWidget {
               style: DauverseTypography.heading(p, size: 19)),
           Text(
             i18n.t(
-              'Không bao giờ cắt nguồn ổ cắm khi Windows đang chạy hoặc khi mất mạng • Cảnh báo nếu AI / ComfyUI / File Transfer đang hoạt động.',
-              'Never cuts AC power while OS is running or on network loss • Interlocks protect active AI, ComfyUI, and File Transfers.',
+              'Yêu cầu mã Step-Up PIN / Mật khẩu máy chủ đã niêm phong trước lệnh OS thật • Chặn cắt điện AC khi Windows đang chạy hoặc mất mạng.',
+              'Requires verified Vault Step-Up PIN / Host Password for live OS commands • Blocks AC power cut while OS is running or unreachable.',
             ),
             style: DauverseTypography.caption(p),
           ),
           const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _powerBtn(p, 'Wake-on-LAN (Magic Packet)', Icons.flash_on, p.success, () {
-                c.invokePowerAction('WAKE_ON_LAN', mac: 'AA:BB:CC:11:22:33', target: '127.0.0.1:9');
-              }),
-              _powerBtn(p, 'Lock Windows', Icons.lock_outline, p.cyan, () {
-                c.invokePowerAction('LOCK_WORKSTATION');
-              }),
-              _powerBtn(p, 'Sleep (Safe Interlock)', Icons.bedtime_outlined, p.blue, () {
-                c.invokePowerAction('SLEEP');
-              }),
-              _powerBtn(p, 'Restart (Safe Interlock)', Icons.restart_alt, p.warning, () {
-                c.invokePowerAction('RESTART');
-              }),
-              _powerBtn(p, 'Safe Windows Shutdown', Icons.power_settings_new, p.danger, () {
-                c.invokePowerAction('SAFE_SHUTDOWN');
-              }),
-            ],
+          DauverseCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 205,
+                      child: TextField(
+                        controller: _macCtrl,
+                        style: DauverseTypography.kpi(p, size: 13),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: i18n.t('Địa chỉ MAC máy nhà', 'Target NIC MAC (XX:XX:...)'),
+                          hintText: 'AA:BB:CC:DD:EE:FF',
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 180,
+                      child: TextField(
+                        controller: _wolTargetCtrl,
+                        style: DauverseTypography.kpi(p, size: 13),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: i18n.t('Broadcast IP:Port', 'Broadcast IP:Port'),
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 215,
+                      child: TextField(
+                        controller: _stepUpPinCtrl,
+                        obscureText: true,
+                        style: DauverseTypography.kpi(p, size: 13),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          labelText: i18n.t('Mã Step-Up PIN (>=6 ký tự)', 'Step-Up PIN (>=6 chars)'),
+                          border: const OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        c.setStepUpPin(_stepUpPinCtrl.text);
+                      },
+                      icon: const Icon(Icons.enhanced_encryption_outlined, size: 16),
+                      label: Text(i18n.t('Lưu PIN vào Vault', 'Seal PIN in Vault')),
+                    ),
+                    FilterChip(
+                      label: Text(_liveOsExecution
+                          ? i18n.t('Chế độ: LỆNH OS THẬT (Cần PIN)', 'Mode: LIVE OS COMMAND (PIN Required)')
+                          : i18n.t('Chế độ: Dry-Run An toàn', 'Mode: Safe Dry-Run')),
+                      selected: _liveOsExecution,
+                      onSelected: (v) => setState(() => _liveOsExecution = v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _powerBtn(p, 'Wake-on-LAN (UDP Magic Packet)', Icons.flash_on, p.success, () {
+                      c.invokePowerAction(
+                        'WAKE_ON_LAN',
+                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        stepUpPin: _stepUpPinCtrl.text,
+                        dryRun: !_liveOsExecution,
+                        mac: _macCtrl.text.trim(),
+                        target: _wolTargetCtrl.text.trim(),
+                      );
+                    }),
+                    _powerBtn(p, 'Lock Workstation', Icons.lock_outline, p.cyan, () {
+                      c.invokePowerAction(
+                        'LOCK_WORKSTATION',
+                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        stepUpPin: _stepUpPinCtrl.text,
+                        dryRun: !_liveOsExecution,
+                      );
+                    }),
+                    _powerBtn(p, 'Sleep (Safe Interlock)', Icons.bedtime_outlined, p.blue, () {
+                      c.invokePowerAction(
+                        'SLEEP',
+                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        stepUpPin: _stepUpPinCtrl.text,
+                        dryRun: !_liveOsExecution,
+                      );
+                    }),
+                    _powerBtn(p, 'Restart (Safe Interlock)', Icons.restart_alt, p.warning, () {
+                      c.invokePowerAction(
+                        'RESTART',
+                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        stepUpPin: _stepUpPinCtrl.text,
+                        dryRun: !_liveOsExecution,
+                      );
+                    }),
+                    _powerBtn(p, 'Safe OS Shutdown', Icons.power_settings_new, p.danger, () {
+                      c.invokePowerAction(
+                        'SAFE_SHUTDOWN',
+                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        stepUpPin: _stepUpPinCtrl.text,
+                        dryRun: !_liveOsExecution,
+                      );
+                    }),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           DauverseCard(
             accentBorder: p.warning,
             child: Column(
@@ -58,26 +171,42 @@ class DauverseSmartPowerScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    DauverseStatusBadge(label: 'SMART PLUG ADAPTER: ${plug['integration_state'] ?? 'BLOCKED'}', color: p.warning),
+                    DauverseStatusBadge(label: 'HUNONIC SK02: ${plug['integration_state'] ?? 'BLOCKED'}', color: p.warning),
                     const SizedBox(width: 10),
-                    Text(plug['adapter_name']?.toString() ?? 'DisabledSmartPlugAdapter',
-                        style: DauverseTypography.heading(p, size: 15)),
+                    Expanded(
+                      child: Text(plug['adapter_name']?.toString() ?? 'DisabledSmartPlugAdapter',
+                          style: DauverseTypography.heading(p, size: 15)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
                   plug['blocker_note']?.toString() ??
-                      'BLOCKED: Chưa xác định model ổ cắm thông minh của Boss. Interface chuẩn đã hoàn thiện; Boss tiếp tục dùng app hãng ổ cắm hiện tại để bật nguồn AC khi cần.',
+                      'BLOCKED (Hunonic SK02 Surveyed): Không có tài liệu API công khai chính thức; giữ nguyên DisabledSmartPlugAdapter.',
                   style: DauverseTypography.body(p),
                 ),
                 const Divider(height: 22),
                 Text(
-                  'BIOS Reference (ASUS PRIME H610M-K D4): Advanced > APM Configuration > Restore AC Power Loss > [Power On] (Xác minh tên mục theo phiên bản BIOS UEFI thực tế trên máy Boss trước khi áp dụng).',
+                  'BIOS Reference (ASUS PRIME H610M-K D4): Advanced > APM Configuration > Restore AC Power Loss > [Power On] & Power On By PCI-E > [Enabled].',
                   style: DauverseTypography.caption(p, size: 12),
                 ),
               ],
             ),
           ),
+          if (events.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            DauverseCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Recent Power Controller Events', style: DauverseTypography.heading(p, size: 14)),
+                  const SizedBox(height: 8),
+                  for (final ev in events.reversed.take(6))
+                    Text(ev, style: DauverseTypography.kpi(p, size: 11)),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -107,18 +236,20 @@ class DauverseSecurityCenterScreen extends StatelessWidget {
     final p = DauversePalette.of(context);
     final c = controller;
     final i18n = c.i18n;
-    final sec = c.snapshot['security'] as Map<String, dynamic>? ?? const {};
+    final secWrap = c.snapshot['security'] as Map<String, dynamic>? ?? const {};
+    final sec = secWrap['summary'] as Map<String, dynamic>? ?? secWrap;
+    final headless = c.snapshot['headless'] as Map<String, dynamic>? ?? const {};
 
     const capabilities = [
       ('Remote Control (Mouse/Keyboard)', true),
       ('View Only', true),
-      ('Smart Clipboard', true),
-      ('File Transfer', true),
+      ('Smart Clipboard (Engine Hooked)', true),
+      ('File Transfer (Path/Symlink Guarded)', true),
       ('System Audio', true),
       ('Power Control (Step-Up Auth)', true),
-      ('Hardware Monitoring', true),
-      ('AI Notification', true),
-      ('AI Live Status', true),
+      ('Hardware Monitoring (Local OS)', true),
+      ('AI Notification (No Auto-Approve)', true),
+      ('AI Live Status (Read-Only)', true),
       ('Screen Recording (Opt-In + Banner)', false),
     ];
 
@@ -137,7 +268,7 @@ class DauverseSecurityCenterScreen extends StatelessWidget {
                     Text(i18n.t('Device Shield & Security Center — Trung tâm Bảo mật', 'Device Shield & Security Center'),
                         style: DauverseTypography.heading(p, size: 19)),
                     Text(
-                      '${sec['encryption'] ?? 'Curve25519 + XSalsa20-Poly1305'} • Vault: ${sec['credential_vault'] ?? 'DPAPI'} • Telemetry: OFF',
+                      '${sec['encryption'] ?? 'Curve25519 + XSalsa20-Poly1305'} • Vault: ${sec['credential_vault'] ?? 'DPAPI/0600'} • Audit Intact: ${sec['audit_chain_intact'] ?? true}',
                       style: DauverseTypography.caption(p),
                     ),
                   ],
@@ -172,11 +303,9 @@ class DauverseSecurityCenterScreen extends StatelessWidget {
                 ),
                 const Divider(height: 24),
                 Text(
-                  i18n.t(
-                    'Bảo vệ hoạt động: Device Allowlist • Chống Brute-Force (khóa luỹ thừa sau 5 lần sai/phút) • Chống Replay & Session Hijack • Chuỗi băm SHA-256 Audit Log toàn vẹn.',
-                    'Active Defenses: Device Allowlist • Exponential Brute-Force Lockout • Replay & TLS Channel Binding • Tamper-Evident SHA-256 Audit Chain.',
-                  ),
-                  style: DauverseTypography.body(p, size: 12),
+                  headless['rustdesk_idd_v04_audit']?.toString() ??
+                      'BLOCKED_DO_NOT_INSTALL: RustDeskIddDriver v0.4 uses self-signed WDKTestCert SHA-1 root import.',
+                  style: DauverseTypography.kpi(p, size: 11.5, color: p.warning),
                 ),
               ],
             ),
@@ -195,22 +324,39 @@ class DauverseSessionHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = DauversePalette.of(context);
     final i18n = controller.i18n;
-    return Padding(
+    final secWrap = controller.snapshot['security'] as Map<String, dynamic>? ?? const {};
+    final audits = (secWrap['recent_audit'] as List<dynamic>? ?? const []).whereType<Map<String, dynamic>>().toList();
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: DauverseCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(i18n.t('Nhật ký Phiên kết nối (Session History)', 'Verified Session History'),
+            Text(i18n.t('Nhật ký Phiên & Chuỗi Băm Kiểm toán SHA-256 (Persistent JSONL)', 'Session & SHA-256 Hash-Chained Security Audit Log'),
                 style: DauverseTypography.heading(p, size: 18)),
             const SizedBox(height: 12),
-            ListTile(
-              leading: Icon(Icons.history, color: p.cyan),
-              title: Text('BOSS-HOME-AI-RIG (892 441 109) • Direct P2P • 60 FPS',
-                  style: DauverseTypography.body(p, weight: FontWeight.w700)),
-              subtitle: Text('Duration: 01h 42m • Recorded: NO • Mutual Auth: VERIFIED',
-                  style: DauverseTypography.caption(p)),
-            ),
+            if (audits.isEmpty)
+              Text(
+                i18n.t('Chưa có bản ghi kiểm toán nào trong phiên này.', 'No audit entries recorded yet.'),
+                style: DauverseTypography.body(p),
+              )
+            else
+              for (var i = 0; i < audits.length; i++) ...[
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.verified_user_outlined, color: p.cyan, size: 20),
+                  title: Text(
+                    '#${audits[i]['seq']} [${audits[i]['outcome']}] ${audits[i]['actor']} -> ${audits[i]['action']}',
+                    style: DauverseTypography.body(p, size: 13, weight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${audits[i]['detail']}  •  SHA-256: ${(audits[i]['entry_hash']?.toString() ?? '').padRight(16).substring(0, 16)}...',
+                    style: DauverseTypography.caption(p, size: 11),
+                  ),
+                ),
+                if (i + 1 < audits.length) const Divider(height: 8),
+              ],
           ],
         ),
       ),
@@ -240,6 +386,13 @@ class _DauverseNetworkDiagnosticsScreenState extends State<DauverseNetworkDiagno
         children: [
           Text(i18n.t('Chẩn đoán Mạng, P2P & Self-Host Server (hbbs/hbbr)', 'Network Diagnostics & Self-Host Server'),
               style: DauverseTypography.heading(p, size: 19)),
+          Text(
+            i18n.t(
+              'Lưu ý minh bạch: Benchmark nội bộ chỉ đo tốc độ quét khung hình CPU & ký HMAC cục bộ — KHÔNG đại diện độ trễ Remote Desktop End-to-End.',
+              'Transparency note: Local microbenchmark measures CPU tile scan & HMAC signing only — NOT end-to-end Remote Desktop latency.',
+            ),
+            style: DauverseTypography.caption(p),
+          ),
           const SizedBox(height: 12),
           DauverseCard(
             child: Column(
@@ -255,7 +408,7 @@ class _DauverseNetworkDiagnosticsScreenState extends State<DauverseNetworkDiagno
                         setState(() => _diagReport = res.toString());
                       },
                       icon: const Icon(Icons.speed, size: 18),
-                      label: Text(i18n.t('Chạy Benchmark thực tế', 'Run Live Pipeline Benchmark')),
+                      label: Text(i18n.t('Chạy Microbenchmark Cục bộ', 'Run Local Pipeline Microbenchmark')),
                     ),
                     OutlinedButton.icon(
                       onPressed: () {
@@ -307,7 +460,7 @@ class DauverseUpdateCenterScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                DauverseStatusBadge(label: 'V1.0.0 (Engine 1.5.3)', color: p.cyan),
+                DauverseStatusBadge(label: 'V1.0.0 RC1 (Engine 1.5.3)', color: p.cyan),
                 const SizedBox(width: 10),
                 DauverseStatusBadge(label: 'CODE SIGNING: UNSIGNED', color: p.warning),
               ],
@@ -318,8 +471,8 @@ class DauverseUpdateCenterScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               i18n.t(
-                'Trạng thái chữ ký số: UNSIGNED (Chưa cấp chứng chỉ Authenticode). Tự động cập nhật nền bị VÔ HIỆU HÓA để đảm bảo an toàn tuyệt đối; chỉ cho phép cập nhật thủ công sau khi kiểm tra SHA-256 và chống hạ cấp (Anti-Downgrade).',
-                'Code Signing Status: UNSIGNED. Background auto-update is DISABLED by security policy; manual updates verify SHA-256 and enforce anti-downgrade.',
+                'Trạng thái chữ ký số: UNSIGNED (Bản thử nghiệm nội bộ chưa ký Authenticode). Tự động cập nhật nền bị KHÓA CỨNG để đảm bảo an toàn; chỉ cho phép cập nhật thủ công sau khi kiểm tra SHA-256 và chống hạ cấp (Anti-Downgrade).',
+                'Code Signing Status: UNSIGNED. Background auto-update is HARD-BLOCKED; manual updates verify SHA-256 and enforce anti-downgrade.',
               ),
               style: DauverseTypography.body(p),
             ),
@@ -339,13 +492,15 @@ class DauverseSettingsScreen extends StatelessWidget {
     final p = DauversePalette.of(context);
     final c = controller;
     final i18n = c.i18n;
+    final headless = c.snapshot['headless'] as Map<String, dynamic>? ?? const {};
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: DauverseCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(i18n.t('Cài đặt Hệ thống, Headless, Service & Mobile Readiness', 'System, Headless IDD, Service & Mobile Settings'),
+            Text(i18n.t('Cài đặt Hệ thống, Headless WHQL, Service & Mobile Readiness', 'System, WHQL Headless IDD, Service & Mobile Settings'),
                 style: DauverseTypography.heading(p, size: 18)),
             const SizedBox(height: 12),
             SwitchListTile(
@@ -361,14 +516,17 @@ class DauverseSettingsScreen extends StatelessWidget {
             ),
             const Divider(),
             ListTile(
-              title: const Text('Headless Virtual Display Driver'),
-              subtitle: const Text('RustDeskIddDriver v0.4 (Signed UMDF) • Preserves Secure Boot & DSE • Auto-restore topology'),
-              trailing: DauverseStatusBadge(label: 'RTX 3060 READY', color: p.success),
+              title: const Text('Headless Virtual Display Driver Policy (Secure Boot + DSE Preserved)'),
+              subtitle: Text(
+                'Primary: ${headless['primary_driver'] ?? 'Amyuni usbmmidd_v2 (Microsoft WHQL Signed)'}\n'
+                'Blocked: RustDeskIddDriver v0.4 (Self-signed WDKTestCert SHA-1 rejected)',
+              ),
+              trailing: DauverseStatusBadge(label: 'INSTALL: OPT-IN ONLY', color: p.warning),
             ),
             ListTile(
-              title: const Text('Mobile Architecture Readiness (iOS / Android)'),
-              subtitle: const Text('Shared FFI & responsive layout ready for Mobile Remote, AI Push & Smart Power V2'),
-              trailing: DauverseStatusBadge(label: 'ARCHITECTED', color: p.purple),
+              title: const Text('Windows Service & Unattended Access'),
+              subtitle: const Text('SCM Name: RustDesk • Disabled/Unchecked by default until Boss approves installation'),
+              trailing: DauverseStatusBadge(label: 'NOT INSTALLED', color: p.cyan),
             ),
           ],
         ),
@@ -397,7 +555,7 @@ class DauverseAboutScreen extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('DAUVERSE REMOTE DESKTOP V1.0', style: DauverseTypography.heading(p, size: 20)),
+                    Text('DAUVERSE REMOTE DESKTOP V1.0 (RC1)', style: DauverseTypography.heading(p, size: 20)),
                     Text('Autonomous Remote AI Workstation Suite • License: GNU AGPL-3.0',
                         style: DauverseTypography.caption(p)),
                   ],

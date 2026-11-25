@@ -5,14 +5,35 @@ import '../l10n/dauverse_i18n.dart';
 import '../theme/dauverse_theme.dart';
 import '../widgets/floating_toolbar.dart';
 
-class DauverseMyDevicesScreen extends StatelessWidget {
+class DauverseMyDevicesScreen extends StatefulWidget {
   final DauverseController controller;
   const DauverseMyDevicesScreen({Key? key, required this.controller}) : super(key: key);
 
   @override
+  State<DauverseMyDevicesScreen> createState() => _DauverseMyDevicesScreenState();
+}
+
+class _DauverseMyDevicesScreenState extends State<DauverseMyDevicesScreen> {
+  late final TextEditingController _peerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _peerCtrl = TextEditingController(text: widget.controller.targetPeerId);
+  }
+
+  @override
+  void dispose() {
+    _peerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = DauversePalette.of(context);
-    final i18n = controller.i18n;
+    final c = widget.controller;
+    final i18n = c.i18n;
+    final peers = c.peersProvider?.call() ?? const <Map<String, String>>[];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -30,8 +51,8 @@ class DauverseMyDevicesScreen extends StatelessWidget {
                         style: DauverseTypography.heading(p, size: 19)),
                     Text(
                       i18n.t(
-                        'Mọi thiết bị Unattended Access đều phải nằm trong Allowlist, có nhật ký kiểm toán và có thể thu hồi tức thì.',
-                        'All Unattended Access hosts enforce mutual auth, device allowlist, audit logging, and instant revocation.',
+                        'Đồng bộ trực tiếp với danh bạ RustDesk Engine • Mọi Unattended Access đều có kiểm toán và thu hồi tức thì.',
+                        'Backed directly by RustDesk Engine peer cache • Enforces mutual auth, audit logging, and instant revocation.',
                       ),
                       style: DauverseTypography.caption(p),
                     ),
@@ -39,151 +60,144 @@ class DauverseMyDevicesScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: controller.openClassicRustDeskView,
-                    icon: Icon(Icons.grid_view, size: 16, color: p.cyan),
-                    label: Text(i18n.t('Mở danh bạ RustDesk Engine', 'Open Native Peer Grid'),
-                        style: TextStyle(color: p.cyan)),
-                  ),
-                ],
+              OutlinedButton.icon(
+                onPressed: c.openClassicRustDeskView,
+                icon: Icon(Icons.grid_view, size: 16, color: p.cyan),
+                label: Text(i18n.t('Mở danh bạ RustDesk Engine', 'Open Native Peer Grid'),
+                    style: TextStyle(color: p.cyan)),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          _deviceCard(
-            p,
-            i18n,
-            id: '892 441 109',
-            name: 'BOSS-HOME-AI-RIG',
-            os: 'Windows 11 Pro 64-bit • Headless IDD Ready',
-            hw: 'Intel Core i5-12400F • ASUS PRIME H610M-K D4 • RTX 3060 12GB • 16GB RAM',
-            route: 'Direct P2P (LAN / NAT Traversal) • 14 ms',
-            online: true,
-            tags: const ['Claude Code', 'Codex QA', 'Antigravity', 'ComfyUI', 'Unattended'],
-            onConnect: () => controller.selectScreen(DauverseScreenId.remoteSession),
-            onMini: () => controller.selectScreen(DauverseScreenId.miniControl),
-            onWol: () => controller.invokePowerAction(
-              'WAKE_ON_LAN',
-              mac: 'AA:BB:CC:11:22:33',
-              target: '127.0.0.1:9',
+          DauverseCard(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SizedBox(
+                  width: 260,
+                  child: TextField(
+                    controller: _peerCtrl,
+                    onChanged: (v) => c.targetPeerId = v.trim(),
+                    style: DauverseTypography.kpi(p, size: 14),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      labelText: i18n.t('Peer ID / IP đích', 'Target Peer ID / IP'),
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: p.blue, foregroundColor: Colors.white),
+                  onPressed: () => c.launchRealRemoteSession(context, _peerCtrl.text),
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: Text(i18n.t('Kết nối Phiên Thực', 'Connect Live Session')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => c.launchRealFileTransfer(context, _peerCtrl.text),
+                  icon: Icon(Icons.swap_horiz, size: 16, color: p.purple),
+                  label: Text(i18n.t('Truyền File hai chiều', 'Dual-Pane Transfer'),
+                      style: TextStyle(color: p.purple)),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    c.targetPeerId = _peerCtrl.text.trim();
+                    c.selectScreen(DauverseScreenId.miniControl);
+                  },
+                  icon: Icon(Icons.picture_in_picture_alt, size: 16, color: p.cyan),
+                  label: Text('Mini Control', style: TextStyle(color: p.cyan)),
+                ),
+              ],
             ),
-            onTransfer: () => controller.selectScreen(DauverseScreenId.fileTransfer),
           ),
-          const SizedBox(height: 14),
-          _deviceCard(
-            p,
-            i18n,
-            id: '410 882 301',
-            name: 'SECONDARY-RENDER-NODE',
-            os: 'Windows 10 Pro 64-bit',
-            hw: 'Standby Render / Backup Node • Wake-on-LAN Enabled',
-            route: 'Relay Fallback Ready',
-            online: false,
-            tags: const ['Wake-on-LAN', 'View-Only Default'],
-            onConnect: () => controller.selectScreen(DauverseScreenId.remoteSession),
-            onMini: () => controller.selectScreen(DauverseScreenId.miniControl),
-            onWol: () => controller.invokePowerAction(
-              'WAKE_ON_LAN',
-              mac: 'DE:AD:BE:EF:10:20',
-              target: '127.0.0.1:9',
-            ),
-            onTransfer: () => controller.selectScreen(DauverseScreenId.fileTransfer),
-          ),
+          const SizedBox(height: 16),
+          if (peers.isEmpty)
+            DauverseCard(
+              child: Text(
+                i18n.t(
+                  'Danh sách thiết bị cục bộ hiện trống (0 peer đã lưu). Không hiển thị thiết bị mẫu giả mạo — nhập Peer ID thật phía trên để kết nối và tự động lưu vào danh bạ Engine.',
+                  'Local peer list is currently empty (0 saved peers). Zero fake placeholder devices shown — connect to a real Peer ID above to populate the native peer cache.',
+                ),
+                style: DauverseTypography.body(p, size: 13),
+              ),
+            )
+          else
+            for (final peer in peers) ...[
+              _deviceCard(
+                context,
+                p,
+                i18n,
+                id: peer['id'] ?? '',
+                name: (peer['alias'] ?? '').isNotEmpty ? peer['alias']! : (peer['hostname'] ?? peer['id'] ?? 'Peer'),
+                os: peer['platform'] ?? 'Desktop',
+                user: peer['username'] ?? '-',
+              ),
+              const SizedBox(height: 12),
+            ],
         ],
       ),
     );
   }
 
   Widget _deviceCard(
+    BuildContext context,
     DauversePalette p,
     DauverseI18n i18n, {
     required String id,
     required String name,
     required String os,
-    required String hw,
-    required String route,
-    required bool online,
-    required List<String> tags,
-    required VoidCallback onConnect,
-    required VoidCallback onMini,
-    required VoidCallback onWol,
-    required VoidCallback onTransfer,
+    required String user,
   }) {
+    final c = widget.controller;
     return DauverseCard(
-      accentBorder: online ? p.cyan.withOpacity(0.45) : p.border,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      accentBorder: p.cyan.withOpacity(0.45),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 8,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DauverseStatusBadge(
-                    label: online ? 'ONLINE' : 'OFFLINE (SLEEP / SHUTDOWN)',
-                    color: online ? p.success : p.warning,
-                  ),
+                  DauverseStatusBadge(label: 'SAVED PEER', color: p.cyan),
                   const SizedBox(width: 10),
                   Text(name, style: DauverseTypography.heading(p, size: 16)),
                   const SizedBox(width: 12),
                   Text('ID: $id', style: DauverseTypography.kpi(p, size: 13, color: p.cyan)),
                 ],
               ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  TextButton.icon(
-                    onPressed: onWol,
-                    icon: Icon(Icons.flash_on, size: 16, color: p.warning),
-                    label: Text('Wake-on-LAN', style: TextStyle(color: p.warning)),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onMini,
-                    icon: Icon(Icons.picture_in_picture_alt, size: 16, color: p.cyan),
-                    label: Text('Mini Control', style: TextStyle(color: p.cyan)),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: onTransfer,
-                    icon: Icon(Icons.swap_horiz, size: 16, color: p.purple),
-                    label: Text(i18n.t('Truyền File', 'Transfer'), style: TextStyle(color: p.purple)),
-                  ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: p.blue, foregroundColor: Colors.white),
-                    onPressed: onConnect,
-                    icon: const Icon(Icons.play_arrow, size: 18),
-                    label: Text(i18n.t('Kết nối một chạm', 'One-Touch Connect')),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 6),
+              Text('$os • User: $user', style: DauverseTypography.caption(p, size: 12)),
             ],
           ),
-          const SizedBox(height: 8),
-          Text('$os  •  $route', style: DauverseTypography.body(p, size: 12)),
-          const SizedBox(height: 3),
-          Text(hw, style: DauverseTypography.caption(p, size: 12)),
-          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
-            runSpacing: 6,
-            children: tags
-                .map((t) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: p.surfaceElevated,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: p.border),
-                      ),
-                      child: Text(t, style: DauverseTypography.caption(p, size: 11)),
-                    ))
-                .toList(),
+            children: [
+              OutlinedButton.icon(
+                onPressed: () {
+                  c.targetPeerId = id;
+                  c.selectScreen(DauverseScreenId.miniControl);
+                },
+                icon: Icon(Icons.picture_in_picture_alt, size: 16, color: p.cyan),
+                label: Text('Mini Control', style: TextStyle(color: p.cyan)),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => c.launchRealFileTransfer(context, id),
+                icon: Icon(Icons.swap_horiz, size: 16, color: p.purple),
+                label: Text(i18n.t('Truyền File', 'Transfer'), style: TextStyle(color: p.purple)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: p.blue, foregroundColor: Colors.white),
+                onPressed: () => c.launchRealRemoteSession(context, id),
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: Text(i18n.t('Kết nối một chạm', 'One-Touch Connect')),
+              ),
+            ],
           ),
         ],
       ),
@@ -191,20 +205,36 @@ class DauverseMyDevicesScreen extends StatelessWidget {
   }
 }
 
-class DauverseRemoteSessionScreen extends StatelessWidget {
+class DauverseRemoteSessionScreen extends StatefulWidget {
   final DauverseController controller;
   const DauverseRemoteSessionScreen({Key? key, required this.controller}) : super(key: key);
 
   @override
+  State<DauverseRemoteSessionScreen> createState() => _DauverseRemoteSessionScreenState();
+}
+
+class _DauverseRemoteSessionScreenState extends State<DauverseRemoteSessionScreen> {
+  late final TextEditingController _sessionPeerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _sessionPeerCtrl = TextEditingController(text: widget.controller.targetPeerId);
+  }
+
+  @override
+  void dispose() {
+    _sessionPeerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = DauversePalette.of(context);
-    final c = controller;
+    final c = widget.controller;
     final i18n = c.i18n;
-    final monitors = [
-      'Display 1: 1920x1080 @ 60Hz (NVENC H.265)',
-      'Display 2: 2560x1440 @ 60Hz (Secondary)',
-      'Virtual Display (IDD Headless): 1920x1080 @ 60Hz',
-    ];
+    final perf = c.snapshot['performance'] as Map<String, dynamic>? ?? const {};
+    final connected = perf['session_connected'] == true;
 
     return Stack(
       children: [
@@ -235,8 +265,8 @@ class DauverseRemoteSessionScreen extends StatelessWidget {
                         const SizedBox(width: 8),
                         Text(
                           i18n.t(
-                            'CHỈ BÁO BẮT BUỘC: ĐANG GHI HÌNH PHIÊN LÀM VIỆC (KHÔNG GHI HÌNH BÍ MẬT)',
-                            'MANDATORY INDICATOR: SESSION SCREEN RECORDING IS ACTIVE',
+                            'CHỈ BÁO BẮT BUỘC: ĐÃ BẬT CỜ GHI HÌNH CÔNG KHAI (KHÔNG GHI HÌNH BÍ MẬT)',
+                            'MANDATORY INDICATOR: EXPLICIT RECORDING FLAG ARMED',
                           ),
                           style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
                         ),
@@ -247,15 +277,35 @@ class DauverseRemoteSessionScreen extends StatelessWidget {
                 const DauverseEmblem(size: 56),
                 const SizedBox(height: 14),
                 Text(
-                  'BOSS-HOME-AI-RIG • ${monitors[c.selectedMonitorIndex % monitors.length]}',
-                  style: DauverseTypography.heading(p.isDark ? p : DauversePalette.dark, size: 18),
+                  c.targetPeerId.isNotEmpty
+                      ? 'Target Peer: ${c.targetPeerId}  •  Preset: ${c.selectedResolutionPreset}'
+                      : i18n.t('Chưa có phiên truyền hình đang mở — Nhập Peer ID bên dưới',
+                          'No Active Remote Stream — Enter Target Peer ID Below'),
+                  style: DauverseTypography.heading(DauversePalette.dark, size: 18),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Mode: ${c.performanceMode}  •  Input: ${c.viewOnlySession ? "VIEW ONLY" : "INTERACTIVE (VN Unicode + Win Shortcuts)"}  •  Audio: ${c.audioEnabled ? "ON" : "MUTED"}',
+                  'Profile: ${c.performanceMode}  •  Input: ${c.viewOnlySession ? "VIEW ONLY" : "INTERACTIVE"}  •  Audio: ${c.audioEnabled ? "ON" : "MUTED"}',
                   style: DauverseTypography.kpi(DauversePalette.dark, size: 13, color: p.cyan),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: 300,
+                  child: TextField(
+                    controller: _sessionPeerCtrl,
+                    onChanged: (v) => c.targetPeerId = v.trim(),
+                    style: DauverseTypography.kpi(DauversePalette.dark, size: 14),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      hintText: i18n.t('Nhập Peer ID đích...', 'Enter Remote Peer ID...'),
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
@@ -263,26 +313,21 @@ class DauverseRemoteSessionScreen extends StatelessWidget {
                   children: [
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: p.blue, foregroundColor: Colors.white),
-                      onPressed: c.openClassicRustDeskView,
+                      onPressed: () => c.launchRealRemoteSession(context, _sessionPeerCtrl.text),
                       icon: const Icon(Icons.connected_tv, size: 18),
-                      label: Text(i18n.t('Mở Khung truyền hình RustDesk Native', 'Launch Native RustDesk Stream Tab')),
+                      label: Text(i18n.t('Khởi chạy Phiên RustDesk Thực', 'Connect Native RustDesk Session')),
                     ),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(foregroundColor: p.cyan, side: BorderSide(color: p.cyan)),
-                      onPressed: () {
-                        c.viewOnlySession = !c.viewOnlySession;
-                        c.refreshSnapshot();
-                      },
-                      icon: Icon(c.viewOnlySession ? Icons.visibility : Icons.mouse, size: 18),
-                      label: Text(c.viewOnlySession
-                          ? i18n.t('Chuyển sang Tương tác', 'Switch to Interactive')
-                          : i18n.t('Chuyển sang Chỉ xem', 'Switch to View Only')),
+                      onPressed: c.openClassicRustDeskView,
+                      icon: const Icon(Icons.tab, size: 18),
+                      label: Text(i18n.t('Mở giao diện Tab gốc', 'Open Native Tab View')),
                     ),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(foregroundColor: p.purple, side: BorderSide(color: p.purple)),
                       onPressed: () => c.selectScreen(DauverseScreenId.miniControl),
                       icon: const Icon(Icons.picture_in_picture_alt, size: 18),
-                      label: Text(i18n.t('Thu nhỏ sang Mini Control', 'Shrink to Mini Control')),
+                      label: Text(i18n.t('Chuyển sang Mini Control', 'Switch to Mini Control')),
                     ),
                   ],
                 ),
@@ -297,13 +342,15 @@ class DauverseRemoteSessionScreen extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          'Direct P2P Encrypted  |  FPS: 60  |  RTT: 14 ms  |  Bitrate: 6.8 Mbps  |  NVENC H.265',
+                          connected
+                              ? '${perf['connection_route']}  |  FPS: ${perf['fps']}  |  RTT: ${perf['ping_rtt_ms']} ms  |  Bitrate: ${perf['bitrate_kbps']} kbps  |  ${perf['codec']}'
+                              : 'DISCONNECTED (0 Active Streams)  |  Configured Codec: ${perf['codec'] ?? "H265"} (${perf['encoder'] ?? "NVENC"})',
                           overflow: TextOverflow.ellipsis,
                           style: DauverseTypography.kpi(DauversePalette.dark, size: 12, color: const Color(0xFF38BDF8)),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(i18n.t('Đa màn hình • High DPI • UAC • Lock Screen', 'Multi-monitor • High DPI • UAC Ready'),
+                      Text(i18n.t('Đa màn hình • High DPI • UAC Ready', 'Multi-monitor • High DPI • UAC Ready'),
                           style: DauverseTypography.caption(DauversePalette.dark, size: 11)),
                     ],
                   ),
@@ -312,7 +359,7 @@ class DauverseRemoteSessionScreen extends StatelessWidget {
             ),
           ),
         ),
-        DauverseFloatingToolbar(controller: controller),
+        DauverseFloatingToolbar(controller: c),
       ],
     );
   }
@@ -336,14 +383,54 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
     } catch (_) {}
   }
 
+  Future<void> _applyWindowOpacity(double val) async {
+    setState(() => widget.controller.miniControlOpacity = val);
+    try {
+      await windowManager.setOpacity(val);
+    } catch (_) {}
+  }
+
+  Future<void> _applySnapCorner(Alignment al) async {
+    setState(() => _snapCorner = al);
+    if (widget.controller.miniControlWindowDetached) {
+      try {
+        await windowManager.setAlignment(al);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _toggleDetachedMiniWindow(bool detach) async {
+    final c = widget.controller;
+    setState(() => c.miniControlWindowDetached = detach);
+    c.syncMiniControlEngineState(
+      minimized: detach && c.miniControlCollapsedStrip,
+      idle: detach && c.miniControlMode != 'INTERACTIVE',
+    );
+    try {
+      if (detach) {
+        await windowManager.setAlwaysOnTop(c.miniControlAlwaysOnTop);
+        await windowManager.setSize(
+          c.miniControlCollapsedStrip ? const Size(520, 88) : const Size(480, 320),
+        );
+        await windowManager.setAlignment(_snapCorner);
+      } else {
+        await windowManager.setOpacity(1.0);
+        await windowManager.setSize(const Size(1440, 900));
+        await windowManager.setAlignment(Alignment.center);
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = DauversePalette.of(context);
     final c = widget.controller;
     final i18n = c.i18n;
     final hw = c.snapshot['hardware'] as Map<String, dynamic>? ?? const {};
+    final perf = c.snapshot['performance'] as Map<String, dynamic>? ?? const {};
     final ai = c.snapshot['ai_summary'] as Map<String, dynamic>? ?? const {};
     final notif = c.snapshot['notifications'] as Map<String, dynamic>? ?? const {};
+    final connected = perf['session_connected'] == true;
 
     const modes = [
       ('PREVIEW', 'Preview Mode'),
@@ -369,8 +456,8 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                         style: DauverseTypography.heading(p, size: 19)),
                     Text(
                       i18n.t(
-                        'Tự động hạ FPS xuống <=5 FPS khi không thao tác, không chiếm quyền bàn phím, nháy đúp mở toàn phiên.',
-                        'Auto-throttles FPS when idle, never steals keyboard focus, double-click expands to full session.',
+                        'Điều khiển kích thước cửa sổ OS thật (windowManager), hạ FPS khi rảnh, không chiếm quyền bàn phím.',
+                        'Drives real OS window geometry/opacity/Always-On-Top via windowManager and syncs idle FPS throttle to Rust.',
                       ),
                       style: DauverseTypography.caption(p),
                     ),
@@ -384,19 +471,30 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                   runSpacing: 6,
                   children: [
                     FilterChip(
+                      label: Text(i18n.t('Thu nhỏ cửa sổ OS thật (PiP)', 'Resize OS Window to PiP')),
+                      selected: c.miniControlWindowDetached,
+                      onSelected: _toggleDetachedMiniWindow,
+                    ),
+                    FilterChip(
                       label: Text(i18n.t('Luôn nổi (Always On Top)', 'Always On Top')),
                       selected: c.miniControlAlwaysOnTop,
                       onSelected: _applyWindowAlwaysOnTop,
                     ),
                     FilterChip(
-                      label: Text(i18n.t('Chỉ hiện trạng thái (Tắt truyền hình)', 'Status-Only (No Video Stream)')),
+                      label: Text(i18n.t('Chỉ hiện trạng thái (Tắt Video)', 'Status-Only (No Video)')),
                       selected: c.miniControlStatusOnlyNoVideo,
-                      onSelected: (v) => setState(() => c.miniControlStatusOnlyNoVideo = v),
+                      onSelected: (v) {
+                        setState(() => c.miniControlStatusOnlyNoVideo = v);
+                        c.syncMiniControlEngineState(minimized: v, idle: true);
+                      },
                     ),
                     FilterChip(
                       label: Text(i18n.t('Thu thành thanh mảnh', 'Collapse to Strip')),
                       selected: c.miniControlCollapsedStrip,
-                      onSelected: (v) => setState(() => c.miniControlCollapsedStrip = v),
+                      onSelected: (v) {
+                        setState(() => c.miniControlCollapsedStrip = v);
+                        c.syncMiniControlEngineState(minimized: v);
+                      },
                     ),
                   ],
                 ),
@@ -413,7 +511,10 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                 ChoiceChip(
                   label: Text(m.$2),
                   selected: c.miniControlMode == m.$1,
-                  onSelected: (_) => setState(() => c.miniControlMode = m.$1),
+                  onSelected: (_) {
+                    setState(() => c.miniControlMode = m.$1);
+                    c.syncMiniControlEngineState(idle: m.$1 != 'INTERACTIVE');
+                  },
                 ),
               const SizedBox(width: 12),
               Text(i18n.t('Độ trong suốt:', 'Opacity:'), style: DauverseTypography.caption(p)),
@@ -423,12 +524,12 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                   min: 0.45,
                   max: 1.0,
                   value: c.miniControlOpacity,
-                  onChanged: (v) => setState(() => c.miniControlOpacity = v),
+                  onChanged: _applyWindowOpacity,
                 ),
               ),
               PopupMenuButton<Alignment>(
                 tooltip: i18n.t('Snap góc màn hình', 'Snap to screen corner'),
-                onSelected: (al) => setState(() => _snapCorner = al),
+                onSelected: _applySnapCorner,
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: Alignment.topLeft, child: Text('Snap: Top-Left')),
                   PopupMenuItem(value: Alignment.topRight, child: Text('Snap: Top-Right')),
@@ -459,7 +560,10 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                   child: FocusScope(
                     canRequestFocus: c.miniControlMode == 'INTERACTIVE',
                     child: GestureDetector(
-                      onDoubleTap: () => c.selectScreen(DauverseScreenId.remoteSession),
+                      onDoubleTap: () async {
+                        await _toggleDetachedMiniWindow(false);
+                        c.selectScreen(DauverseScreenId.remoteSession);
+                      },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 220),
                         width: c.miniControlCollapsedStrip ? 520 : 440,
@@ -483,9 +587,13 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                                   const DauverseEmblem(size: 22),
                                   const SizedBox(width: 8),
                                   Expanded(
-                                    child: Text('HOME-RTX3060 • ONLINE • 14ms',
-                                        overflow: TextOverflow.ellipsis,
-                                        style: DauverseTypography.kpi(DauversePalette.dark, size: 12, color: p.success)),
+                                    child: Text(
+                                      connected
+                                          ? '${c.targetPeerId} • CONNECTED • ${perf['ping_rtt_ms']}ms'
+                                          : 'LOCAL MONITOR • NO STREAM',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: DauverseTypography.kpi(DauversePalette.dark, size: 12, color: p.cyan),
+                                    ),
                                   ),
                                   Text(
                                     'Run:${ai['running'] ?? 0} | Unread:${notif['unread_count'] ?? 0}',
@@ -508,19 +616,22 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          'BOSS-HOME-AI-RIG  •  ${c.miniControlMode}',
+                                          '${c.targetPeerId.isEmpty ? "LOCAL HOST" : c.targetPeerId}  •  ${c.miniControlMode}',
                                           style: DauverseTypography.body(DauversePalette.dark,
                                               size: 12, weight: FontWeight.w700),
                                         ),
                                       ),
-                                      DauverseStatusBadge(label: 'ONLINE • 14ms', color: p.success),
+                                      DauverseStatusBadge(
+                                        label: connected ? 'STREAM ${perf['ping_rtt_ms']}ms' : 'NO STREAM',
+                                        color: connected ? p.success : p.warning,
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 10),
                                   if (!c.miniControlStatusOnlyNoVideo &&
                                       (c.miniControlMode == 'PREVIEW' || c.miniControlMode == 'INTERACTIVE'))
                                     Container(
-                                      height: 138,
+                                      height: 128,
                                       width: double.infinity,
                                       decoration: BoxDecoration(
                                         gradient: const LinearGradient(
@@ -535,13 +646,14 @@ class _DauverseMiniControlScreenState extends State<DauverseMiniControlScreen> {
                                       child: Column(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.desktop_windows, color: p.cyan, size: 30),
+                                          Icon(Icons.desktop_windows, color: p.cyan, size: 28),
                                           const SizedBox(height: 6),
                                           Text(
-                                            i18n.t(
-                                              'Nháy đúp để mở toàn màn hình • Tự giảm <=12 FPS khi rảnh',
-                                              'Double-click for Full Session • Idle FPS Throttle Active',
-                                            ),
+                                            c.targetPeerId.isEmpty
+                                                ? i18n.t('Chưa gắn Peer ID • Nháy đúp để mở màn hình phiên',
+                                                    'No Peer Selected • Double-click for Session View')
+                                                : i18n.t('Peer ${c.targetPeerId} • Nhấn Kết nối thực hoặc nháy đúp',
+                                                    'Target ${c.targetPeerId} • Double-click for Full Session'),
                                             style: DauverseTypography.caption(DauversePalette.dark, size: 11),
                                           ),
                                         ],

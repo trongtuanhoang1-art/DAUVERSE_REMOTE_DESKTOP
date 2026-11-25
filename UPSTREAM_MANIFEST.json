@@ -1,10 +1,11 @@
 {
-  "manifest_version": "1.0.0",
+  "manifest_version": "1.1.0",
   "product": "DAUVERSE REMOTE DESKTOP",
   "product_short_name": "DAUVERSE REMOTE",
   "product_version": "1.0.0",
   "task_id": "DREMOTE-V1-MASTER-001",
-  "generated_at": "2026-11-24T16:17:00Z",
+  "remediation_task_id": "DREMOTE-V1-RC1-NEXT-002",
+  "generated_at": "2026-11-25T02:10:00Z",
   "project_repository": {
     "owner": "trongtuanhoang1-art",
     "name": "DAUVERSE_REMOTE_DESKTOP",
@@ -12,6 +13,7 @@
     "development_branch": "develop/dauverse-remote-v1",
     "base_branch": "master",
     "base_commit_sha": "a0c0963c483fc8f1aeed4547787d1673adcb583c",
+    "rc1_immutable_baseline_sha": "35027150fcc497ade9145fcb4ea5cbc625035630",
     "license": "AGPL-3.0"
   },
   "primary_upstream": {
@@ -57,24 +59,40 @@
       "rationale": "100% protocol-compatible rendezvous (hbbs) and relay (hbbr) server matching libs/hbb_common. Configured via Docker Compose / systemd self-host deployment configs without modifying protocol encryption."
     },
     {
-      "category": "Primary Virtual Display Driver (Windows Headless)",
+      "category": "Primary Virtual Display Driver (Windows Headless — WHQL Signed)",
+      "name": "usbmmidd_v2 (Amyuni USB Mobile Monitor Virtual Display Driver)",
+      "repository": "https://www.amyuni.com/forum/viewtopic.php?t=3030",
+      "archive_sha256": "629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51",
+      "pkcs7_signer": "CN=Microsoft Windows Hardware Compatibility Publisher -> Microsoft Windows Third Party Component CA 2014 -> Microsoft Root Certificate Authority 2010 (sha256WithRSAEncryption)",
+      "license": "Amyuni Freeware Redistribution with Attribution (usbmmidd_v2/License.txt)",
+      "decision": "SELECTED_WHQL_SIGNED_OPT_IN_HEADLESS_DRIVER",
+      "rationale": "Actual driver used by upstream RustDesk v1.5.3 (src/virtual_display_manager.rs:9 IDD_IMPL_AMYUNI). Carries genuine Microsoft WHQL signature preserving UEFI Secure Boot and Driver Signature Enforcement with zero LocalMachine\\Root certificate store modification. Not installed until Boss explicitly approves."
+    },
+    {
+      "category": "Audited & Blocked Virtual Display Driver",
       "name": "RustDeskIddDriver",
       "repository": "https://github.com/rustdesk-org/RustDeskIddDriver",
       "verified_latest_release": "v0.4",
       "verified_commit_sha": "f779474e130f641d82102b5128000c6f5c079460",
+      "archive_sha256": "e0f8875407feda12ba7d5df8dfe84ab9755a8b805b4b71d088720b3a8a6318de",
+      "x509_subject_issuer": "CN=WDKTestCert admin,133225435702113567 (Self-Signed, sha1WithRSAEncryption, SHA-1 D1:DB:B6:72:D5:A5:00:B9:80:96:89:CA:EA:1C:E4:9E:79:97:67:F0)",
       "license": "MS-PL",
-      "decision": "SELECTED_PRIMARY_HEADLESS_DRIVER",
-      "rationale": "Official Indirect Display Driver (IDD) already integrated with libs/virtual_display and src/virtual_display_manager.rs in upstream RustDesk. Supports Windows 10 1903+ and Windows 11 Pro with RTX 3060 GPU acceleration. Driver installation remains opt-in requiring explicit Boss administrator approval."
+      "decision": "BLOCKED_SELF_SIGNED_WDKTESTCERT_DO_NOT_INSTALL",
+      "rationale": "Cryptographic audit under Section 7 proved RustDeskIddDriver v0.4 is signed with an anonymous WDK test certificate using deprecated SHA-1 and its batch script injects RustDeskIddDriver.cer into LocalMachine\\Root. Hard-blocked in src/dauverse/headless.rs and build scripts."
     },
     {
-      "category": "Fallback Virtual Display Driver (Windows Headless)",
-      "name": "Virtual-Display-Driver (MttVDD)",
-      "repository": "https://github.com/VirtualDrivers/Virtual-Display-Driver",
-      "verified_latest_release": "25.7.23",
-      "verified_commit_sha": "d7244969b2aa8bb38e76d79505eda217996cefea",
-      "license": "MIT",
-      "decision": "DOCUMENTED_FALLBACK_OPTION",
-      "rationale": "Evaluated as secondary high-refresh HDR/4K IDD fallback if custom EDID profiles are needed; not bundled simultaneously to avoid duplicate kernel/UMDF driver conflict. HDMI Dummy Plug documented as hardware last-resort fallback."
+      "category": "Hardware Headless Fallback (Zero Driver)",
+      "name": "HDMI 2.0 / DisplayPort EDID Dummy Plug",
+      "decision": "RECOMMENDED_ZERO_DRIVER_HARDWARE_OPTION",
+      "rationale": "Passive hardware EDID emulator plugged into NVIDIA RTX 3060 providing 1080p/1440p/4K headless rendering + NVENC with zero OS driver installation."
+    },
+    {
+      "category": "Smart Plug Hardware Survey (Section 6)",
+      "name": "Hunonic SK02 Wi-Fi Smart Plug",
+      "manufacturer_url": "https://hunonic.com/san-pham/o-cam-thong-minh-hunonic-sk02/",
+      "specs": "90-240VAC 50Hz, 16A max, Wi-Fi 2.4GHz b/g/n",
+      "decision": "BLOCKED_NO_OFFICIAL_PUBLIC_API_KEEP_DISABLED_ADAPTER",
+      "rationale": "Official Hunonic documentation provides mobile app control only and publishes zero public REST, MQTT, or OpenAPI documentation. Per Section 6, reverse-engineered/MITM community workarounds and credential extraction are prohibited; DisabledSmartPlugAdapter remains active."
     },
     {
       "category": "System Information & Process Telemetry",
@@ -96,7 +114,7 @@
       "verified_commit_sha": "9e2d677cefff5c614ecc38da88fbc447eb478e2a",
       "license": "MPL-2.0",
       "decision": "OPTIONAL_READONLY_JSON_WMI_BRIDGE_NO_KERNEL_DRIVER_BUNDLED",
-      "rationale": "Primary GPU telemetry (RTX 3060 temp, VRAM, power, utilization) uses NVIDIA NVML / nvidia-smi and Windows PDH without third-party ring0 kernel drivers. LibreHardwareMonitor v0.9.6 is supported via read-only local HTTP JSON / WMI sensor bridge when user-started, adhering strictly to Section 22 rule against installing untrusted sensor drivers."
+      "rationale": "Primary GPU telemetry (RTX 3060 temp, VRAM, power, utilization) uses NVIDIA NVML / nvidia-smi (with CREATE_NO_WINDOW and 4s TTL cache) without third-party ring0 kernel drivers."
     },
     {
       "category": "Desktop & Mobile UI Framework",
@@ -105,10 +123,10 @@
       "cloud_build_version": "3.50.0",
       "cloud_framework_revision": "ab2912035e",
       "dart_version": "3.14.0",
-      "windows_ci_pinned_version": "3.24.5 / 3.44.8+",
+      "windows_ci_pinned_version": "3.50.0",
       "license": "BSD-3-Clause",
       "decision": "SELECTED_UI_FRAMEWORK",
-      "rationale": "Official modern UI layer for RustDesk Desktop & Mobile, extended with the DAUVERSE Executive SaaS design system, 16 screens, Floating Toolbar, Mini Control, AI Live Status, and Notification Center."
+      "rationale": "Official modern UI layer for RustDesk Desktop & Mobile, extended with the DAUVERSE Executive SaaS design system, 16 screens, real RustDesk engine connection hooks, window_manager desktop controls, AI Live Status, and Notification Center."
     }
   ]
 }

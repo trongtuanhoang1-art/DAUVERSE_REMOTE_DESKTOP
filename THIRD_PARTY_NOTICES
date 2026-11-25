@@ -12,8 +12,11 @@ preserved in both `LICENSE` and `LICENCE`.
   - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
 - **rustdesk-server (Self-Host Reference)** (`https://github.com/rustdesk/rustdesk-server`, v1.1.16)
   - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
-- **RustDeskIddDriver** (`https://github.com/rustdesk-org/RustDeskIddDriver`, v0.4)
-  - License: Microsoft Public License (`MS-PL`).
+- **Amyuni USB Mobile Monitor Virtual Display Driver (`usbmmidd_v2`)** (`https://www.amyuni.com/forum/viewtopic.php?t=3030`)
+  - Copyright (C) Amyuni Technologies Inc. All rights reserved.
+  - Acknowledgment: Portions of optional Windows headless virtual display support reference the WHQL-signed Amyuni USB Mobile Monitor Virtual Display Driver (`usbmmidd_v2`, signed by `Microsoft Windows Hardware Compatibility Publisher`), redistributed unmodified under `usbmmidd_v2/License.txt` freeware redistribution terms with attribution. Opt-in only; never installed without explicit administrator approval.
+- **RustDeskIddDriver (Surveyed Only — Blocked & Not Bundled)** (`https://github.com/rustdesk-org/RustDeskIddDriver`, v0.4)
+  - License: Microsoft Public License (`MS-PL`). Status: `BLOCKED_DO_NOT_INSTALL` (uses self-signed `WDKTestCert` SHA-1 certificate; excluded from DAUVERSE staging and installers).
 - **Virtual-Display-Driver (Fallback Reference)** (`https://github.com/VirtualDrivers/Virtual-Display-Driver`, 25.7.23)
   - License: MIT License.
 - **sysinfo** (`https://github.com/GuillaumeGomez/sysinfo` / `rustdesk-org/sysinfo` v0.29.10)

@@ -925,7 +925,7 @@ warning: module `pt_PT` should have a snake case name
    |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
 
 warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 59.09s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.54s
      Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
 
 running 21 tests
@@ -934,13 +934,13 @@ test dauverse::clipboard_guard::tests::oversize_and_disabled_direction_rejected 
 test dauverse::clipboard_guard::tests::vietnamese_unicode_and_code_prompt_allowed_and_loop_blocked ... ok
 test dauverse::crypto_util::tests::redacts_tokens_and_credentials ... ok
 test dauverse::crypto_util::tests::rfc4231_hmac_sha256_vectors ... ok
-test dauverse::crypto_util::tests::seal_unseal_and_reject_tampering ... ok
-test dauverse::ffi::tests::ffi_c_abi_roundtrip_and_free_works ... ok
 test dauverse::ai_bridge::tests::loopback_http_gateway_accepts_signed_and_rejects_forged ... ok
-test dauverse::headless::tests::enforces_signed_driver_and_restores_topology_on_disconnect ... ok
+test dauverse::crypto_util::tests::seal_unseal_and_reject_tampering ... ok
+test dauverse::hardware::tests::collects_real_host_hardware_metrics_and_evaluates_thresholds ... ok
+test dauverse::headless::tests::enforces_whql_signed_driver_rejects_wdk_test_cert_and_restores_topology ... ok
 test dauverse::notifications::tests::dedup_offline_replay_redaction_and_no_auto_approve ... ok
 test dauverse::performance::tests::auto_adaptive_protects_comfyui_and_throttles_mini_control ... ok
-test dauverse::hardware::tests::collects_real_host_hardware_metrics_and_evaluates_thresholds ... ok
+test dauverse::performance::tests::real_pipeline_benchmark_executes ... ok
 test dauverse::security::tests::negative_security_matrix_unauthorized_mitm_hijack_bruteforce_revocation_and_audit ... ok
 test dauverse::service_ctrl::tests::requires_auth_for_unattended_and_supports_instant_revocation ... ok
 test dauverse::session_tools::tests::blocks_silent_recording_and_redacts_diagnostic_export ... ok
@@ -949,7 +949,7 @@ test dauverse::smart_power::tests::wol_magic_packet_loopback_verified ... ok
 test dauverse::transfer_guard::tests::queue_lifecycle_duplicate_rename_and_sha256_integrity ... ok
 test dauverse::transfer_guard::tests::rejects_traversal_unc_reserved_and_symlinks ... ok
 test dauverse::update_center::tests::blocks_downgrade_tampered_hash_and_unsigned_autoupdate ... ok
-test dauverse::performance::tests::real_pipeline_benchmark_executes ... ok
+test dauverse::ffi::tests::ffi_c_abi_roundtrip_and_auto_bridge_pipeline_works ... ok
 
-test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 215 filtered out; finished in 0.07s
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 215 filtered out; finished in 1.57s
 

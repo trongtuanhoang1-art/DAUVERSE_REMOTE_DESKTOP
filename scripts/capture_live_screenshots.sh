@@ -18,12 +18,16 @@ capture_screen() {
   local out_file="$4"
 
   echo "Capturing live native binary screenshot: $out_file (screen=$screen_id, theme=$theme_mode, toast=$show_toast)"
+  rm -f "$OUT_DIR/$out_file"
+  DAUVERSE_XVFB_CAPTURE="1" \
   DAUVERSE_INITIAL_SCREEN="$screen_id" \
   DAUVERSE_THEME_MODE="$theme_mode" \
   DAUVERSE_SHOW_SAMPLE_TOAST="$show_toast" \
   xvfb-run -a -s "-screen 0 1600x960x24" bash -c "
+    set -uo pipefail
     '$BUNDLE_BIN' --dauverse-ui >/tmp/dv_gui.log 2>&1 &
     APP_PID=\$!
+    WIN_ID=''
     for i in {1..40}; do
       WIN_ID=\$(xdotool search --onlyvisible --pid \$APP_PID 2>/dev/null | head -n 1 || true)
       if [[ -n \"\$WIN_ID\" ]]; then
@@ -33,6 +37,12 @@ capture_screen() {
       fi
       sleep 0.25
     done
+    if [[ -z \"\$WIN_ID\" ]]; then
+      echo 'ERROR: Native GTK window never became visible for $out_file' >&2
+      cat /tmp/dv_gui.log >&2 || true
+      kill \$APP_PID 2>/dev/null || true
+      exit 1
+    fi
     for attempt in {1..12}; do
       sleep 1.0
       scrot -o '$OUT_DIR/$out_file'
@@ -44,6 +54,12 @@ capture_screen() {
     kill \$APP_PID 2>/dev/null || true
     wait \$APP_PID 2>/dev/null || true
   "
+  local final_size
+  final_size="$(stat -c%s "$OUT_DIR/$out_file" 2>/dev/null || echo 0)"
+  if [[ "$final_size" -le 25000 ]]; then
+    echo "ERROR: Screenshot $out_file failed size check ($final_size bytes <= 25000)" >&2
+    exit 1
+  fi
 }
 
 capture_screen "dashboard" "dark" "1" "01_dashboard_dark_vi_toast.png"

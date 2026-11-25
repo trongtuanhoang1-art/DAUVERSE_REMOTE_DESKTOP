@@ -1,10 +1,12 @@
 name: DAUVERSE Windows Release Build (Manual Dispatch Only)
 
-# Security & Cost Governance (Sections 06 & 30):
-# - Manual workflow_dispatch ONLY (zero automatic push/PR runner minutes).
+# Security & Zero-Cost Governance (Sections 06, 08 & 30):
+# - Manual workflow_dispatch ONLY (zero automatic push/PR/cron/tag runner minutes).
+# - Concurrency cancel-in-progress prevents accidental duplicate Windows runner jobs.
 # - Least-privilege permissions (contents: read).
-# - All third-party GitHub Actions pinned to full 40-char commit SHAs.
-# - Never auto-publishes public releases; uploads private workflow artifacts only.
+# - All GitHub Actions pinned to full 40-char commit SHAs.
+# - VCPKG_BINARY_SOURCES + VCPKG_DEFAULT_HOST_TRIPLET prevent double compilation & timeout.
+# - Never auto-publishes public GitHub Releases; uploads private workflow artifacts only.
 
 on:
   workflow_dispatch:
@@ -18,9 +20,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: dauverse-windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
-  FLUTTER_VERSION: "3.44.8"
+  VCPKG_ROOT: "C:\\vcpkg"
+  VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  FLUTTER_VERSION: "3.50.0"
   LLVM_VERSION: "17.0.6"
 
 jobs:
@@ -29,10 +38,18 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 90
     steps:
+      - name: Export GitHub Actions cache environment variables for vcpkg
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Checkout repository and submodules
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
@@ -44,48 +61,60 @@ jobs:
         with:
           toolchain: stable
           targets: x86_64-pc-windows-msvc
+          components: rustfmt
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           prefix-key: dauverse-win-x64
 
-      - name: Setup vcpkg with binary cache
+      - name: Setup vcpkg with GitHub Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
         with:
           vcpkgDirectory: C:\vcpkg
           vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          runVcpkgInstall: false
+          doNotCache: false
 
-      - name: Install vcpkg static Windows dependencies
+      - name: Install vcpkg static Windows dependencies (single x64-windows-static triplet)
         shell: bash
         run: |
-          $VCPKG_ROOT/vcpkg install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
+          set -euo pipefail
+          "$VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
 
-      - name: Install Flutter SDK
+      - name: Install Flutter SDK (verified in Google releases_windows.json matching pubspec.lock Dart 3.14)
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
         with:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           architecture: x64
+          cache: true
 
-      - name: Generate flutter_rust_bridge bindings if absent
+      - name: Generate flutter_rust_bridge bindings & apply Dart 3 FFI patch
         shell: bash
+        env:
+          VCPKG_INSTALLED_ROOT: C:\vcpkg\installed
         run: |
-          if [ ! -f "./flutter/lib/generated_bridge.dart" ]; then
+          set -euo pipefail
+          if [ ! -f "./flutter/lib/generated_bridge.dart" ] || [ ! -f "./src/bridge_generated.rs" ]; then
             cargo install cargo-expand --version 1.0.95 --locked
             cargo install flutter_rust_bridge_codegen --version 1.80.1 --features "uuid" --locked
-            pushd flutter && flutter pub get && popd
+            pushd flutter
+            flutter pub get
+            popd
             flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h
-            sed -i "s/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g" flutter/lib/generated_bridge.dart
+            cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+            sed -i 's/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g' ./flutter/lib/generated_bridge.dart
           fi
 
       - name: Build Setup EXE, Portable EXE, and SHA-256 Manifest
         shell: pwsh
-        env:
-          VCPKG_ROOT: C:\vcpkg
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
           $skipTestsFlag = if ("${{ inputs.run_tests }}" -eq "true") { $false } else { $true }
-          ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -SkipVcpkgInstall -SkipTests:$skipTestsFlag
+          ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests:$skipTestsFlag
+          if ($LASTEXITCODE -ne 0) { throw "build_windows_release.ps1 exited with $LASTEXITCODE" }
 
       - name: Upload Unsigned Release Candidate Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

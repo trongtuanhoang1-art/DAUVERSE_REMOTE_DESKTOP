@@ -59,6 +59,7 @@ pub struct StreamParameters {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkRuntimeSample {
+    pub session_connected: bool,
     pub rtt_ms: u32,
     pub packet_loss_pct: f32,
     pub is_direct_p2p: bool,
@@ -74,12 +75,13 @@ pub struct NetworkRuntimeSample {
 impl Default for NetworkRuntimeSample {
     fn default() -> Self {
         Self {
-            rtt_ms: 14,
+            session_connected: false,
+            rtt_ms: 0,
             packet_loss_pct: 0.0,
-            is_direct_p2p: true,
-            host_cpu_pct: 18.0,
-            host_gpu_pct: 12.0,
-            host_vram_pct: 22.0,
+            is_direct_p2p: false,
+            host_cpu_pct: 0.0,
+            host_gpu_pct: 0.0,
+            host_vram_pct: 0.0,
             ai_workload_active: false,
             comfyui_rendering: false,
             mini_control_minimized: false,
@@ -90,6 +92,7 @@ impl Default for NetworkRuntimeSample {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceTelemetry {
+    pub session_connected: bool,
     pub active_mode: PerformanceMode,
     pub fps: u32,
     pub ping_rtt_ms: u32,
@@ -108,6 +111,7 @@ pub struct PerformanceTelemetry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkReport {
     pub measured_at_utc: String,
+    pub benchmark_scope: String,
     pub environment_type: String,
     pub cpu_model: String,
     pub logical_cores: usize,
@@ -142,7 +146,22 @@ impl PerformanceEngine {
             *guard = mode;
         }
         let sample = self.last_sample.lock().unwrap().clone();
-        Self::compute_parameters(mode, &sample)
+        let params = Self::compute_parameters(mode, &sample);
+        // Apply codec and image-quality preferences directly into upstream RustDesk LocalConfig
+        let codec_opt = match params.preferred_codec.as_str() {
+            "H265" => "h265",
+            "H264" => "h264",
+            _ => "auto",
+        };
+        hbb_common::config::LocalConfig::set_option(
+            "codec-preference".to_owned(),
+            codec_opt.to_owned(),
+        );
+        hbb_common::config::LocalConfig::set_option(
+            "custom-fps".to_owned(),
+            params.target_fps.to_string(),
+        );
+        params
     }
 
     pub fn update_runtime_sample(&self, sample: NetworkRuntimeSample) -> PerformanceTelemetry {
@@ -293,6 +312,24 @@ impl PerformanceEngine {
 
     fn build_telemetry(mode: PerformanceMode, sample: &NetworkRuntimeSample) -> PerformanceTelemetry {
         let params = Self::compute_parameters(mode, sample);
+        if !sample.session_connected {
+            return PerformanceTelemetry {
+                session_connected: false,
+                active_mode: mode,
+                fps: 0,
+                ping_rtt_ms: 0,
+                bitrate_kbps: 0,
+                packet_loss_pct: None,
+                codec: params.preferred_codec.clone(),
+                encoder: params.encoder_preference.clone(),
+                cpu_usage_pct: sample.host_cpu_pct,
+                gpu_usage_pct: sample.host_gpu_pct,
+                connection_route: "DISCONNECTED (No Active Remote Session)".to_owned(),
+                network_quality_score: 0,
+                network_quality_label: "Idle (No Session)".to_owned(),
+                applied_params: params,
+            };
+        }
         let (score, label) = Self::compute_network_quality_score(
             sample.rtt_ms,
             sample.packet_loss_pct,
@@ -306,6 +343,7 @@ impl PerformanceEngine {
         let effective_bitrate = ((params.min_bitrate_kbps + params.max_bitrate_kbps) / 2)
             .min(params.max_bitrate_kbps);
         PerformanceTelemetry {
+            session_connected: true,
             active_mode: mode,
             fps: effective_fps,
             ping_rtt_ms: sample.rtt_ms,
@@ -397,6 +435,7 @@ impl PerformanceEngine {
 
         Ok(BenchmarkReport {
             measured_at_utc: chrono::Utc::now().to_rfc3339(),
+            benchmark_scope: "LOCAL_PIPELINE_MICROBENCHMARK_ONLY (NOT End-to-End Remote Desktop Network/NVENC Latency)".to_owned(),
             environment_type: format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH),
             cpu_model: "Measured Host CPU".to_owned(),
             logical_cores: num_cpus::get(),
@@ -404,8 +443,8 @@ impl PerformanceEngine {
             frame_1080p_dirty_scan_ms: (scan_ms * 1000.0).round() / 1000.0,
             loopback_tcp_rtt_ms: (avg_rtt_ms * 1000.0).round() / 1000.0,
             hmac_event_sign_us: (sign_us * 100.0).round() / 100.0,
-            estimated_1080p_scan_fps_headroom: (headroom * 10.0).round() / 10.0,
-            notes: "Real local pipeline benchmark executed on current host; NVENC hardware encode latency requires native RTX 3060 Windows host verification.".to_owned(),
+            estimated_1080p_scan_fps_headroom: (headroom * 10.0).round() / 1000.0 * 100.0,
+            notes: "Measures local CPU dirty-tile memory scan, HMAC signing, and 127.0.0.1 socket overhead ONLY. End-to-end Remote Desktop LAN/WAN + RTX 3060 NVENC latency requires 2-PC Windows measurement.".to_owned(),
         })
     }
 }
