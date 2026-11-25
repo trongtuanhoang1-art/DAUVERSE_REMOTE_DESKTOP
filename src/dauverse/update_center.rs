@@ -1,4 +1,4 @@
-use super::crypto_util::sha256_file;
+use super::crypto_util::{check_no_symlink_or_reparse_component, sha256_file};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -10,6 +10,7 @@ pub const UPSTREAM_ENGINE_VERSION: &str = "1.5.3";
 pub enum SignatureStatus {
     VerifiedTrustedPublisher,
     UnsignedBuild,
+    UnverifiedPublisher,
     InvalidOrTamperedSignature,
 }
 
@@ -45,18 +46,74 @@ pub fn parse_semver_triplet(v: &str) -> Result<(u32, u32, u32), String> {
     Ok((major, minor, patch))
 }
 
+pub fn inspect_artifact_publisher_signature(artifact_path: &Path) -> SignatureStatus {
+    if check_no_symlink_or_reparse_component(artifact_path).is_err() {
+        return SignatureStatus::InvalidOrTamperedSignature;
+    }
+
+    #[cfg(windows)]
+    {
+        let pinned_thumb = std::env::var("DAUVERSE_TRUSTED_PUBLISHER_THUMBPRINT")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_uppercase();
+        let ps_arg = format!(
+            "$s = Get-AuthenticodeSignature -LiteralPath '{}'; $tp = if ($s.SignerCertificate) {{ $s.SignerCertificate.Thumbprint }} else {{ '' }}; Write-Output \"$($s.Status)|$tp\"",
+            artifact_path.to_string_lossy().replace('\'', "''")
+        );
+        if let Ok(out) = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_arg])
+            .output()
+        {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let line = stdout.trim();
+            let mut parts = line.splitn(2, '|');
+            let status = parts.next().unwrap_or("");
+            let thumb = parts.next().unwrap_or("").trim().to_ascii_uppercase();
+            return match status {
+                "NotSigned" => SignatureStatus::UnsignedBuild,
+                "HashMismatch" | "NotTrusted" => SignatureStatus::InvalidOrTamperedSignature,
+                "Valid" => {
+                    if pinned_thumb.len() == 40 && thumb == pinned_thumb {
+                        SignatureStatus::VerifiedTrustedPublisher
+                    } else {
+                        SignatureStatus::UnverifiedPublisher
+                    }
+                }
+                _ => SignatureStatus::UnsignedBuild,
+            };
+        }
+        SignatureStatus::UnsignedBuild
+    }
+
+    #[cfg(not(windows))]
+    {
+        let sig_sidecar = Path::new(&format!("{}.sig", artifact_path.display())).to_path_buf();
+        if sig_sidecar.exists() {
+            return SignatureStatus::InvalidOrTamperedSignature;
+        }
+        SignatureStatus::UnsignedBuild
+    }
+}
+
 pub fn verify_local_update_artifact(
     current_version: &str,
     descriptor: &UpdatePackageDescriptor,
     artifact_path: &Path,
 ) -> UpdateVerificationResult {
+    let observed_sig = if descriptor.signature_status == SignatureStatus::InvalidOrTamperedSignature {
+        SignatureStatus::InvalidOrTamperedSignature
+    } else {
+        inspect_artifact_publisher_signature(artifact_path)
+    };
+
     let Ok(cur) = parse_semver_triplet(current_version) else {
         return UpdateVerificationResult {
             safe_for_auto_update: false,
             safe_for_manual_owner_install: false,
             status_code: "INVALID_CURRENT_VERSION".to_owned(),
             computed_sha256: None,
-            signature_status: descriptor.signature_status,
+            signature_status: observed_sig,
             reason: "Current version string is malformed.".to_owned(),
         };
     };
@@ -66,7 +123,7 @@ pub fn verify_local_update_artifact(
             safe_for_manual_owner_install: false,
             status_code: "INVALID_CANDIDATE_VERSION".to_owned(),
             computed_sha256: None,
-            signature_status: descriptor.signature_status,
+            signature_status: observed_sig,
             reason: "Candidate version string is malformed.".to_owned(),
         };
     };
@@ -77,7 +134,7 @@ pub fn verify_local_update_artifact(
             safe_for_manual_owner_install: false,
             status_code: "SECURITY_REJECT_DOWNGRADE_ATTACK".to_owned(),
             computed_sha256: None,
-            signature_status: descriptor.signature_status,
+            signature_status: observed_sig,
             reason: format!(
                 "Anti-downgrade blocked candidate {} (< current {}). Use explicit documented Rollback Procedure instead.",
                 descriptor.version, current_version
@@ -91,8 +148,19 @@ pub fn verify_local_update_artifact(
             safe_for_manual_owner_install: false,
             status_code: "SECURITY_REJECT_INSECURE_TRANSPORT".to_owned(),
             computed_sha256: None,
-            signature_status: descriptor.signature_status,
+            signature_status: observed_sig,
             reason: "Update URLs must use HTTPS.".to_owned(),
+        };
+    }
+
+    if let Err(e) = check_no_symlink_or_reparse_component(artifact_path) {
+        return UpdateVerificationResult {
+            safe_for_auto_update: false,
+            safe_for_manual_owner_install: false,
+            status_code: "SECURITY_REJECT_UNSAFE_ARTIFACT_PATH".to_owned(),
+            computed_sha256: None,
+            signature_status: SignatureStatus::InvalidOrTamperedSignature,
+            reason: e,
         };
     }
 
@@ -104,7 +172,7 @@ pub fn verify_local_update_artifact(
                 safe_for_manual_owner_install: false,
                 status_code: "ARTIFACT_UNREADABLE".to_owned(),
                 computed_sha256: None,
-                signature_status: descriptor.signature_status,
+                signature_status: observed_sig,
                 reason: e,
             };
         }
@@ -116,28 +184,37 @@ pub fn verify_local_update_artifact(
             safe_for_manual_owner_install: false,
             status_code: "SECURITY_REJECT_SHA256_MISMATCH".to_owned(),
             computed_sha256: Some(actual_sha),
-            signature_status: descriptor.signature_status,
+            signature_status: observed_sig,
             reason: "Artifact SHA-256 hash does not match signed manifest.".to_owned(),
         };
     }
 
-    match descriptor.signature_status {
+    match observed_sig {
         SignatureStatus::VerifiedTrustedPublisher => UpdateVerificationResult {
             safe_for_auto_update: cand > cur,
             safe_for_manual_owner_install: true,
             status_code: "VERIFIED_SIGNED_UPDATE_READY".to_owned(),
             computed_sha256: Some(actual_sha),
             signature_status: SignatureStatus::VerifiedTrustedPublisher,
-            reason: "Both SHA-256 integrity and Authenticode/Ed25519 signature verified.".to_owned(),
+            reason: "Both SHA-256 integrity and pinned publisher Authenticode signature verified independently.".to_owned(),
         },
-        SignatureStatus::UnsignedBuild => UpdateVerificationResult {
-            safe_for_auto_update: false,
-            safe_for_manual_owner_install: true,
-            status_code: "UNSIGNED_BUILD_MANUAL_ONLY".to_owned(),
-            computed_sha256: Some(actual_sha),
-            signature_status: SignatureStatus::UnsignedBuild,
-            reason: "UNSIGNED build: SHA-256 verified, but automatic background update is disabled without a code-signing certificate. Manual Boss-approved install only.".to_owned(),
-        },
+        SignatureStatus::UnsignedBuild | SignatureStatus::UnverifiedPublisher => {
+            let caller_claimed_trusted =
+                descriptor.signature_status == SignatureStatus::VerifiedTrustedPublisher;
+            let code = if caller_claimed_trusted {
+                "UNSIGNED_BUILD_CALLER_CLAIM_OVERRIDDEN_MANUAL_ONLY"
+            } else {
+                "UNSIGNED_BUILD_MANUAL_ONLY"
+            };
+            UpdateVerificationResult {
+                safe_for_auto_update: false,
+                safe_for_manual_owner_install: true,
+                status_code: code.to_owned(),
+                computed_sha256: Some(actual_sha),
+                signature_status: observed_sig,
+                reason: "Independent publisher check found no pinned Authenticode signature (caller enum ignored); automatic update remains HARD-DISABLED. Manual Boss-approved SHA-256 install only.".to_owned(),
+            }
+        }
         SignatureStatus::InvalidOrTamperedSignature => UpdateVerificationResult {
             safe_for_auto_update: false,
             safe_for_manual_owner_install: false,
@@ -157,7 +234,7 @@ pub fn current_release_status() -> serde_json::Value {
         "upstream_engine_base": UPSTREAM_ENGINE_VERSION,
         "code_signing_status": "UNSIGNED",
         "auto_update_enabled": false,
-        "auto_update_policy": "Disabled until official Authenticode certificate is provisioned; manual SHA-256 verified update and rollback supported.",
+        "auto_update_policy": "Disabled until official Authenticode certificate is provisioned and pinned; manual SHA-256 verified update and rollback supported.",
         "rollback_supported": true,
     })
 }
@@ -167,7 +244,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn blocks_downgrade_tampered_hash_and_unsigned_autoupdate() {
+    fn f12_blocks_downgrade_tampered_hash_and_ignores_spoofed_caller_signature_enum() {
         let tmp = std::env::temp_dir().join(format!("dv_upd_{}.bin", uuid::Uuid::new_v4()));
         let bytes = b"DAUVERSE_RELEASE_CANDIDATE_BINARY_BYTES";
         std::fs::write(&tmp, bytes).unwrap();
@@ -193,6 +270,22 @@ mod tests {
         };
         let r_tamper = verify_local_update_artifact("1.0.0", &tampered, &tmp);
         assert_eq!(r_tamper.status_code, "SECURITY_REJECT_SHA256_MISMATCH");
+
+        // F12 counterexample: caller falsely claims VerifiedTrustedPublisher on an unsigned file
+        let spoofed_signed = UpdatePackageDescriptor {
+            version: "1.1.0".to_owned(),
+            download_url: "https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/releases/download/v1.1.0/pkg.exe".to_owned(),
+            expected_sha256: sha.clone(),
+            signature_status: SignatureStatus::VerifiedTrustedPublisher,
+            release_notes_vi: "Caller lies about publisher signature".to_owned(),
+        };
+        let r_spoof = verify_local_update_artifact("1.0.0", &spoofed_signed, &tmp);
+        assert!(!r_spoof.safe_for_auto_update);
+        assert_ne!(r_spoof.signature_status, SignatureStatus::VerifiedTrustedPublisher);
+        assert_eq!(
+            r_spoof.status_code,
+            "UNSIGNED_BUILD_CALLER_CLAIM_OVERRIDDEN_MANUAL_ONLY"
+        );
 
         let unsigned_cand = UpdatePackageDescriptor {
             version: "1.0.1".to_owned(),

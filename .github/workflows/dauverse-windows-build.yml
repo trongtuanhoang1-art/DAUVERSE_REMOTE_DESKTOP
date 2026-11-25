@@ -1,18 +1,19 @@
 name: DAUVERSE Windows Release Build (Manual Dispatch Only)
 
-# Security & Zero-Cost Governance (Sections 06, 08 & 30):
+# Security & Zero-Cost Governance (Sections 06, 08 & 30 — RC2 Hardened for F15 & A01-A04):
 # - Manual workflow_dispatch ONLY (zero automatic push/PR/cron/tag runner minutes).
 # - Concurrency cancel-in-progress prevents accidental duplicate Windows runner jobs.
 # - Least-privilege permissions (contents: read).
-# - All GitHub Actions pinned to full 40-char commit SHAs.
-# - VCPKG_BINARY_SOURCES + VCPKG_DEFAULT_HOST_TRIPLET prevent double compilation & timeout.
-# - Never auto-publishes public GitHub Releases; uploads private workflow artifacts only.
+# - All GitHub Actions pinned to full 40-char commit SHAs (Swatinem/rust-cache v2.9.3 for Cache v2).
+# - Exact Rust (1.100.0), Flutter (3.50.0), LLVM (17.0.6), and vcpkg (9e593bb1...) versions pinned.
+# - Full unshallow checkout (fetch-depth: 0) so self-contained git bundle passes bare repo verification.
+# - Never auto-publishes public GitHub Releases; uploads complete clean-room-verified RC2 QA archive artifact.
 
 on:
   workflow_dispatch:
     inputs:
       run_tests:
-        description: "Run Rust dauverse:: and Flutter UI test suites before packaging"
+        description: "Run Rust base/dauverse:: and Flutter UI test suites (required for RC eligibility)"
         required: false
         default: true
         type: boolean
@@ -29,12 +30,13 @@ env:
   VCPKG_ROOT: "C:\\vcpkg"
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  RUST_VERSION: "1.100.0"
   FLUTTER_VERSION: "3.50.0"
   LLVM_VERSION: "17.0.6"
 
 jobs:
   build-windows-x64:
-    name: Build DAUVERSE Remote V1 (Windows x64)
+    name: Build & Verify DAUVERSE Remote V1 RC2 (Windows x64)
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
@@ -45,9 +47,10 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - name: Checkout repository and submodules
+      - name: Checkout full repository history and pinned submodules
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
+          fetch-depth: 0
           submodules: recursive
           persist-credentials: false
 
@@ -56,17 +59,17 @@ jobs:
         with:
           version: ${{ env.LLVM_VERSION }}
 
-      - name: Install Rust stable toolchain
+      - name: Install pinned Rust toolchain (${{ env.RUST_VERSION }})
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
-          toolchain: stable
+          toolchain: ${{ env.RUST_VERSION }}
           targets: x86_64-pc-windows-msvc
           components: rustfmt
 
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Cache Rust build artifacts (GitHub Actions Cache v2)
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          prefix-key: dauverse-win-x64
+          prefix-key: dauverse-win-x64-rc2
 
       - name: Setup vcpkg with GitHub Actions binary cache
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
@@ -82,7 +85,7 @@ jobs:
           set -euo pipefail
           "$VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"
 
-      - name: Install Flutter SDK (verified in Google releases_windows.json matching pubspec.lock Dart 3.14)
+      - name: Install Flutter SDK (${{ env.FLUTTER_VERSION }})
         uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
         with:
           channel: stable
@@ -107,36 +110,46 @@ jobs:
             sed -i 's/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g' ./flutter/lib/generated_bridge.dart
           fi
 
-      - name: Build Setup EXE, Portable EXE, and SHA-256 Manifest
+      - name: Build Setup EXE, Portable EXE, Provenance, and Initial SHA-256 Manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _win_out/LOGS
+          pwsh -NoProfile -NonInteractive -Command '
+            $ErrorActionPreference = "Stop"
+            if (-not (Get-Command "makensis.exe" -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") -and -not (Test-Path "C:\Program Files\NSIS\makensis.exe")) {
+              choco install nsis --version=3.10 -y --no-progress
+            }
+          '
+          if [ "${{ inputs.run_tests }}" = "true" ]; then
+            pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
+          else
+            pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
+          fi
+
+      - name: Verify Coexistence, Startup, 3-Process DPAPI/HMAC/PIN Matrix, Rollback & Uninstaller
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _win_out/LOGS
+          pwsh -NoProfile -NonInteractive -File ./scripts/windows/verify_and_package_windows_rc.ps1 -ReleaseDir "$PWD/_win_out/RELEASE" -RepoRoot "$PWD" -LogsDir "$PWD/_win_out/LOGS" -AuthorizedSandbox 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_VERIFY_CONSOLE.log
+
+      - name: Package & Clean-Room Verify Complete Windows RC2 QA Archive
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
-          if (-not (Get-Command "makensis.exe" -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") -and -not (Test-Path "C:\Program Files\NSIS\makensis.exe")) {
-            choco install nsis -y --no-progress
-          }
-          $skipTestsFlag = if ("${{ inputs.run_tests }}" -eq "true") { $false } else { $true }
-          ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests:$skipTestsFlag
-          if ($LASTEXITCODE -ne 0) { throw "build_windows_release.ps1 exited with $LASTEXITCODE" }
+          ./scripts/windows/package_complete_rc2_qa_archive.ps1 -RepoRoot "$PWD" -WorkspaceRoot "$PWD/_win_out" -OutputDir "$PWD/_win_out/HANDOFF"
+          if ($LASTEXITCODE -ne 0) { throw "package_complete_rc2_qa_archive.ps1 exited with $LASTEXITCODE" }
 
-      - name: Verify Installer, Startup, Windows DPAPI, Rollback & Uninstaller in Sandbox
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $PSNativeCommandUseErrorActionPreference = $true
-          ./scripts/windows/verify_and_package_windows_rc.ps1 -ReleaseDir "$PWD/_win_out/RELEASE" -RepoRoot "$PWD" -LogsDir "$PWD/_win_out/LOGS" -AuthorizedSandbox
-          if ($LASTEXITCODE -ne 0) { throw "verify_and_package_windows_rc.ps1 exited with $LASTEXITCODE" }
-
-      - name: Upload Unsigned Release Candidate Artifacts & Verification Evidence
+      - name: Upload Complete Windows RC2 QA Package & Standalone Binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_UNSIGNED
+          name: DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA
           path: |
-            _win_out/RELEASE/DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe
-            _win_out/RELEASE/DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe
-            _win_out/RELEASE/SHA256_MANIFEST.txt
-            _win_out/RELEASE/SIGNING_STATUS.txt
-            _win_out/RELEASE/WINDOWS_RC_VERIFICATION_REPORT.json
-            _win_out/RELEASE/WINDOWS_RC_VERIFICATION_REPORT.md
-            _win_out/RELEASE/WINDOWS_NATIVE_BUILD.log
+            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip
+            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip.sha256
+            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe
+            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe
+            _win_out/HANDOFF/FINAL_HANDOFF_SHA256_MANIFEST.txt
           if-no-files-found: error

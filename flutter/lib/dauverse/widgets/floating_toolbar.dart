@@ -235,7 +235,7 @@ class _DauverseFloatingToolbarState extends State<DauverseFloatingToolbar> {
                 accentBorder: p.cyan,
                 child: Text(
                   connected
-                      ? 'Codec: ${perf['codec']} (${perf['encoder']})  |  ${perf['fps']} FPS  |  RTT: ${perf['ping_rtt_ms']} ms  |  ${perf['bitrate_kbps']} kbps  |  ${perf['connection_route']}'
+                      ? 'Codec: ${perf['codec']} (${perf['encoder']})  |  ${perf['measured_fps'] != null ? "${perf['measured_fps']} FPS" : "FPS: N/A (Target ${perf['configured_target_fps'] ?? 0})"}  |  RTT: ${perf['ping_rtt_ms']} ms  |  ${perf['measured_bitrate_kbps'] != null ? "${perf['measured_bitrate_kbps']} kbps" : "Bitrate: N/A (Cap ${perf['estimated_bitrate_cap_kbps'] ?? 0} kbps)"}  |  ${perf['connection_route']}'
                       : 'Session: DISCONNECTED  |  Profile: ${perf['active_mode'] ?? c.performanceMode}  |  Preferred Codec: ${perf['codec'] ?? "H265"} (${perf['encoder'] ?? "NVENC"})',
                   style: DauverseTypography.kpi(p, size: 12, color: p.cyan),
                 ),

@@ -1,8 +1,8 @@
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
-    io::Read,
-    path::Path,
+    io::{Read, Write},
+    path::{Component, Path, PathBuf},
 };
 
 const HMAC_BLOCK_SIZE: usize = 64;
@@ -338,38 +338,318 @@ pub fn unprotect_secret_bytes(sealed: &[u8], entropy: &[u8]) -> Result<Vec<u8>, 
     Ok(keystream_xor(&enc_key, &nonce, ct))
 }
 
-pub fn write_sealed_secret_file(path: &Path, plaintext: &[u8], entropy: &[u8]) -> Result<(), String> {
-    use std::io::Write;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("failed creating vault dir: {e}"))?;
+pub fn default_durable_app_data_dir() -> PathBuf {
+    if let Ok(explicit) = std::env::var("DAUVERSE_DATA_DIR") {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
     }
-    let sealed = protect_secret_bytes(plaintext, entropy)?;
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-        let mut f = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(path)
-            .map_err(|e| format!("failed opening 0600 vault file: {e}"))?;
-        f.set_permissions(fs::Permissions::from_mode(0o600))
-            .map_err(|e| format!("failed enforcing 0600 permissions: {e}"))?;
-        f.write_all(&sealed)
-            .map_err(|e| format!("failed writing vault bytes: {e}"))?;
-        f.sync_all()
-            .map_err(|e| format!("failed syncing vault file: {e}"))?;
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let trimmed = local_app_data.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed)
+                    .join("DAUVERSE")
+                    .join("RemoteDesktopV1");
+            }
+        }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let trimmed = app_data.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed)
+                    .join("DAUVERSE")
+                    .join("RemoteDesktopV1");
+            }
+        }
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            let trimmed = profile.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed)
+                    .join("AppData")
+                    .join("Local")
+                    .join("DAUVERSE")
+                    .join("RemoteDesktopV1");
+            }
+        }
+        std::env::temp_dir().join("dauverse_remote_v1")
     }
-    #[cfg(not(unix))]
+    #[cfg(not(windows))]
     {
-        fs::write(path, &sealed).map_err(|e| format!("failed writing vault file: {e}"))?;
+        if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+            let trimmed = xdg.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed).join("dauverse_remote_v1");
+            }
+        }
+        if let Ok(home) = std::env::var("HOME") {
+            let trimmed = home.trim();
+            if !trimmed.is_empty() {
+                return PathBuf::from(trimmed)
+                    .join(".local")
+                    .join("share")
+                    .join("dauverse_remote_v1");
+            }
+        }
+        std::env::temp_dir().join("dauverse_remote_v1")
+    }
+}
+
+pub fn check_no_symlink_or_reparse_component(path: &Path) -> Result<(), String> {
+    let Ok(meta) = fs::symlink_metadata(path) else {
+        return Ok(());
+    };
+    if meta.file_type().is_symlink() {
+        return Err(format!(
+            "SECURITY_REJECT_SYMLINK: refusing symlink component '{}'",
+            path.display()
+        ));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+            return Err(format!(
+                "SECURITY_REJECT_REPARSE_POINT: refusing junction/reparse point '{}'",
+                path.display()
+            ));
+        }
     }
     Ok(())
 }
 
+pub fn ensure_private_dir(dir: &Path) -> Result<(), String> {
+    check_no_symlink_or_reparse_component(dir)?;
+    let existed = dir.exists();
+    fs::create_dir_all(dir).map_err(|e| format!("failed creating directory '{}': {e}", dir.display()))?;
+    check_no_symlink_or_reparse_component(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let meta = fs::symlink_metadata(dir)
+            .map_err(|e| format!("failed stating directory '{}': {e}", dir.display()))?;
+        let euid = unsafe { hbb_common::libc::geteuid() };
+        if !existed || meta.uid() == euid {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
+                .map_err(|e| format!("failed enforcing 0700 permissions on '{}': {e}", dir.display()))?;
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = existed;
+    Ok(())
+}
+
+pub fn write_atomic_bytes(path: &Path, data: &[u8], private_mode: bool) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("missing parent directory for '{}'", path.display()))?;
+    if private_mode {
+        ensure_private_dir(parent)?;
+    } else {
+        check_no_symlink_or_reparse_component(parent)?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed creating directory '{}': {e}", parent.display()))?;
+    }
+    check_no_symlink_or_reparse_component(path)?;
+
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("state");
+    let tmp_path = parent.join(format!(".{file_name}.tmp.{}", uuid::Uuid::new_v4()));
+
+    let write_res: Result<(), String> = (|| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            let mode = if private_mode { 0o600 } else { 0o644 };
+            let mut opts = fs::OpenOptions::new();
+            opts.write(true)
+                .create_new(true)
+                .mode(mode)
+                .custom_flags(hbb_common::libc::O_NOFOLLOW);
+            let mut f = opts
+                .open(&tmp_path)
+                .map_err(|e| format!("failed opening atomic temp file: {e}"))?;
+            f.set_permissions(fs::Permissions::from_mode(mode))
+                .map_err(|e| format!("failed setting file permissions: {e}"))?;
+            f.write_all(data)
+                .map_err(|e| format!("failed writing atomic temp file: {e}"))?;
+            f.sync_all()
+                .map_err(|e| format!("failed syncing atomic temp file: {e}"))?;
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = private_mode;
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&tmp_path)
+                .map_err(|e| format!("failed opening atomic temp file: {e}"))?;
+            f.write_all(data)
+                .map_err(|e| format!("failed writing atomic temp file: {e}"))?;
+            f.sync_all()
+                .map_err(|e| format!("failed syncing atomic temp file: {e}"))?;
+        }
+        check_no_symlink_or_reparse_component(path)?;
+        fs::rename(&tmp_path, path)
+            .map_err(|e| format!("failed atomic rename into '{}': {e}", path.display()))?;
+        Ok(())
+    })();
+
+    if write_res.is_err() {
+        let _ = fs::remove_file(&tmp_path);
+    }
+    write_res
+}
+
+pub fn open_no_follow_regular_file(path: &Path) -> Result<(File, u64), String> {
+    check_no_symlink_or_reparse_component(path)?;
+    #[cfg(unix)]
+    let file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(hbb_common::libc::O_NOFOLLOW)
+            .open(path)
+            .map_err(|e| format!("SECURITY_OPEN_NOFOLLOW_FAILED '{}': {e}", path.display()))?
+    };
+    #[cfg(windows)]
+    let file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)
+            .map_err(|e| format!("SECURITY_OPEN_NOFOLLOW_FAILED '{}': {e}", path.display()))?
+    };
+    #[cfg(not(any(unix, windows)))]
+    let file = File::open(path).map_err(|e| format!("failed opening '{}': {e}", path.display()))?;
+
+    let meta = file
+        .metadata()
+        .map_err(|e| format!("failed reading open handle metadata '{}': {e}", path.display()))?;
+    if meta.file_type().is_symlink() || !meta.file_type().is_file() {
+        return Err(format!(
+            "SECURITY_REJECT_NON_REGULAR_HANDLE: '{}' is not a regular file",
+            path.display()
+        ));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+            return Err(format!(
+                "SECURITY_REJECT_REPARSE_HANDLE: open handle '{}' is a reparse point",
+                path.display()
+            ));
+        }
+    }
+    Ok((file, meta.len()))
+}
+
+pub fn sha256_file_confined_no_follow(
+    authorized_root: &Path,
+    target_path: &Path,
+) -> Result<(String, u64), String> {
+    check_no_symlink_or_reparse_component(authorized_root)?;
+    let canon_root = authorized_root
+        .canonicalize()
+        .map_err(|e| format!("failed canonicalizing authorized root: {e}"))?;
+
+    let parent = target_path
+        .parent()
+        .ok_or_else(|| "missing target parent directory".to_owned())?;
+    check_no_symlink_or_reparse_component(parent)?;
+    let canon_parent = parent
+        .canonicalize()
+        .map_err(|e| format!("failed canonicalizing target parent: {e}"))?;
+    if !canon_parent.starts_with(&canon_root) {
+        return Err("SECURITY_REJECT_OUTSIDE_AUTHORIZED_ROOT: parent escapes authorized root".to_owned());
+    }
+
+    if let Ok(rel) = canon_parent.strip_prefix(&canon_root) {
+        let mut cursor = canon_root.clone();
+        for comp in rel.components() {
+            if let Component::Normal(seg) = comp {
+                cursor.push(seg);
+                check_no_symlink_or_reparse_component(&cursor)?;
+            }
+        }
+    }
+
+    let file_name = target_path
+        .file_name()
+        .ok_or_else(|| "missing target file name".to_owned())?;
+    let confined_target = canon_parent.join(file_name);
+    let (mut file, expected_len) = open_no_follow_regular_file(&confined_target)?;
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        use winapi::um::fileapi::GetFinalPathNameByHandleW;
+        let mut buf = vec![0u16; 1024];
+        let len = unsafe {
+            GetFinalPathNameByHandleW(
+                file.as_raw_handle() as *mut _,
+                buf.as_mut_ptr(),
+                buf.len() as u32,
+                0,
+            )
+        } as usize;
+        if len > 0 && len < buf.len() {
+            let final_str = String::from_utf16_lossy(&buf[..len]);
+            let root_str = canon_root.to_string_lossy();
+            let clean_final = final_str.trim_start_matches(r"\\?\");
+            let clean_root = root_str.trim_start_matches(r"\\?\");
+            if !clean_final
+                .to_ascii_lowercase()
+                .starts_with(&clean_root.to_ascii_lowercase())
+            {
+                return Err(format!(
+                    "SECURITY_REJECT_HANDLE_ESCAPE: handle resolved to '{}' outside '{}'",
+                    clean_final, clean_root
+                ));
+            }
+        }
+    }
+
+    let mut hasher = Sha256::new();
+    let mut read_total = 0u64;
+    let mut chunk = [0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut chunk)
+            .map_err(|e| format!("failed reading confined file: {e}"))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&chunk[..n]);
+        read_total += n as u64;
+    }
+    if read_total != expected_len {
+        return Err(format!(
+            "INTEGRITY_READ_LENGTH_CHANGED: metadata {} != streamed {}",
+            expected_len, read_total
+        ));
+    }
+    Ok((hex::encode(hasher.finalize()), read_total))
+}
+
+pub fn write_sealed_secret_file(path: &Path, plaintext: &[u8], entropy: &[u8]) -> Result<(), String> {
+    let sealed = protect_secret_bytes(plaintext, entropy)?;
+    write_atomic_bytes(path, &sealed, true)
+}
+
 pub fn read_sealed_secret_file(path: &Path, entropy: &[u8]) -> Result<Vec<u8>, String> {
-    let sealed = fs::read(path).map_err(|e| format!("failed reading vault file: {e}"))?;
+    let (mut file, _len) = open_no_follow_regular_file(path)?;
+    let mut sealed = Vec::new();
+    file.read_to_end(&mut sealed)
+        .map_err(|e| format!("failed reading vault file: {e}"))?;
     unprotect_secret_bytes(&sealed, entropy)
 }
 
@@ -503,5 +783,29 @@ mod tests {
         assert!(!clean.contains("MyPlainPassword123"));
         assert!(clean.contains("[REDACTED_TOKEN]"));
         assert!(clean.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn atomic_write_and_confined_nofollow_rejects_symlink_swap() {
+        let dir = std::env::temp_dir().join(format!("dv_atomic_{}", uuid::Uuid::new_v4()));
+        ensure_private_dir(&dir).unwrap();
+        let target = dir.join("state.json");
+        write_atomic_bytes(&target, b"{\"v\":1}", true).unwrap();
+        write_atomic_bytes(&target, b"{\"v\":2}", true).unwrap();
+        let (sha, size) = sha256_file_confined_no_follow(&dir, &target).unwrap();
+        assert_eq!(size, 7);
+        assert_eq!(sha, sha256_hex(b"{\"v\":2}"));
+
+        #[cfg(unix)]
+        {
+            let outside = std::env::temp_dir().join(format!("dv_out_{}.txt", uuid::Uuid::new_v4()));
+            fs::write(&outside, b"secret-outside").unwrap();
+            let swapped = dir.join("swapped.txt");
+            std::os::unix::fs::symlink(&outside, &swapped).unwrap();
+            assert!(sha256_file_confined_no_follow(&dir, &swapped).is_err());
+            assert!(write_atomic_bytes(&swapped, b"overwrite", true).is_err());
+            fs::remove_file(&outside).ok();
+        }
+        fs::remove_dir_all(&dir).ok();
     }
 }

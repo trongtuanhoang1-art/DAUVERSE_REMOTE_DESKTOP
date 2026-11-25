@@ -347,6 +347,32 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
                         ],
                       ),
                     ),
+                    if (!_controller.backendAvailable)
+                      Container(
+                        key: const Key('dauverse-ffi-fail-closed-banner'),
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: p.danger,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                i18n.t(
+                                  'CẢNH BÁO AN TOÀN (FAIL-CLOSED): Backend gốc librustdesk không khả dụng — mọi thao tác cấu hình & bảo mật đã bị từ chối (${_controller.backendError}).',
+                                  'SECURITY FAIL-CLOSED: Native librustdesk backend is unavailable — privileged operations are refused (${_controller.backendError}).',
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Expanded(child: _buildActiveScreen()),
                   ],
                 ),

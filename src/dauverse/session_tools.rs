@@ -142,6 +142,12 @@ impl SessionToolsManager {
         self.shortcuts.lock().unwrap().clone()
     }
 
+    pub fn set_shortcuts_map(&self, next: HashMap<String, String>) {
+        if !next.is_empty() {
+            *self.shortcuts.lock().unwrap() = next;
+        }
+    }
+
     pub fn update_shortcut(&self, action: &str, combo: &str) -> Result<(), String> {
         if action.trim().is_empty() || combo.trim().is_empty() {
             return Err("shortcut action and combo must be non-empty".to_owned());

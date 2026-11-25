@@ -1,6 +1,7 @@
-use super::crypto_util::sha256_file;
+use super::crypto_util::sha256_file_confined_no_follow;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs,
     path::{Component, Path, PathBuf},
     sync::Mutex,
@@ -40,11 +41,21 @@ pub struct TransferJob {
     pub direction: TransferDirection,
     pub relative_path: String,
     pub resolved_target_path: String,
+    #[serde(default)]
+    pub dest_root_dir: Option<String>,
+    #[serde(default)]
+    pub expected_relative_files: Vec<String>,
     pub total_bytes: u64,
     pub transferred_bytes: u64,
     pub resume_offset: u64,
     pub expected_sha256: Option<String>,
     pub verified_sha256: Option<String>,
+    #[serde(default)]
+    pub computed_sha256: Option<String>,
+    #[serde(default)]
+    pub file_sha256_map: HashMap<String, String>,
+    #[serde(default)]
+    pub integrity_state: String,
     pub status: TransferStatus,
     pub speed_bytes_per_sec: u64,
     pub eta_seconds: Option<u64>,
@@ -104,27 +115,7 @@ fn is_windows_reserved_device_name(segment: &str) -> bool {
 }
 
 fn check_no_symlink_or_reparse(path: &Path) -> Result<(), String> {
-    let Ok(meta) = fs::symlink_metadata(path) else {
-        return Ok(());
-    };
-    if meta.file_type().is_symlink() {
-        return Err(format!(
-            "SECURITY_REJECT_SYMLINK: refusing symlink component '{}'",
-            path.display()
-        ));
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
-            return Err(format!(
-                "SECURITY_REJECT_REPARSE_POINT: refusing junction/reparse point '{}'",
-                path.display()
-            ));
-        }
-    }
-    Ok(())
+    super::crypto_util::check_no_symlink_or_reparse_component(path)
 }
 
 pub fn validate_and_resolve_destination(
@@ -142,12 +133,17 @@ pub fn validate_and_resolve_destination(
         || untrusted_relative_path.starts_with('\\')
         || untrusted_relative_path.contains(':')
     {
-        return Err("SECURITY_REJECT_ABSOLUTE_OR_UNC_PATH: absolute/UNC/drive path forbidden".to_owned());
+        return Err(
+            "SECURITY_REJECT_ABSOLUTE_OR_UNC_PATH: absolute/UNC/drive path forbidden".to_owned(),
+        );
     }
     if untrusted_relative_path.contains('\\') {
         for raw_part in untrusted_relative_path.split('\\') {
             if raw_part == ".." || raw_part.is_empty() {
-                return Err("SECURITY_REJECT_PATH_TRAVERSAL: backslash traversal or empty segment".to_owned());
+                return Err(
+                    "SECURITY_REJECT_PATH_TRAVERSAL: backslash traversal or empty segment"
+                        .to_owned(),
+                );
             }
             if is_windows_reserved_device_name(raw_part) {
                 return Err(format!(
@@ -334,11 +330,16 @@ impl TransferQueueManager {
             direction: TransferDirection::DownloadToLocal,
             relative_path: untrusted_relative_path.to_owned(),
             resolved_target_path: resolved.to_string_lossy().into_owned(),
+            dest_root_dir: Some(root.to_string_lossy().into_owned()),
+            expected_relative_files: vec![untrusted_relative_path.to_owned()],
             total_bytes,
             transferred_bytes: 0,
             resume_offset: 0,
             expected_sha256,
             verified_sha256: None,
+            computed_sha256: None,
+            file_sha256_map: HashMap::new(),
+            integrity_state: "PENDING".to_owned(),
             status: TransferStatus::Queued,
             speed_bytes_per_sec: 0,
             eta_seconds: None,
@@ -415,6 +416,7 @@ impl TransferQueueManager {
                 Err("completed job cannot be cancelled".to_owned())
             } else {
                 job.status = TransferStatus::Cancelled;
+                job.integrity_state = "CANCELLED".to_owned();
                 job.speed_bytes_per_sec = 0;
                 job.eta_seconds = None;
                 Ok(())
@@ -426,6 +428,7 @@ impl TransferQueueManager {
         self.transition(job_id, |job| {
             if matches!(job.status, TransferStatus::Failed | TransferStatus::Cancelled) {
                 job.status = TransferStatus::Queued;
+                job.integrity_state = "PENDING".to_owned();
                 job.error_message = None;
                 Ok(())
             } else {
@@ -435,32 +438,65 @@ impl TransferQueueManager {
     }
 
     pub fn finalize_and_verify(&self, job_id: &str) -> Result<TransferJob, String> {
-        let target_path = {
+        let (root_dir, target_path, expected_total) = {
             let jobs = self.jobs.lock().unwrap();
             let job = jobs
                 .iter()
                 .find(|j| j.job_id == job_id)
                 .ok_or_else(|| "transfer job not found".to_owned())?;
-            PathBuf::from(&job.resolved_target_path)
+            let root = job
+                .dest_root_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .unwrap_or_else(|| self.get_authorized_root());
+            (root, PathBuf::from(&job.resolved_target_path), job.total_bytes)
         };
 
-        check_no_symlink_or_reparse(&target_path)?;
-        let actual_hash = sha256_file(&target_path)?;
-
+        let hash_res = sha256_file_confined_no_follow(&root_dir, &target_path);
         self.transition(job_id, |job| {
+            let (actual_hash, actual_len) = match hash_res {
+                Ok(v) => v,
+                Err(e) => {
+                    job.status = TransferStatus::Failed;
+                    job.verified_sha256 = None;
+                    job.integrity_state = "FAILED_SYMLINK_OR_UNREADABLE".to_owned();
+                    job.error_message = Some(e.clone());
+                    return Err(e);
+                }
+            };
+            if expected_total > 0 && actual_len != expected_total {
+                let msg = format!(
+                    "INTEGRITY_BYTE_SIZE_MISMATCH: expected {} bytes, got {} bytes",
+                    expected_total, actual_len
+                );
+                job.status = TransferStatus::Failed;
+                job.verified_sha256 = None;
+                job.computed_sha256 = Some(actual_hash);
+                job.integrity_state = "FAILED_MISSING_OR_TRUNCATED_FILE".to_owned();
+                job.error_message = Some(msg.clone());
+                return Err(msg);
+            }
+            job.computed_sha256 = Some(actual_hash.clone());
             if let Some(expected) = &job.expected_sha256 {
                 if !expected.trim().eq_ignore_ascii_case(&actual_hash) {
-                    job.status = TransferStatus::Failed;
-                    job.error_message = Some(format!(
+                    let msg = format!(
                         "INTEGRITY_SHA256_MISMATCH: expected {}, got {}",
                         expected.trim(),
                         actual_hash
-                    ));
-                    return Err(job.error_message.clone().unwrap());
+                    );
+                    job.status = TransferStatus::Failed;
+                    job.verified_sha256 = None;
+                    job.integrity_state = "FAILED_SHA256_MISMATCH".to_owned();
+                    job.error_message = Some(msg.clone());
+                    return Err(msg);
                 }
+                job.verified_sha256 = Some(actual_hash);
+                job.integrity_state = "SENDER_SHA256_VERIFIED".to_owned();
+            } else {
+                job.verified_sha256 = None;
+                job.integrity_state = "LOCAL_SHA256_COMPUTED_SIZE_VERIFIED".to_owned();
             }
-            job.verified_sha256 = Some(actual_hash);
-            job.transferred_bytes = job.total_bytes;
+            job.transferred_bytes = actual_len;
             job.speed_bytes_per_sec = 0;
             job.eta_seconds = Some(0);
             job.status = TransferStatus::Completed;
@@ -480,16 +516,43 @@ impl TransferQueueManager {
         relative_path: &str,
         total_bytes: u64,
     ) {
+        self.track_engine_receive_start_batch(
+            engine_job_id,
+            conn_id,
+            dest_dir,
+            vec![relative_path.to_owned()],
+            total_bytes,
+        );
+    }
+
+    pub fn track_engine_receive_start_batch(
+        &self,
+        engine_job_id: i32,
+        conn_id: i32,
+        dest_dir: &str,
+        relative_files: Vec<String>,
+        total_bytes: u64,
+    ) {
         let job_id = format!("engine-fs-{engine_job_id}");
         let now = chrono::Utc::now().to_rfc3339();
+        let first_rel = relative_files
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "transfer_batch".to_owned());
         let resolved = Path::new(dest_dir)
-            .join(relative_path)
+            .join(&first_rel)
             .to_string_lossy()
             .into_owned();
         let mut jobs = self.jobs.lock().unwrap();
         if let Some(existing) = jobs.iter_mut().find(|j| j.job_id == job_id) {
             existing.status = TransferStatus::Active;
+            existing.dest_root_dir = Some(dest_dir.to_owned());
+            existing.expected_relative_files = relative_files;
             existing.total_bytes = total_bytes;
+            existing.integrity_state = "PENDING".to_owned();
+            existing.verified_sha256 = None;
+            existing.computed_sha256 = None;
+            existing.file_sha256_map.clear();
             existing.updated_at_utc = now;
             return;
         }
@@ -497,13 +560,18 @@ impl TransferQueueManager {
             job_id,
             peer_id: format!("conn-{conn_id}"),
             direction: TransferDirection::DownloadToLocal,
-            relative_path: relative_path.to_owned(),
+            relative_path: first_rel,
             resolved_target_path: resolved,
+            dest_root_dir: Some(dest_dir.to_owned()),
+            expected_relative_files: relative_files,
             total_bytes,
             transferred_bytes: 0,
             resume_offset: 0,
             expected_sha256: None,
             verified_sha256: None,
+            computed_sha256: None,
+            file_sha256_map: HashMap::new(),
+            integrity_state: "PENDING".to_owned(),
             status: TransferStatus::Active,
             speed_bytes_per_sec: 0,
             eta_seconds: None,
@@ -512,6 +580,122 @@ impl TransferQueueManager {
             updated_at_utc: now,
             auto_open_disabled: true,
         });
+    }
+
+    pub fn verify_and_finalize_engine_receive(
+        &self,
+        engine_job_id: i32,
+    ) -> Result<TransferJob, String> {
+        let job_id = format!("engine-fs-{engine_job_id}");
+        let (dest_root, expected_files, expected_total, expected_sha_opt) = {
+            let jobs = self.jobs.lock().unwrap();
+            let job = jobs
+                .iter()
+                .find(|j| j.job_id == job_id)
+                .ok_or_else(|| format!("INTEGRITY_ORPHAN_JOB: unknown engine receive job {job_id}"))?;
+            let root = job
+                .dest_root_dir
+                .as_deref()
+                .map(PathBuf::from)
+                .ok_or_else(|| "INTEGRITY_MISSING_DEST_ROOT".to_owned())?;
+            (
+                root,
+                job.expected_relative_files.clone(),
+                job.total_bytes,
+                job.expected_sha256.clone(),
+            )
+        };
+
+        if expected_files.is_empty() {
+            let msg = "INTEGRITY_EMPTY_FILE_MANIFEST: no files recorded for engine receive job".to_owned();
+            self.track_engine_receive_finish(engine_job_id, false, false, Some(&msg));
+            return Err(msg);
+        }
+
+        let mut actual_total_bytes = 0u64;
+        let mut digest_map = HashMap::new();
+        let mut primary_sha: Option<String> = None;
+
+        for rel in &expected_files {
+            let candidate = dest_root.join(rel);
+            let staging_leftover = PathBuf::from(format!("{}.download", candidate.display()));
+            if staging_leftover.exists() && !candidate.exists() {
+                let msg = format!(
+                    "INTEGRITY_UNFINALIZED_DOWNLOAD_STAGING: '{}' still unrenamed",
+                    staging_leftover.display()
+                );
+                self.track_engine_receive_finish(engine_job_id, false, false, Some(&msg));
+                return Err(msg);
+            }
+            match sha256_file_confined_no_follow(&dest_root, &candidate) {
+                Ok((sha, len)) => {
+                    if primary_sha.is_none() {
+                        primary_sha = Some(sha.clone());
+                    }
+                    actual_total_bytes = actual_total_bytes.saturating_add(len);
+                    digest_map.insert(rel.clone(), sha);
+                }
+                Err(e) => {
+                    self.transition(&job_id, |job| {
+                        job.status = TransferStatus::Failed;
+                        job.verified_sha256 = None;
+                        job.integrity_state = "FAILED_SYMLINK_OR_MISSING_FILE".to_owned();
+                        job.error_message = Some(e.clone());
+                        Err(e)
+                    })?;
+                }
+            }
+        }
+
+        if actual_total_bytes != expected_total {
+            let msg = format!(
+                "INTEGRITY_RECEIVED_SIZE_MISMATCH: expected {} bytes across {} file(s), got {} bytes",
+                expected_total,
+                expected_files.len(),
+                actual_total_bytes
+            );
+            return self.transition(&job_id, |job| {
+                job.status = TransferStatus::Failed;
+                job.transferred_bytes = actual_total_bytes;
+                job.verified_sha256 = None;
+                job.computed_sha256 = primary_sha;
+                job.file_sha256_map = digest_map;
+                job.integrity_state = "FAILED_MISSING_OR_TRUNCATED_FILE".to_owned();
+                job.error_message = Some(msg.clone());
+                Err(msg)
+            });
+        }
+
+        self.transition(&job_id, |job| {
+            job.computed_sha256 = primary_sha.clone();
+            job.file_sha256_map = digest_map;
+            if let (Some(exp), Some(act)) = (&expected_sha_opt, &primary_sha) {
+                if !exp.trim().eq_ignore_ascii_case(act) {
+                    let msg = format!(
+                        "INTEGRITY_SHA256_MISMATCH: expected {}, got {}",
+                        exp.trim(),
+                        act
+                    );
+                    job.status = TransferStatus::Failed;
+                    job.verified_sha256 = None;
+                    job.integrity_state = "FAILED_SHA256_MISMATCH".to_owned();
+                    job.error_message = Some(msg.clone());
+                    return Err(msg);
+                }
+                job.verified_sha256 = Some(act.clone());
+                job.integrity_state = "SENDER_SHA256_VERIFIED".to_owned();
+            } else {
+                // Honest scope: upstream protocol does not transmit sender SHA-256;
+                // local no-follow post-write SHA-256 & byte-length parity were verified.
+                job.verified_sha256 = None;
+                job.integrity_state = "LOCAL_SHA256_COMPUTED_SIZE_VERIFIED".to_owned();
+            }
+            job.transferred_bytes = actual_total_bytes;
+            job.speed_bytes_per_sec = 0;
+            job.eta_seconds = Some(0);
+            job.status = TransferStatus::Completed;
+            Ok(())
+        })
     }
 
     pub fn track_engine_receive_finish(
@@ -525,15 +709,18 @@ impl TransferQueueManager {
         let mut jobs = self.jobs.lock().unwrap();
         if let Some(job) = jobs.iter_mut().find(|j| j.job_id == job_id) {
             if completed {
-                job.status = TransferStatus::Completed;
-                job.transferred_bytes = job.total_bytes;
-                job.eta_seconds = Some(0);
+                drop(jobs);
+                let _ = self.verify_and_finalize_engine_receive(engine_job_id);
+                return;
             } else if cancelled {
                 job.status = TransferStatus::Cancelled;
+                job.integrity_state = "CANCELLED".to_owned();
             } else {
                 job.status = TransferStatus::Failed;
+                job.integrity_state = "FAILED_TRANSPORT".to_owned();
                 job.error_message = error_message.map(|s| s.to_owned());
             }
+            job.verified_sha256 = None;
             job.speed_bytes_per_sec = 0;
             job.updated_at_utc = chrono::Utc::now().to_rfc3339();
         }
@@ -615,7 +802,7 @@ mod tests {
     }
 
     #[test]
-    fn queue_lifecycle_duplicate_rename_and_sha256_integrity() {
+    fn f14_f16_engine_receive_integrity_verifies_multi_file_hashes_rejects_missing_truncated_and_post_validation_symlink_swap() {
         let base = std::env::temp_dir().join(format!("dv_xfer_q_{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&base).unwrap();
 
@@ -639,7 +826,7 @@ mod tests {
                 "peer-home",
                 "renders/comfy_output.mp4",
                 payload.len() as u64,
-                Some(expected_sha),
+                Some(expected_sha.clone()),
                 DuplicateFileStrategy::AutoRename,
             )
             .unwrap();
@@ -662,7 +849,62 @@ mod tests {
         let done = mgr.finalize_and_verify(&job.job_id).unwrap();
         assert_eq!(done.status, TransferStatus::Completed);
         assert!(done.auto_open_disabled);
-        assert!(done.verified_sha256.is_some());
+        assert_eq!(done.verified_sha256.as_deref(), Some(expected_sha.as_str()));
+        assert_eq!(done.integrity_state, "SENDER_SHA256_VERIFIED");
+
+        // F16: Engine receive batch with 2 real files verifies both digests & total size,
+        //      and marks LOCAL_SHA256_COMPUTED_SIZE_VERIFIED (verified_sha256 == None when no sender digest)
+        let f1_bytes = b"part-one-content";
+        let f2_bytes = b"part-two-content-1234";
+        fs::write(base.join("a.bin"), f1_bytes).unwrap();
+        fs::write(base.join("b.bin"), f2_bytes).unwrap();
+        mgr.track_engine_receive_start_batch(
+            77,
+            1,
+            base.to_str().unwrap(),
+            vec!["a.bin".to_owned(), "b.bin".to_owned()],
+            (f1_bytes.len() + f2_bytes.len()) as u64,
+        );
+        let rx_ok = mgr.verify_and_finalize_engine_receive(77).unwrap();
+        assert_eq!(rx_ok.status, TransferStatus::Completed);
+        assert!(rx_ok.verified_sha256.is_none());
+        assert!(rx_ok.computed_sha256.is_some());
+        assert_eq!(rx_ok.file_sha256_map.len(), 2);
+        assert_eq!(rx_ok.integrity_state, "LOCAL_SHA256_COMPUTED_SIZE_VERIFIED");
+
+        // F16 Negative 1: Missing file on WriteDone MUST fail (never mark Completed!)
+        mgr.track_engine_receive_start(78, 1, base.to_str().unwrap(), "missing.bin", 128);
+        assert!(mgr.verify_and_finalize_engine_receive(78).is_err());
+        let rx_missing = mgr
+            .list_jobs()
+            .into_iter()
+            .find(|j| j.job_id == "engine-fs-78")
+            .unwrap();
+        assert_eq!(rx_missing.status, TransferStatus::Failed);
+
+        // F16 Negative 2: Truncated byte length on WriteDone MUST fail
+        fs::write(base.join("trunc.bin"), b"short").unwrap();
+        mgr.track_engine_receive_start(79, 1, base.to_str().unwrap(), "trunc.bin", 999);
+        assert!(mgr.verify_and_finalize_engine_receive(79).is_err());
+        let rx_trunc = mgr
+            .list_jobs()
+            .into_iter()
+            .find(|j| j.job_id == "engine-fs-79")
+            .unwrap();
+        assert_eq!(rx_trunc.status, TransferStatus::Failed);
+        assert_eq!(rx_trunc.integrity_state, "FAILED_MISSING_OR_TRUNCATED_FILE");
+
+        // F14 Negative: Symlink planted after validate_and_resolve_destination and before finalize is rejected
+        #[cfg(unix)]
+        {
+            let outside_secret =
+                std::env::temp_dir().join(format!("dv_race_secret_{}.txt", uuid::Uuid::new_v4()));
+            fs::write(&outside_secret, b"SENSITIVE").unwrap();
+            mgr.track_engine_receive_start(80, 1, base.to_str().unwrap(), "race_swap.txt", 9);
+            std::os::unix::fs::symlink(&outside_secret, base.join("race_swap.txt")).unwrap();
+            assert!(mgr.verify_and_finalize_engine_receive(80).is_err());
+            fs::remove_file(&outside_secret).ok();
+        }
 
         let bad_job = mgr
             .enqueue_download(

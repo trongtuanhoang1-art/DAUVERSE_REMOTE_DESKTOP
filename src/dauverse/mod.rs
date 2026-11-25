@@ -15,21 +15,33 @@ pub mod update_center;
 
 use self::{
     ai_bridge::AiEventBridge,
-    clipboard_guard::ClipboardGuard,
+    clipboard_guard::{ClipboardGuard, ClipboardPolicy},
     hardware::HardwareMonitor,
     headless::HeadlessManager,
-    notifications::NotificationCenter,
-    performance::PerformanceEngine,
+    notifications::{NotificationCenter, NotificationPreferences},
+    performance::{PerformanceEngine, PerformanceMode},
     security::DeviceShieldSecurityCenter,
     service_ctrl::ServiceController,
     session_tools::SessionToolsManager,
     smart_power::SmartPowerController,
     transfer_guard::TransferQueueManager,
 };
+use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
+    io::Read,
     path::PathBuf,
     sync::{atomic::AtomicBool, Arc, Mutex, OnceLock},
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedUserSettings {
+    pub performance_mode: PerformanceMode,
+    pub clipboard_policy: ClipboardPolicy,
+    pub notification_preferences: NotificationPreferences,
+    pub transfer_bandwidth_limit_kbps: Option<u32>,
+    pub shortcuts: HashMap<String, String>,
+}
 
 pub struct DauverseRuntime {
     pub data_dir: PathBuf,
@@ -47,6 +59,7 @@ pub struct DauverseRuntime {
     pub bridge_listen_port: u16,
     pub mini_control_minimized: Mutex<bool>,
     pub mini_control_idle: Mutex<bool>,
+    pub storage_error: Mutex<Option<String>>,
     _bridge_stop: Arc<AtomicBool>,
 }
 
@@ -58,86 +71,181 @@ impl DauverseRuntime {
     }
 
     fn init_default() -> Self {
+        #[cfg(test)]
         let base_dir = std::env::var("DAUVERSE_DATA_DIR")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
             .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                let mut p = std::env::temp_dir();
-                p.push("dauverse_remote_v1");
-                p
+            .unwrap_or_else(|| {
+                std::env::temp_dir().join(format!("dauverse_unit_rt_{}", uuid::Uuid::new_v4()))
             });
-        let _ = std::fs::create_dir_all(&base_dir);
+
+        #[cfg(not(test))]
+        let base_dir = crypto_util::default_durable_app_data_dir();
+
+        Self::init_at_dir(base_dir, true)
+    }
+
+    pub fn init_at_dir(base_dir: PathBuf, spawn_gateway: bool) -> Self {
+        let mut init_err: Option<String> = None;
+        if let Err(e) = crypto_util::ensure_private_dir(&base_dir) {
+            init_err = Some(format!("DATA_DIR_INIT_FAILED: {e}"));
+        }
         let transfer_root = base_dir.join("received_files");
-        let _ = std::fs::create_dir_all(&transfer_root);
+        if let Err(e) = crypto_util::ensure_private_dir(&transfer_root) {
+            if init_err.is_none() {
+                init_err = Some(format!("TRANSFER_DIR_INIT_FAILED: {e}"));
+            }
+        }
         let offline_journal = base_dir.join("offline_notifications.json");
         let audit_log_path = base_dir.join("security_audit_chain.jsonl");
+        let replay_journal_path = base_dir.join("bridge_replay_journal.json");
+        let settings_path = base_dir.join("dauverse_settings_state.json");
         let vault_path = base_dir.join("bridge_hmac.vault");
         const VAULT_ENTROPY: &[u8] = b"dauverse-bridge-hmac-v1";
 
+        let security = DeviceShieldSecurityCenter::with_audit_log_path(Some(audit_log_path));
+
         let bridge_secret = match std::env::var("DAUVERSE_EVENT_HMAC_KEY") {
             Ok(s) if s.len() >= 16 => s.into_bytes(),
-            _ => match crypto_util::read_sealed_secret_file(&vault_path, VAULT_ENTROPY) {
-                Ok(sec) if sec.len() >= 16 => sec,
-                _ => {
+            _ => {
+                if std::fs::symlink_metadata(&vault_path).is_ok() {
+                    match crypto_util::read_sealed_secret_file(&vault_path, VAULT_ENTROPY) {
+                        Ok(sec) if sec.len() >= 16 => sec,
+                        Err(e) => {
+                            let msg = format!("BRIDGE_VAULT_CORRUPTED_FAIL_CLOSED: {e}");
+                            security.append_audit(
+                                "SYSTEM",
+                                "BRIDGE_VAULT_INTEGRITY",
+                                "FAILED_CLOSED",
+                                &msg,
+                            );
+                            if init_err.is_none() {
+                                init_err = Some(msg);
+                            }
+                            crypto_util::generate_nonce_hex().into_bytes()
+                        }
+                        Ok(_) => {
+                            let msg = "BRIDGE_VAULT_CORRUPTED_FAIL_CLOSED: truncated key".to_owned();
+                            if init_err.is_none() {
+                                init_err = Some(msg);
+                            }
+                            crypto_util::generate_nonce_hex().into_bytes()
+                        }
+                    }
+                } else {
                     let generated = crypto_util::generate_nonce_hex().into_bytes();
-                    let _ = crypto_util::write_sealed_secret_file(
+                    if let Err(e) = crypto_util::write_sealed_secret_file(
                         &vault_path,
                         &generated,
                         VAULT_ENTROPY,
-                    );
+                    ) {
+                        if init_err.is_none() {
+                            init_err = Some(format!("BRIDGE_VAULT_WRITE_FAILED: {e}"));
+                        }
+                    }
                     generated
                 }
-            },
+            }
         };
 
-        let ai_bridge = Arc::new(AiEventBridge::new(bridge_secret));
+        let ai_bridge = Arc::new(AiEventBridge::with_persistence_and_limits(
+            bridge_secret,
+            Some(replay_journal_path),
+            65_536,
+        ));
         let notifications = Arc::new(NotificationCenter::new(Some(offline_journal)));
-        let security = DeviceShieldSecurityCenter::with_audit_log_path(Some(audit_log_path));
+        let performance = PerformanceEngine::new();
+        let clipboard_guard = ClipboardGuard::new();
+        let transfer_queue = TransferQueueManager::new(transfer_root);
+        let session_tools = SessionToolsManager::new();
 
-        let preferred_port = std::env::var("DAUVERSE_EVENT_BRIDGE_PORT")
-            .ok()
-            .and_then(|v| v.parse::<u16>().ok())
-            .unwrap_or(21188);
-        let stop_flag = Arc::new(AtomicBool::new(false));
-        let notif_sink = notifications.clone();
-        let cb: Arc<dyn Fn(&ai_bridge::AiEvent, i64) + Send + Sync> =
-            Arc::new(move |ev, now_ms| {
-                notif_sink.publish_from_ai_event(ev, now_ms);
-            });
-
-        let bound_port = AiEventBridge::spawn_loopback_http_gateway_with_sink(
-            ai_bridge.clone(),
-            preferred_port,
-            stop_flag.clone(),
-            Some(cb.clone()),
-        )
-        .or_else(|_| {
-            AiEventBridge::spawn_loopback_http_gateway_with_sink(
-                ai_bridge.clone(),
-                0,
-                stop_flag.clone(),
-                Some(cb),
-            )
-        })
-        .map(|(p, _handle)| p)
-        .unwrap_or(0);
-
-        if bound_port > 0 {
-            let endpoint_meta = serde_json::json!({
-                "endpoint": format!("http://127.0.0.1:{bound_port}/v1/events"),
-                "health_url": format!("http://127.0.0.1:{bound_port}/v1/health"),
-                "port": bound_port,
-            });
-            let _ = std::fs::write(
-                base_dir.join("bridge_endpoint.json"),
-                endpoint_meta.to_string(),
-            );
+        if std::fs::symlink_metadata(&settings_path).is_ok() {
+            match crypto_util::open_no_follow_regular_file(&settings_path) {
+                Ok((mut f, _)) => {
+                    let mut raw = String::new();
+                    match f.read_to_string(&mut raw).ok().and_then(|_| {
+                        serde_json::from_str::<PersistedUserSettings>(&raw).ok()
+                    }) {
+                        Some(saved) => {
+                            performance.set_mode(saved.performance_mode);
+                            clipboard_guard.update_policy(saved.clipboard_policy);
+                            notifications.update_preferences(saved.notification_preferences);
+                            transfer_queue.set_bandwidth_limit_kbps(saved.transfer_bandwidth_limit_kbps);
+                            session_tools.set_shortcuts_map(saved.shortcuts);
+                        }
+                        None => {
+                            let msg = "SETTINGS_STATE_CORRUPTED_FAIL_CLOSED: invalid dauverse_settings_state.json".to_owned();
+                            security.append_audit("SYSTEM", "LOAD_SETTINGS_STATE", "FAILED_CLOSED", &msg);
+                            if init_err.is_none() {
+                                init_err = Some(msg);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if init_err.is_none() {
+                        init_err = Some(format!("SETTINGS_STATE_OPEN_FAILED: {e}"));
+                    }
+                }
+            }
         }
+
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let bound_port = if spawn_gateway {
+            let preferred_port = std::env::var("DAUVERSE_EVENT_BRIDGE_PORT")
+                .ok()
+                .and_then(|v| v.parse::<u16>().ok())
+                .unwrap_or(21188);
+            let notif_sink = notifications.clone();
+            let cb: Arc<dyn Fn(&ai_bridge::AiEvent, i64) + Send + Sync> =
+                Arc::new(move |ev, now_ms| {
+                    notif_sink.publish_from_ai_event(ev, now_ms);
+                });
+
+            let port = AiEventBridge::spawn_loopback_http_gateway_with_sink(
+                ai_bridge.clone(),
+                preferred_port,
+                stop_flag.clone(),
+                Some(cb.clone()),
+            )
+            .or_else(|_| {
+                AiEventBridge::spawn_loopback_http_gateway_with_sink(
+                    ai_bridge.clone(),
+                    0,
+                    stop_flag.clone(),
+                    Some(cb),
+                )
+            })
+            .map(|(p, _handle)| p)
+            .unwrap_or(0);
+
+            if port > 0 {
+                let endpoint_meta = serde_json::json!({
+                    "endpoint": format!("http://127.0.0.1:{port}/v1/events"),
+                    "health_url": format!("http://127.0.0.1:{port}/v1/health"),
+                    "port": port,
+                });
+                if let Err(e) = crypto_util::write_atomic_bytes(
+                    &base_dir.join("bridge_endpoint.json"),
+                    endpoint_meta.to_string().as_bytes(),
+                    true,
+                ) {
+                    if init_err.is_none() {
+                        init_err = Some(format!("ENDPOINT_METADATA_WRITE_FAILED: {e}"));
+                    }
+                }
+            }
+            port
+        } else {
+            0
+        };
 
         Self {
             data_dir: base_dir,
-            performance: PerformanceEngine::new(),
-            clipboard_guard: ClipboardGuard::new(),
-            transfer_queue: TransferQueueManager::new(transfer_root),
+            performance,
+            clipboard_guard,
+            transfer_queue,
             smart_power: SmartPowerController::new(),
             headless: HeadlessManager::new(),
             service_ctrl: ServiceController::new(),
@@ -145,11 +253,37 @@ impl DauverseRuntime {
             notifications,
             hardware: HardwareMonitor::new(),
             security,
-            session_tools: SessionToolsManager::new(),
+            session_tools,
             bridge_listen_port: bound_port,
             mini_control_minimized: Mutex::new(false),
             mini_control_idle: Mutex::new(false),
+            storage_error: Mutex::new(init_err),
             _bridge_stop: stop_flag,
+        }
+    }
+
+    pub fn persist_user_settings(&self) -> Result<(), String> {
+        if let Some(existing_err) = self.storage_error.lock().unwrap().clone() {
+            if existing_err.contains("CORRUPTED_FAIL_CLOSED") {
+                return Err(existing_err);
+            }
+        }
+        let state = PersistedUserSettings {
+            performance_mode: self.performance.get_mode(),
+            clipboard_policy: self.clipboard_guard.get_policy(),
+            notification_preferences: self.notifications.preferences(),
+            transfer_bandwidth_limit_kbps: self.transfer_queue.get_bandwidth_limit_kbps(),
+            shortcuts: self.session_tools.shortcuts(),
+        };
+        let bytes = serde_json::to_vec_pretty(&state)
+            .map_err(|e| format!("SETTINGS_SERIALIZE_ERROR: {e}"))?;
+        let path = self.data_dir.join("dauverse_settings_state.json");
+        match crypto_util::write_atomic_bytes(&path, &bytes, true) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                *self.storage_error.lock().unwrap() = Some(e.clone());
+                Err(e)
+            }
         }
     }
 
@@ -174,12 +308,16 @@ impl DauverseRuntime {
         let perf = self.performance.update_runtime_sample(net_sample);
 
         let local_id = hbb_common::config::Config::get_id();
+        let storage_err = self.storage_error.lock().unwrap().clone();
 
         serde_json::json!({
             "product": "DAUVERSE REMOTE DESKTOP",
             "version": update_center::DAUVERSE_PRODUCT_VERSION,
             "engine_base": update_center::UPSTREAM_ENGINE_VERSION,
             "local_peer_id": local_id,
+            "data_dir": self.data_dir.to_string_lossy(),
+            "storage_healthy": storage_err.is_none(),
+            "storage_error": storage_err,
             "bridge_endpoint": if self.bridge_listen_port > 0 {
                 format!("http://127.0.0.1:{}/v1/events", self.bridge_listen_port)
             } else {
@@ -225,5 +363,55 @@ impl DauverseRuntime {
             },
             "release": update_center::current_release_status(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn f07_settings_and_vault_persist_across_restart_and_corrupted_files_fail_closed() {
+        let dir = std::env::temp_dir().join(format!("dv_rt_persist_{}", uuid::Uuid::new_v4()));
+        {
+            let rt1 = DauverseRuntime::init_at_dir(dir.clone(), false);
+            rt1.performance.set_mode(PerformanceMode::HighQuality);
+            let mut pol = rt1.clipboard_guard.get_policy();
+            pol.allow_files = false;
+            rt1.clipboard_guard.update_policy(pol);
+            let mut prefs = rt1.notifications.preferences();
+            prefs.quiet_mode = true;
+            rt1.notifications.update_preferences(prefs);
+            rt1.transfer_queue.set_bandwidth_limit_kbps(Some(4096));
+            rt1.session_tools
+                .update_shortcut("toggle_mini_control", "Ctrl+Shift+M")
+                .unwrap();
+            rt1.persist_user_settings().unwrap();
+            rt1.security.set_step_up_passcode("Persist#2026").unwrap();
+        }
+
+        {
+            let rt2 = DauverseRuntime::init_at_dir(dir.clone(), false);
+            assert_eq!(rt2.performance.get_mode(), PerformanceMode::HighQuality);
+            assert!(!rt2.clipboard_guard.get_policy().allow_files);
+            assert!(rt2.notifications.preferences().quiet_mode);
+            assert_eq!(rt2.transfer_queue.get_bandwidth_limit_kbps(), Some(4096));
+            assert_eq!(
+                rt2.session_tools
+                    .shortcuts()
+                    .get("toggle_mini_control")
+                    .map(String::as_str),
+                Some("Ctrl+Shift+M")
+            );
+            assert!(rt2.security.verify_step_up_passcode("Persist#2026"));
+        }
+
+        // Corrupt dauverse_settings_state.json -> runtime detects corruption and fails closed on writes
+        std::fs::write(dir.join("dauverse_settings_state.json"), b"{invalid-json").unwrap();
+        let rt3 = DauverseRuntime::init_at_dir(dir.clone(), false);
+        assert!(rt3.storage_error.lock().unwrap().is_some());
+        assert!(rt3.persist_user_settings().is_err());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

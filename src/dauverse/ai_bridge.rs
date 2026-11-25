@@ -1,16 +1,18 @@
-use super::crypto_util::{constant_time_eq, hmac_sha256, redact_sensitive};
+use super::crypto_util::{constant_time_eq, hmac_sha256, redact_sensitive, write_atomic_bytes};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     time::Duration,
 };
+
+pub const AI_EVENT_SCHEMA_V2: u8 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -68,7 +70,7 @@ pub enum SourceSupportStatus {
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventProvenance {
     pub adapter_type: SourceSupportStatus,
     pub evidence_verified: bool,
@@ -97,6 +99,8 @@ pub struct AiEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedAiEventEnvelope {
+    #[serde(default)]
+    pub schema_version: u8,
     pub event: AiEvent,
     pub issued_at_ms: i64,
     pub nonce: String,
@@ -131,26 +135,79 @@ pub struct AiSourceDescriptor {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ReplayRecord {
+    event_id: String,
+    nonce: String,
+    issued_at_ms: i64,
+    seen_at_ms: i64,
+}
+
+#[derive(Default)]
+struct ReplayGuardState {
+    records: VecDeque<ReplayRecord>,
+    seen_event_ids: HashSet<String>,
+    seen_nonces: HashSet<String>,
+}
+
 const MAX_CLOCK_SKEW_MS: i64 = 300_000;
-const MAX_REPLAY_CACHE: usize = 2_048;
+const REPLAY_RETENTION_MS: i64 = MAX_CLOCK_SKEW_MS * 2 + 60_000;
+const DEFAULT_MAX_ACTIVE_REPLAY_ENTRIES: usize = 65_536;
+
+pub fn canonical_signing_bytes_checked(
+    event: &AiEvent,
+    schema_version: u8,
+    issued_at_ms: i64,
+    nonce: &str,
+) -> Result<Vec<u8>, String> {
+    if schema_version != AI_EVENT_SCHEMA_V2 {
+        return Err("EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION".to_owned());
+    }
+    if !event.confidence.is_finite() {
+        return Err("EVENT_REJECT_NON_FINITE_CONFIDENCE".to_owned());
+    }
+    let progress_str = match event.progress {
+        Some(p) => {
+            if !p.is_finite() {
+                return Err("EVENT_REJECT_NON_FINITE_PROGRESS".to_owned());
+            }
+            Some(format!("{p:.4}"))
+        }
+        None => None,
+    };
+    let confidence_str = format!("{:.4}", event.confidence);
+    let canonical = serde_json::json!([
+        "DAUVERSE_AI_EVENT_V2",
+        schema_version,
+        issued_at_ms,
+        nonce,
+        &event.event_id,
+        &event.timestamp,
+        &event.source,
+        &event.device_id,
+        &event.project_id,
+        &event.task_id,
+        &event.task_name,
+        &event.event_type,
+        &event.status,
+        &event.severity,
+        progress_str,
+        &event.summary,
+        &event.artifact_reference,
+        confidence_str,
+        [
+            &event.provenance.adapter_type,
+            event.provenance.evidence_verified,
+            event.provenance.exit_code,
+            &event.provenance.evidence_badge,
+        ],
+    ]);
+    serde_json::to_vec(&canonical).map_err(|e| format!("CANONICAL_SERIALIZE_ERROR: {e}"))
+}
 
 pub fn canonical_signing_bytes(event: &AiEvent, issued_at_ms: i64, nonce: &str) -> Vec<u8> {
-    let status_json = serde_json::to_string(&event.status).unwrap_or_default();
-    let event_type_json = serde_json::to_string(&event.event_type).unwrap_or_default();
-    format!(
-        "DAUVERSE_AI_EVENT_V1|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-        event.event_id,
-        event.timestamp,
-        event.source,
-        event.device_id,
-        event.project_id,
-        event.task_id,
-        event_type_json,
-        status_json,
-        issued_at_ms,
-        nonce
-    )
-    .into_bytes()
+    canonical_signing_bytes_checked(event, AI_EVENT_SCHEMA_V2, issued_at_ms, nonce)
+        .unwrap_or_default()
 }
 
 pub fn sign_event_envelope(
@@ -162,6 +219,7 @@ pub fn sign_event_envelope(
     let payload = canonical_signing_bytes(&event, issued_at_ms, &nonce);
     let sig = hex::encode(hmac_sha256(secret_key, &payload));
     SignedAiEventEnvelope {
+        schema_version: AI_EVENT_SCHEMA_V2,
         event,
         issued_at_ms,
         nonce,
@@ -169,9 +227,74 @@ pub fn sign_event_envelope(
     }
 }
 
+pub fn validate_source_adapter_policy(ev: &AiEvent) -> Result<(), String> {
+    let src = ev.source.trim().to_ascii_lowercase();
+    let allowed = match src.as_str() {
+        "claude_code" | "codex_cli" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::OfficialHook | SourceSupportStatus::StructuredLogsReadOnly
+        ),
+        "build_qa_powershell" | "powershell_job" | "antigravity_cli" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::ApprovedWrapperAdapter
+                | SourceSupportStatus::StructuredLogsReadOnly
+        ),
+        "antigravity_desktop" | "antigravity_remote" | "antigravity" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::StructuredLogsReadOnly
+                | SourceSupportStatus::ApprovedWrapperAdapter
+        ),
+        "dauverse_ai_controller" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::ExistingControllerEventsReadOnly
+        ),
+        "comfyui" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::OfficialLocalHttpReadOnly
+        ),
+        "codex_desktop" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::ReadOnlyProcessMonitor | SourceSupportStatus::Unknown
+        ),
+        "claude_desktop" => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::Unknown | SourceSupportStatus::StructuredLogsReadOnly
+        ),
+        _ => matches!(
+            ev.provenance.adapter_type,
+            SourceSupportStatus::Unknown | SourceSupportStatus::Unsupported
+        ),
+    };
+    if !allowed {
+        return Err(format!(
+            "EVENT_REJECT_UNTRUSTED_SOURCE_ADAPTER_CLAIM: source '{}' cannot claim adapter {:?}",
+            ev.source, ev.provenance.adapter_type
+        ));
+    }
+    Ok(())
+}
+
 pub fn normalize_event_truthfulness(mut ev: AiEvent) -> AiEvent {
     ev.summary = redact_sensitive(&ev.summary);
     ev.confidence = ev.confidence.clamp(0.0, 1.0);
+
+    if matches!(
+        ev.provenance.adapter_type,
+        SourceSupportStatus::Unknown
+            | SourceSupportStatus::Unsupported
+            | SourceSupportStatus::ReadOnlyProcessMonitor
+    ) {
+        ev.provenance.evidence_verified = false;
+    }
+
+    if matches!(
+        ev.provenance.adapter_type,
+        SourceSupportStatus::ApprovedWrapperAdapter
+    ) && ev.status == AiTaskStatus::Completed
+        && ev.provenance.exit_code != Some(0)
+    {
+        ev.provenance.evidence_verified = false;
+    }
 
     if let Some(p) = ev.progress {
         if !p.is_finite() || !(0.0..=100.0).contains(&p) || !ev.provenance.evidence_verified {
@@ -216,7 +339,9 @@ pub fn normalize_event_truthfulness(mut ev: AiEvent) -> AiEvent {
 
 pub struct AiEventBridge {
     hmac_secret: Mutex<Vec<u8>>,
-    seen_replay_keys: Mutex<VecDeque<String>>,
+    replay_guard: Mutex<ReplayGuardState>,
+    replay_journal_path: Option<PathBuf>,
+    max_active_replay_entries: usize,
     event_log: Mutex<VecDeque<AiEvent>>,
     live_tasks: Mutex<HashMap<String, AiLiveTaskState>>,
     rejected_spoof_or_replay: Mutex<u64>,
@@ -224,9 +349,34 @@ pub struct AiEventBridge {
 
 impl AiEventBridge {
     pub fn new(hmac_secret: Vec<u8>) -> Self {
+        Self::with_persistence_and_limits(hmac_secret, None, DEFAULT_MAX_ACTIVE_REPLAY_ENTRIES)
+    }
+
+    pub fn with_persistence_and_limits(
+        hmac_secret: Vec<u8>,
+        replay_journal_path: Option<PathBuf>,
+        max_active_replay_entries: usize,
+    ) -> Self {
+        let mut guard = ReplayGuardState::default();
+        if let Some(ref p) = replay_journal_path {
+            if let Ok(raw) = std::fs::read_to_string(p) {
+                if let Ok(records) = serde_json::from_str::<Vec<ReplayRecord>>(&raw) {
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    for rec in records {
+                        if now_ms.saturating_sub(rec.seen_at_ms) <= REPLAY_RETENTION_MS {
+                            guard.seen_event_ids.insert(rec.event_id.clone());
+                            guard.seen_nonces.insert(rec.nonce.clone());
+                            guard.records.push_back(rec);
+                        }
+                    }
+                }
+            }
+        }
         Self {
             hmac_secret: Mutex::new(hmac_secret),
-            seen_replay_keys: Mutex::new(VecDeque::with_capacity(256)),
+            replay_guard: Mutex::new(guard),
+            replay_journal_path,
+            max_active_replay_entries: max_active_replay_entries.max(1),
             event_log: Mutex::new(VecDeque::with_capacity(512)),
             live_tasks: Mutex::new(HashMap::new()),
             rejected_spoof_or_replay: Mutex::new(0),
@@ -322,14 +472,31 @@ impl AiEventBridge {
         envelope: SignedAiEventEnvelope,
         now_ms: i64,
     ) -> Result<AiEvent, String> {
-        if envelope.event.event_id.trim().is_empty() || envelope.nonce.trim().is_empty() {
+        if envelope.schema_version != AI_EVENT_SCHEMA_V2 {
             self.bump_rejected();
-            return Err("EVENT_REJECT_EMPTY_ID_OR_NONCE".to_owned());
+            return Err("EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION".to_owned());
+        }
+        if envelope.event.event_id.trim().is_empty() || envelope.nonce.trim().len() < 8 {
+            self.bump_rejected();
+            return Err("EVENT_REJECT_EMPTY_ID_OR_WEAK_NONCE".to_owned());
         }
         if (now_ms - envelope.issued_at_ms).abs() > MAX_CLOCK_SKEW_MS {
             self.bump_rejected();
             return Err("EVENT_REJECT_TIMESTAMP_OUTSIDE_WINDOW".to_owned());
         }
+
+        let payload = match canonical_signing_bytes_checked(
+            &envelope.event,
+            envelope.schema_version,
+            envelope.issued_at_ms,
+            &envelope.nonce,
+        ) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                self.bump_rejected();
+                return Err(e);
+            }
+        };
 
         let Ok(provided_sig) = hex::decode(envelope.signature_hex.trim()) else {
             self.bump_rejected();
@@ -337,8 +504,6 @@ impl AiEventBridge {
         };
         let expected_sig = {
             let secret = self.hmac_secret.lock().unwrap();
-            let payload =
-                canonical_signing_bytes(&envelope.event, envelope.issued_at_ms, &envelope.nonce);
             hmac_sha256(&secret, &payload)
         };
         if !constant_time_eq(&expected_sig, &provided_sig) {
@@ -346,20 +511,61 @@ impl AiEventBridge {
             return Err("EVENT_REJECT_INVALID_HMAC_SPOOFED".to_owned());
         }
 
-        let replay_key = format!("{}:{}", envelope.event.event_id, envelope.nonce);
+        if let Err(policy_err) = validate_source_adapter_policy(&envelope.event) {
+            self.bump_rejected();
+            return Err(policy_err);
+        }
+
         {
-            let mut seen = self.seen_replay_keys.lock().unwrap();
-            if seen
-                .iter()
-                .any(|k| k == &replay_key || k.starts_with(&format!("{}:", envelope.event.event_id)))
+            let mut guard = self.replay_guard.lock().unwrap();
+            while let Some(front) = guard.records.front() {
+                if now_ms.saturating_sub(front.seen_at_ms) > REPLAY_RETENTION_MS
+                    && (now_ms - front.issued_at_ms).abs() > MAX_CLOCK_SKEW_MS
+                {
+                    if let Some(expired) = guard.records.pop_front() {
+                        guard.seen_event_ids.remove(&expired.event_id);
+                        guard.seen_nonces.remove(&expired.nonce);
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if guard.seen_event_ids.contains(&envelope.event.event_id)
+                || guard.seen_nonces.contains(&envelope.nonce)
             {
                 self.bump_rejected();
                 return Err("EVENT_REJECT_REPLAY_DETECTED".to_owned());
             }
-            if seen.len() >= MAX_REPLAY_CACHE {
-                seen.pop_front();
+
+            if guard.records.len() >= self.max_active_replay_entries {
+                self.bump_rejected();
+                return Err("EVENT_REJECT_REPLAY_CACHE_SATURATED".to_owned());
             }
-            seen.push_back(replay_key);
+
+            let rec = ReplayRecord {
+                event_id: envelope.event.event_id.clone(),
+                nonce: envelope.nonce.clone(),
+                issued_at_ms: envelope.issued_at_ms,
+                seen_at_ms: now_ms,
+            };
+            guard.seen_event_ids.insert(rec.event_id.clone());
+            guard.seen_nonces.insert(rec.nonce.clone());
+            guard.records.push_back(rec);
+
+            if let Some(ref path) = self.replay_journal_path {
+                let snapshot: Vec<&ReplayRecord> = guard.records.iter().collect();
+                let bytes = serde_json::to_vec(&snapshot)
+                    .map_err(|e| format!("EVENT_REJECT_REPLAY_SERIALIZE_FAILED: {e}"))?;
+                if let Err(e) = write_atomic_bytes(path, &bytes, true) {
+                    if let Some(rolled) = guard.records.pop_back() {
+                        guard.seen_event_ids.remove(&rolled.event_id);
+                        guard.seen_nonces.remove(&rolled.nonce);
+                    }
+                    self.bump_rejected();
+                    return Err(format!("EVENT_REJECT_REPLAY_PERSIST_FAILED: {e}"));
+                }
+            }
         }
 
         let normalized = normalize_event_truthfulness(envelope.event);
@@ -376,8 +582,15 @@ impl AiEventBridge {
             if trimmed.is_empty() {
                 continue;
             }
-            let parsed: AiEvent = serde_json::from_str(trimmed)
+            let mut parsed: AiEvent = serde_json::from_str(trimmed)
                 .map_err(|e| format!("invalid AiEvent JSONL line: {e}"))?;
+            if matches!(
+                parsed.provenance.adapter_type,
+                SourceSupportStatus::OfficialHook | SourceSupportStatus::ApprovedWrapperAdapter
+            ) {
+                parsed.provenance.adapter_type = SourceSupportStatus::StructuredLogsReadOnly;
+                parsed.provenance.evidence_verified = false;
+            }
             let normalized = normalize_event_truthfulness(parsed);
             self.record_verified_event(&normalized);
             count += 1;
@@ -645,11 +858,18 @@ impl AiEventBridge {
                         .to_string(),
                 )
             }
-            Err(err) => Self::write_json_resp(
-                &mut stream,
-                401,
-                &serde_json::json!({"ok": false, "error": err}).to_string(),
-            ),
+            Err(err) => {
+                let code = if err.starts_with("EVENT_REJECT_REPLAY_CACHE_SATURATED") {
+                    429
+                } else {
+                    401
+                };
+                Self::write_json_resp(
+                    &mut stream,
+                    code,
+                    &serde_json::json!({"ok": false, "error": err}).to_string(),
+                )
+            }
         }
     }
 
@@ -658,6 +878,7 @@ impl AiEventBridge {
             200 => "OK",
             400 => "Bad Request",
             401 => "Unauthorized",
+            429 => "Too Many Requests",
             _ => "Not Found",
         };
         let resp = format!(
@@ -678,7 +899,7 @@ mod tests {
         AiEvent {
             event_id: event_id.to_owned(),
             timestamp: "2026-11-24T16:25:00Z".to_owned(),
-            source: "antigravity_desktop".to_owned(),
+            source: "codex_cli".to_owned(),
             device_id: "HOME-RTX3060".to_owned(),
             project_id: "DAUVERSE-FT004".to_owned(),
             task_id: "FT004".to_owned(),
@@ -706,7 +927,7 @@ mod tests {
         let now_ms = 1_795_537_500_000i64;
 
         let ev = sample_event("evt-001", AiEventType::QaPassed, AiTaskStatus::Completed, true);
-        let signed = sign_event_envelope(ev, &secret, now_ms, "nonce-1".to_owned());
+        let signed = sign_event_envelope(ev, &secret, now_ms, "nonce-0001".to_owned());
         let accepted = bridge.ingest_signed_envelope(signed.clone(), now_ms).unwrap();
         assert_eq!(accepted.status, AiTaskStatus::Completed);
         assert_eq!(
@@ -718,7 +939,7 @@ mod tests {
         assert_eq!(replay_err, "EVENT_REJECT_REPLAY_DETECTED");
 
         let spoof_ev = sample_event("evt-002", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
-        let bad_env = sign_event_envelope(spoof_ev, b"wrong-attacker-key-00000000", now_ms, "nonce-2".to_owned());
+        let bad_env = sign_event_envelope(spoof_ev, b"wrong-attacker-key-00000000", now_ms, "nonce-0002".to_owned());
         let spoof_err = bridge.ingest_signed_envelope(bad_env, now_ms).unwrap_err();
         assert_eq!(spoof_err, "EVENT_REJECT_INVALID_HMAC_SPOOFED");
 
@@ -728,11 +949,128 @@ mod tests {
             AiTaskStatus::Completed,
             false,
         );
-        let exit_env = sign_event_envelope(unverified_exit, &secret, now_ms, "nonce-3".to_owned());
+        let exit_env = sign_event_envelope(unverified_exit, &secret, now_ms, "nonce-0003".to_owned());
         let normalized = bridge.ingest_signed_envelope(exit_env, now_ms).unwrap();
         assert_eq!(normalized.status, AiTaskStatus::Unknown);
         assert!(normalized.progress.is_none());
         assert!(normalized.provenance.evidence_badge.is_none());
+    }
+
+    #[test]
+    fn f01_mutating_any_envelope_or_provenance_field_breaks_hmac_and_blocks_fake_completion() {
+        let secret = b"f01-complete-field-coverage-hmac-key-2026".to_vec();
+        let bridge = AiEventBridge::new(secret.clone());
+        let now_ms = 1_795_540_000_000i64;
+
+        let base_ev = sample_event("f01-base", AiEventType::TaskProgress, AiTaskStatus::Unknown, false);
+        let base_signed = sign_event_envelope(base_ev, &secret, now_ms, "nonce-f01-base".to_owned());
+
+        let mut legacy_v1 = base_signed.clone();
+        legacy_v1.schema_version = 1;
+        assert_eq!(
+            bridge.ingest_signed_envelope(legacy_v1, now_ms).unwrap_err(),
+            "EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION"
+        );
+
+        let mutators: Vec<(&str, Box<dyn Fn(&mut SignedAiEventEnvelope)>)> = vec![
+            ("task_name", Box::new(|e| e.event.task_name = "Hijacked Task Name".to_owned())),
+            ("severity", Box::new(|e| e.event.severity = EventSeverity::Critical)),
+            ("progress", Box::new(|e| e.event.progress = Some(50.0))),
+            ("summary", Box::new(|e| e.event.summary = "Tampered summary text".to_owned())),
+            ("artifact_reference", Box::new(|e| e.event.artifact_reference = Some("evil.exe".to_owned()))),
+            ("confidence", Box::new(|e| e.event.confidence = 0.25)),
+            ("provenance.adapter_type", Box::new(|e| e.event.provenance.adapter_type = SourceSupportStatus::Unknown)),
+            ("provenance.evidence_verified", Box::new(|e| e.event.provenance.evidence_verified = true)),
+            ("provenance.exit_code", Box::new(|e| e.event.provenance.exit_code = Some(1))),
+            ("provenance.evidence_badge", Box::new(|e| e.event.provenance.evidence_badge = Some("FORGED PASS".to_owned()))),
+            ("event_id", Box::new(|e| e.event.event_id = "f01-other-id".to_owned())),
+            ("project_id", Box::new(|e| e.event.project_id = "OTHER-PROJ".to_owned())),
+            ("status", Box::new(|e| e.event.status = AiTaskStatus::Completed)),
+            ("issued_at_ms", Box::new(|e| e.issued_at_ms += 1)),
+            ("nonce", Box::new(|e| e.nonce = "nonce-f01-tampered".to_owned())),
+        ];
+
+        for (field_name, mutate) in mutators {
+            let mut tampered = base_signed.clone();
+            mutate(&mut tampered);
+            let err = bridge.ingest_signed_envelope(tampered, now_ms).unwrap_err();
+            assert_eq!(
+                err, "EVENT_REJECT_INVALID_HMAC_SPOOFED",
+                "mutation on {field_name} was not rejected by HMAC"
+            );
+        }
+
+        // Delimiter injection collision resistance ('|' and '"')
+        let mut ev_delim_a = sample_event("delim-1", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
+        ev_delim_a.project_id = "proj|alpha".to_owned();
+        ev_delim_a.task_id = "task\"1".to_owned();
+        let mut ev_delim_b = ev_delim_a.clone();
+        ev_delim_b.project_id = "proj".to_owned();
+        ev_delim_b.task_id = "alpha|task\"1".to_owned();
+        assert_ne!(
+            canonical_signing_bytes(&ev_delim_a, now_ms, "nonce-delim-01"),
+            canonical_signing_bytes(&ev_delim_b, now_ms, "nonce-delim-01")
+        );
+
+        // Untrusted source claiming OfficialHook must be rejected even with valid HMAC key
+        let mut rogue_src = sample_event("f01-rogue-src", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
+        rogue_src.source = "claude_desktop".to_owned();
+        rogue_src.provenance.adapter_type = SourceSupportStatus::OfficialHook;
+        let rogue_env = sign_event_envelope(rogue_src, &secret, now_ms, "nonce-rogue-src".to_owned());
+        assert!(bridge
+            .ingest_signed_envelope(rogue_env, now_ms)
+            .unwrap_err()
+            .starts_with("EVENT_REJECT_UNTRUSTED_SOURCE_ADAPTER_CLAIM"));
+    }
+
+    #[test]
+    fn f09_replay_protection_survives_above_2048_burst_restart_and_fails_closed_at_ceiling() {
+        let secret = b"f09-replay-window-and-ceiling-secret-2026".to_vec();
+        let now_ms = chrono::Utc::now().timestamp_millis();
+
+        // 1. Verify >2,048 events inside 5-minute window never evicts event #0
+        let burst_bridge = AiEventBridge::new(secret.clone());
+        let first_ev = sample_event("burst-0", AiEventType::CommandCompleted, AiTaskStatus::Completed, true);
+        let first_env = sign_event_envelope(first_ev, &secret, now_ms, "nonce-burst-0000".to_owned());
+        burst_bridge.ingest_signed_envelope(first_env.clone(), now_ms).unwrap();
+        for i in 1..2_300 {
+            let ev = sample_event(&format!("burst-{i}"), AiEventType::TaskProgress, AiTaskStatus::Running, true);
+            let env = sign_event_envelope(ev, &secret, now_ms + 10, format!("nonce-burst-{i:05}"));
+            burst_bridge.ingest_signed_envelope(env, now_ms + 10).unwrap();
+        }
+        assert_eq!(
+            burst_bridge.ingest_signed_envelope(first_env, now_ms + 1_000).unwrap_err(),
+            "EVENT_REJECT_REPLAY_DETECTED"
+        );
+
+        // 2. Verify saturation fails closed instead of evicting unexpired keys, then recovers after expiry
+        let journal_dir = std::env::temp_dir().join(format!("dv_replay_dir_{}", uuid::Uuid::new_v4()));
+        let journal = journal_dir.join("bridge_replay_journal.json");
+        let capped = AiEventBridge::with_persistence_and_limits(secret.clone(), Some(journal.clone()), 3);
+        let mut first_capped_env = None;
+        for i in 0..3 {
+            let ev = sample_event(&format!("cap-{i}"), AiEventType::CommandCompleted, AiTaskStatus::Completed, true);
+            let env = sign_event_envelope(ev, &secret, now_ms, format!("nonce-cap-{i:04}"));
+            if i == 0 {
+                first_capped_env = Some(env.clone());
+            }
+            capped.ingest_signed_envelope(env, now_ms).unwrap();
+        }
+        let fourth_ev = sample_event("cap-overflow", AiEventType::CommandCompleted, AiTaskStatus::Completed, true);
+        let fourth_env = sign_event_envelope(fourth_ev, &secret, now_ms, "nonce-cap-over".to_owned());
+        assert_eq!(
+            capped.ingest_signed_envelope(fourth_env, now_ms + 500).unwrap_err(),
+            "EVENT_REJECT_REPLAY_CACHE_SATURATED"
+        );
+        // Restarted bridge reloads durable replay journal and still rejects replay of cap-0
+        let restarted = AiEventBridge::with_persistence_and_limits(secret, Some(journal.clone()), 3);
+        assert_eq!(
+            restarted
+                .ingest_signed_envelope(first_capped_env.unwrap(), now_ms + 1_000)
+                .unwrap_err(),
+            "EVENT_REJECT_REPLAY_DETECTED"
+        );
+        std::fs::remove_dir_all(&journal_dir).ok();
     }
 
     #[test]
@@ -744,7 +1082,7 @@ mod tests {
 
         let now_ms = chrono::Utc::now().timestamp_millis();
         let ev = sample_event("http-evt-1", AiEventType::BuildSucceeded, AiTaskStatus::Completed, true);
-        let signed = sign_event_envelope(ev, &secret, now_ms, "http-nonce-1".to_owned());
+        let signed = sign_event_envelope(ev, &secret, now_ms, "http-nonce-0001".to_owned());
         let body = serde_json::to_string(&signed).unwrap();
 
         let mut conn = TcpStream::connect(("127.0.0.1", port)).unwrap();

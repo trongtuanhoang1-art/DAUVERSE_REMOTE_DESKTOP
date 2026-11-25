@@ -1,9 +1,13 @@
-; DAUVERSE REMOTE DESKTOP V1.0 — NSIS Windows Installer & Clean Uninstaller
-; Respects Sections 07, 18 & 24:
+; DAUVERSE REMOTE DESKTOP V1.0 — NSIS Windows Installer & Clean Uninstaller (RC2 Hardened)
+; Remediates Codex Findings F03 & F11 while preserving Sections 07, 18 & 24:
 ; - Selects E:\Program Files ONLY when E:\ is a real fixed local disk (GetDriveTypeW == DRIVE_FIXED = 3).
-; - Creates rollback backup synchronized with scripts\windows\rollback_windows_release.ps1.
-; - Windows Service registration is OPTIONAL (/o unchecked by default — never auto-installs without Boss consent)
-;   and uses SCM name "RustDesk" matching upstream src/platform/windows.rs is_self_service_running().
+; - Verifies Windows Service ("RustDesk") ImagePath ownership before stopping, modifying, or deleting:
+;   external/pre-existing RustDesk installations and processes outside $INSTDIR are preserved untouched.
+; - Scopes process termination strictly to executables residing under $INSTDIR\ via dauverse_setup_helper.ps1.
+; - Generates SHA-256-manifested rollback backup (BACKUP_SHA256_MANIFEST.txt) synchronized with
+;   scripts\windows\rollback_windows_release.ps1 before modifying an existing installation.
+; - Windows Service registration remains OPTIONAL (/o unchecked by default) and refuses collision with
+;   any external RustDesk service.
 ; - Never modifies Windows Defender, Firewall exclusions, Secure Boot, or DSE.
 
 !include "MUI2.nsh"
@@ -24,6 +28,26 @@ RequestExecutionLevel admin
 InstallDir "$PROGRAMFILES64\DAUVERSE Remote Desktop"
 
 Var HasFixedDriveE
+Var ServiceOwnedState ; "ABSENT", "OWNED", or "EXTERNAL"
+
+!macro CHECK_RUSTDESK_SERVICE_OWNERSHIP RESULT_VAR TARGET_DIR
+  ReadRegStr $R0 HKLM "SYSTEM\CurrentControlSet\Services\RustDesk" "ImagePath"
+  ${If} $R0 == ""
+    StrCpy ${RESULT_VAR} "ABSENT"
+  ${Else}
+    StrCpy $R1 $R0 1
+    ${If} $R1 == '"'
+      StrCpy $R0 $R0 "" 1
+    ${EndIf}
+    StrLen $R2 "${TARGET_DIR}\"
+    StrCpy $R3 $R0 $R2
+    ${If} $R3 == "${TARGET_DIR}\"
+      StrCpy ${RESULT_VAR} "OWNED"
+    ${Else}
+      StrCpy ${RESULT_VAR} "EXTERNAL"
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 Function .onInit
   SetRegView 64
@@ -55,17 +79,30 @@ FunctionEnd
 Section "DAUVERSE Remote Core & Executive UI (Required)" SecCore
   SectionIn RO
 
-  ; Gracefully stop optional service & running app before upgrade
-  nsExec::ExecToLog 'sc.exe stop RustDesk'
-  nsExec::ExecToLog 'taskkill.exe /IM DAUVERSE_REMOTE.exe /F'
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\dauverse_setup_helper.ps1" "${__FILEDIR__}\dauverse_setup_helper.ps1"
 
-  ; Create Rollback Snapshot if upgrading an existing installation (matches rollback_windows_release.ps1)
+  ; F03: Check service ownership BEFORE stopping — never disrupt an external RustDesk installation
+  !insertmacro CHECK_RUSTDESK_SERVICE_OWNERSHIP $ServiceOwnedState "$INSTDIR"
+  ${If} $ServiceOwnedState == "OWNED"
+    DetailPrint "Stopping owned DAUVERSE RustDesk service under $INSTDIR..."
+    nsExec::ExecToLog 'sc.exe stop RustDesk'
+    Pop $0
+  ${ElseIf} $ServiceOwnedState == "EXTERNAL"
+    DetailPrint "External RustDesk service detected outside $INSTDIR — preserving untouched."
+  ${EndIf}
+
+  ; F03: Stop ONLY processes whose executable path starts with $INSTDIR\
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\dauverse_setup_helper.ps1" -Action StopOwnedProcesses -InstallDir "$INSTDIR"'
+  Pop $0
+
+  ; F11: Create SHA-256-manifested Rollback Snapshot if upgrading an existing installation
   IfFileExists "$INSTDIR\DAUVERSE_REMOTE.exe" 0 SkipBackup
-    CreateDirectory "$INSTDIR.rollback_backup"
-    CopyFiles /SILENT "$INSTDIR\*.*" "$INSTDIR.rollback_backup"
-    ${If} $HasFixedDriveE == "1"
-      CreateDirectory "E:\DAUVERSE_REMOTE_DESKTOP\BACKUP\previous_release"
-      CopyFiles /SILENT "$INSTDIR\*.*" "E:\DAUVERSE_REMOTE_DESKTOP\BACKUP\previous_release"
+    DetailPrint "Creating verified upgrade rollback snapshot with BACKUP_SHA256_MANIFEST.txt..."
+    nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\dauverse_setup_helper.ps1" -Action CreateVerifiedBackup -InstallDir "$INSTDIR" -HasFixedDriveE "$HasFixedDriveE"'
+    Pop $0
+    ${If} $0 != 0
+      Abort "SAFETY_ABORT: Failed to create verified rollback backup before upgrading $INSTDIR (exit $0)."
     ${EndIf}
   SkipBackup:
 
@@ -85,15 +122,58 @@ Section "DAUVERSE Remote Core & Executive UI (Required)" SecCore
 SectionEnd
 
 Section /o "Register Windows Startup Service (Optional — Unchecked Until Boss Approves)" SecService
+  !insertmacro CHECK_RUSTDESK_SERVICE_OWNERSHIP $ServiceOwnedState "$INSTDIR"
+  ${If} $ServiceOwnedState == "EXTERNAL"
+    DetailPrint "COLLISION_REFUSED: External RustDesk Windows Service already exists outside $INSTDIR. Preserving external service untouched."
+    Abort "Cannot register Windows Service 'RustDesk': an external RustDesk installation already owns that service name."
+  ${EndIf}
   nsExec::ExecToLog 'sc.exe create RustDesk binPath= "\"$INSTDIR\rustdesk.exe\" --service" start= auto DisplayName= "DAUVERSE Remote Desktop Service (RustDesk Engine)"'
+  Pop $0
+  ${If} $0 != 0
+    ${If} $ServiceOwnedState != "OWNED"
+      Abort "Failed to create owned Windows Service 'RustDesk' (sc.exe exit $0)."
+    ${EndIf}
+  ${EndIf}
   nsExec::ExecToLog 'sc.exe failure RustDesk reset= 86400 actions= restart/5000/restart/15000/restart/30000'
+  Pop $0
   nsExec::ExecToLog 'sc.exe start RustDesk'
+  Pop $0
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "OwnedServiceRegistered" "1"
 SectionEnd
 
 Section "Uninstall"
-  nsExec::ExecToLog 'sc.exe stop RustDesk'
-  nsExec::ExecToLog 'sc.exe delete RustDesk'
-  nsExec::ExecToLog 'taskkill.exe /IM DAUVERSE_REMOTE.exe /F'
+  InitPluginsDir
+  File "/oname=$PLUGINSDIR\dauverse_setup_helper.ps1" "${__FILEDIR__}\dauverse_setup_helper.ps1"
+
+  ; F03: Verify ImagePath ownership BEFORE stopping or deleting RustDesk service
+  !insertmacro CHECK_RUSTDESK_SERVICE_OWNERSHIP $ServiceOwnedState "$INSTDIR"
+  ${If} $ServiceOwnedState == "OWNED"
+    DetailPrint "Stopping and removing DAUVERSE-owned RustDesk Windows Service..."
+    nsExec::ExecToLog 'sc.exe stop RustDesk'
+    Pop $0
+    nsExec::ExecToLog 'sc.exe delete RustDesk'
+    Pop $0
+  ${ElseIf} $ServiceOwnedState == "EXTERNAL"
+    DetailPrint "Preserving external RustDesk Windows Service untouched (ImagePath outside $INSTDIR)."
+  ${EndIf}
+
+  ; F03: Stop ONLY processes whose executable path starts with $INSTDIR\
+  nsExec::ExecToLog '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\dauverse_setup_helper.ps1" -Action StopOwnedProcesses -InstallDir "$INSTDIR"'
+  Pop $0
+
+  ; Remove HKCU Run entry ONLY if owned by $INSTDIR
+  ReadRegStr $R4 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "DauverseRemoteDesktop"
+  ${If} $R4 != ""
+    StrCpy $R5 $R4 1
+    ${If} $R5 == '"'
+      StrCpy $R4 $R4 "" 1
+    ${EndIf}
+    StrLen $R6 "$INSTDIR\"
+    StrCpy $R7 $R4 $R6
+    ${If} $R7 == "$INSTDIR\"
+      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "DauverseRemoteDesktop"
+    ${EndIf}
+  ${EndIf}
 
   Delete "$DESKTOP\DAUVERSE Remote Desktop.lnk"
   RMDir /r "$SMPROGRAMS\DAUVERSE Remote Desktop"

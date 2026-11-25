@@ -1,5 +1,6 @@
 use super::{
     ai_bridge::SignedAiEventEnvelope,
+    headless::{DisplayEnvironmentState, VirtualDisplayPreset},
     notifications::NotificationFilter,
     performance::PerformanceMode,
     smart_power::{PowerOperation, PowerSafetyContext},
@@ -38,7 +39,10 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 .and_then(|v| v.as_str())
                 .unwrap_or("AUTO_ADAPTIVE");
             let params = rt.performance.set_mode(PerformanceMode::from_key(mode_str));
-            serde_json::json!({ "ok": true, "data": params })
+            match rt.persist_user_settings() {
+                Ok(()) => serde_json::json!({ "ok": true, "data": params }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
         }
         "run_benchmark" => match super::performance::PerformanceEngine::run_pipeline_benchmark() {
             Ok(rep) => serde_json::json!({ "ok": true, "data": rep }),
@@ -85,8 +89,7 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
             }
         }
         "notifications_query" => {
-            let filter: NotificationFilter =
-                serde_json::from_value(args).unwrap_or_default();
+            let filter: NotificationFilter = serde_json::from_value(args).unwrap_or_default();
             serde_json::json!({
                 "ok": true,
                 "data": {
@@ -129,14 +132,23 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 .get("step_up_pin")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let step_up_verified = if dry_run_only {
+            let step_up_token = args
+                .get("step_up_token")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            let auth_check = rt.security.verify_owner_step_up_or_token(
+                step_up_pin,
+                step_up_token,
+                "POWER_CONTROL",
+                now_ms,
+            );
+            let step_up_verified = if dry_run_only && !rt.security.is_step_up_passcode_configured() {
                 args.get("authenticated")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false)
-                    || (!step_up_pin.is_empty() && rt.security.verify_step_up_passcode(step_up_pin))
             } else {
-                // Live OS execution NEVER trusts an unauthenticated UI boolean flag
-                rt.security.verify_step_up_passcode(step_up_pin)
+                auth_check.is_ok()
             };
             let ctx = PowerSafetyContext {
                 host_state: rt.smart_power.get_host_state(),
@@ -158,12 +170,66 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 _ => None,
             };
             let outcome = rt.smart_power.evaluate_and_execute(op, &ctx, wol_pair);
-            serde_json::json!({ "ok": outcome.allowed, "data": outcome })
+            let err_field = if !outcome.allowed {
+                auth_check.err().unwrap_or_else(|| outcome.status_code.clone())
+            } else {
+                String::new()
+            };
+            serde_json::json!({
+                "ok": outcome.allowed,
+                "error": if outcome.allowed { serde_json::Value::Null } else { serde_json::Value::String(err_field) },
+                "data": outcome
+            })
         }
         "set_step_up_pin" => {
             let pin = args.get("pin").and_then(|v| v.as_str()).unwrap_or("");
-            match rt.security.set_step_up_passcode(pin) {
+            let current_pin = args
+                .get("current_pin")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let res = if !current_pin.trim().is_empty() {
+                rt.security.change_step_up_passcode(current_pin, pin)
+            } else {
+                rt.security.set_step_up_passcode(pin)
+            };
+            match res {
                 Ok(()) => serde_json::json!({ "ok": true, "data": rt.security.summary() }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "change_step_up_pin" => {
+            let current_pin = args
+                .get("current_pin")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let new_pin = args
+                .get("new_pin")
+                .or_else(|| args.get("pin"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            match rt.security.change_step_up_passcode(current_pin, new_pin) {
+                Ok(()) => serde_json::json!({ "ok": true, "data": rt.security.summary() }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "verify_step_up_pin" => {
+            let pin = args.get("pin").and_then(|v| v.as_str()).unwrap_or("");
+            let scope = args.get("scope").and_then(|v| v.as_str()).unwrap_or("*");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            match rt.security.issue_step_up_token_at(pin, scope, now_ms) {
+                Ok(grant) => serde_json::json!({ "ok": true, "data": grant }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "verify_step_up_token" => {
+            let token_id = args.get("token_id").and_then(|v| v.as_str()).unwrap_or("");
+            let scope = args.get("scope").and_then(|v| v.as_str()).unwrap_or("*");
+            let now_ms = args
+                .get("now_ms")
+                .and_then(|v| v.as_i64())
+                .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+            match rt.security.verify_step_up_token_at(token_id, scope, now_ms) {
+                Ok(()) => serde_json::json!({ "ok": true }),
                 Err(e) => serde_json::json!({ "ok": false, "error": e }),
             }
         }
@@ -174,10 +240,82 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 "recent_audit": rt.security.recent_audit_entries(50),
             }
         }),
+        "set_auto_start" => {
+            let enable = args.get("enable").and_then(|v| v.as_bool()).unwrap_or(false);
+            let pin = args.get("step_up_pin").and_then(|v| v.as_str()).unwrap_or("");
+            let tok = args.get("step_up_token").and_then(|v| v.as_str()).unwrap_or("");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            if let Err(e) = rt.security.verify_owner_step_up_or_token(pin, tok, "SERVICE_CONFIG", now_ms) {
+                return serde_json::json!({ "ok": false, "error": e });
+            }
+            match rt.service_ctrl.set_auto_start(enable, true) {
+                Ok(st) => serde_json::json!({ "ok": true, "data": st }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "configure_unattended" => {
+            let enable = args.get("enable").and_then(|v| v.as_bool()).unwrap_or(false);
+            let pin = args.get("step_up_pin").and_then(|v| v.as_str()).unwrap_or("");
+            let tok = args.get("step_up_token").and_then(|v| v.as_str()).unwrap_or("");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            if let Err(e) = rt.security.verify_owner_step_up_or_token(pin, tok, "SERVICE_CONFIG", now_ms) {
+                return serde_json::json!({ "ok": false, "error": e });
+            }
+            match rt.service_ctrl.configure_unattended(enable, true) {
+                Ok(st) => serde_json::json!({ "ok": true, "data": st }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "headless_request_driver" => {
+            let whql = args.get("whql_signed").and_then(|v| v.as_bool()).unwrap_or(true);
+            let test_cert = args.get("self_signed_root").and_then(|v| v.as_bool()).unwrap_or(false);
+            let approved = args.get("boss_approved").and_then(|v| v.as_bool()).unwrap_or(false);
+            let pin = args.get("step_up_pin").and_then(|v| v.as_str()).unwrap_or("");
+            let tok = args.get("step_up_token").and_then(|v| v.as_str()).unwrap_or("");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            if let Err(e) = rt.security.verify_owner_step_up_or_token(pin, tok, "HEADLESS_DRIVER", now_ms) {
+                return serde_json::json!({ "ok": false, "error": e });
+            }
+            let res = if let Some(dir_str) = args.get("driver_dir").and_then(|v| v.as_str()) {
+                rt.headless
+                    .request_driver_install_from_dir(std::path::Path::new(dir_str), approved)
+            } else {
+                rt.headless.request_driver_install(whql, test_cert, approved)
+            };
+            match res {
+                Ok(code) => serde_json::json!({ "ok": true, "status_code": code, "data": rt.headless.get_state() }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e, "data": rt.headless.get_state() }),
+            }
+        }
+        "headless_activate" => {
+            let env_str = args
+                .get("display_state")
+                .and_then(|v| v.as_str())
+                .unwrap_or("HEADLESS_NO_PHYSICAL_MONITOR");
+            let env_state: DisplayEnvironmentState = serde_json::from_value(serde_json::Value::String(env_str.to_owned()))
+                .unwrap_or(DisplayEnvironmentState::HeadlessNoPhysicalMonitor);
+            let preset: VirtualDisplayPreset = args
+                .get("preset")
+                .cloned()
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default();
+            match rt.headless.activate_headless_session(env_state, preset) {
+                Ok(st) => serde_json::json!({ "ok": true, "data": st }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e, "data": rt.headless.get_state() }),
+            }
+        }
+        "headless_disconnect" => {
+            let st = rt.headless.on_session_disconnected();
+            serde_json::json!({ "ok": true, "data": st })
+        }
         "revoke_all_access" => {
             let svc = rt.service_ctrl.revoke_all_access_immediately();
-            rt.security
-                .append_audit("BOSS", "EMERGENCY_REVOKE_ALL_ACCESS", "OK", "Revoked unattended & service access");
+            rt.security.append_audit(
+                "BOSS",
+                "EMERGENCY_REVOKE_ALL_ACCESS",
+                "OK",
+                "Revoked unattended & service access",
+            );
             serde_json::json!({ "ok": true, "data": svc })
         }
         "network_probe" => {
@@ -242,6 +380,9 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 "enable-clipboard".to_owned(),
                 enable_flag.to_owned(),
             );
+            if let Err(e) = rt.persist_user_settings() {
+                return serde_json::json!({ "ok": false, "error": e });
+            }
             rt.security.append_audit(
                 "BOSS",
                 "UPDATE_CLIPBOARD_POLICY",
@@ -265,12 +406,45 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 .and_then(|v| v.as_u64())
                 .map(|v| v as u32);
             rt.transfer_queue.set_bandwidth_limit_kbps(cap_kbps);
-            serde_json::json!({
-                "ok": true,
-                "data": {
-                    "bandwidth_limit_kbps": rt.transfer_queue.get_bandwidth_limit_kbps(),
-                }
-            })
+            match rt.persist_user_settings() {
+                Ok(()) => serde_json::json!({
+                    "ok": true,
+                    "data": {
+                        "bandwidth_limit_kbps": rt.transfer_queue.get_bandwidth_limit_kbps(),
+                    }
+                }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "transfer_track_receive" => {
+            let engine_id = args.get("engine_job_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            let conn_id = args.get("conn_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            let dest_dir = args.get("dest_dir").and_then(|v| v.as_str()).unwrap_or("");
+            let total_bytes = args.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
+            let files: Vec<String> = args
+                .get("files")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default();
+            rt.transfer_queue.track_engine_receive_start_batch(
+                engine_id,
+                conn_id,
+                dest_dir,
+                files,
+                total_bytes,
+            );
+            serde_json::json!({ "ok": true })
+        }
+        "transfer_finalize_receive" => {
+            let engine_id = args.get("engine_job_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            match rt.transfer_queue.verify_and_finalize_engine_receive(engine_id) {
+                Ok(job) => serde_json::json!({ "ok": true, "data": job }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
         }
         "transfer_control" => {
             let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("");
@@ -311,7 +485,10 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 prefs.auto_hide_seconds = v as u8;
             }
             let updated = rt.notifications.update_preferences(prefs);
-            serde_json::json!({ "ok": true, "data": updated })
+            match rt.persist_user_settings() {
+                Ok(()) => serde_json::json!({ "ok": true, "data": updated }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
         }
         "ai_send_signed_loopback_probe" => {
             use std::io::{Read, Write};
@@ -419,16 +596,17 @@ pub unsafe extern "C" fn dauverse_invoke(
             CStr::from_ptr(payload_ptr).to_str().unwrap_or("{}")
         };
         let val = dispatch_command(cmd, payload);
-        val.to_string()
+        val.to_string().replace('\0', "")
     });
 
     let json_str = match result {
         Ok(s) => s,
         Err(_) => r#"{"ok":false,"error":"INTERNAL_FFI_PANIC_CAUGHT"}"#.to_owned(),
     };
-    CString::new(json_str)
-        .unwrap_or_else(|_| CString::new(r#"{"ok":false,"error":"NUL_IN_JSON"}"#).unwrap())
-        .into_raw()
+    let cstr = CString::new(json_str).unwrap_or_else(|_| {
+        CString::from_vec_unchecked(b"{\"ok\":false,\"error\":\"NUL_IN_JSON\"}".to_vec())
+    });
+    cstr.into_raw()
 }
 
 #[no_mangle]
@@ -455,18 +633,16 @@ mod tests {
             let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
             assert_eq!(parsed["ok"], true);
             assert_eq!(parsed["data"]["product"], "DAUVERSE REMOTE DESKTOP");
-            // Verify auto-started loopback HTTP bridge & zero fabricated RTT when disconnected
             assert!(parsed["data"]["bridge_port"].as_u64().unwrap_or(0) > 0);
             assert_eq!(parsed["data"]["performance"]["session_connected"], false);
             assert_eq!(parsed["data"]["performance"]["ping_rtt_ms"], 0);
-            assert_eq!(parsed["data"]["performance"]["fps"], 0);
+            assert!(parsed["data"]["performance"]["measured_fps"].is_null());
             assert!(parsed["data"]["smart_power"]["smart_plug"]["blocker_note"]
                 .as_str()
                 .unwrap_or("")
                 .contains("Hunonic SK02"));
         }
 
-        // Send a real signed AI event over the auto-started 127.0.0.1 HTTP listener
         let probe = dispatch_command(
             "ai_send_signed_loopback_probe",
             r#"{"source":"codex_cli","summary":"Real HTTP loopback probe"}"#,
@@ -474,7 +650,6 @@ mod tests {
         assert_eq!(probe["ok"], true);
         assert!(probe["data"]["unread_notifications"].as_u64().unwrap_or(0) >= 1);
 
-        // Verify clipboard policy syncs with upstream Config
         let clip_res = dispatch_command(
             "set_clipboard_policy",
             r#"{"enabled":false,"direction":"DISABLED"}"#,
@@ -486,7 +661,6 @@ mod tests {
             r#"{"enabled":true,"direction":"BIDIRECTIONAL"}"#,
         );
 
-        // Verify live OS power action rejects bare boolean authenticated=true without verified Step-Up PIN
         let unauth_live = dispatch_command(
             "smart_power_action",
             r#"{"operation":"SLEEP","authenticated":true,"dry_run":false}"#,
@@ -497,9 +671,13 @@ mod tests {
             "AUTH_REQUIRED_BEFORE_POWER_ACTION"
         );
 
-        // Enroll sealed Step-Up PIN and verify wrong PIN is denied while active engine transfer blocks Sleep
         let pin_set = dispatch_command("set_step_up_pin", r#"{"pin":"BossVault#2026"}"#);
         assert_eq!(pin_set["ok"], true);
+
+        // F05: Second unauthenticated set_step_up_pin MUST fail
+        let pin_overwrite = dispatch_command("set_step_up_pin", r#"{"pin":"Attacker#9999"}"#);
+        assert_eq!(pin_overwrite["ok"], false);
+
         let wrong_pin = dispatch_command(
             "smart_power_action",
             r#"{"operation":"SLEEP","step_up_pin":"wrong999","dry_run":false}"#,
@@ -523,6 +701,6 @@ mod tests {
             "SAFETY_INTERLOCK_CONFIRMATION_REQUIRED"
         );
         rt.transfer_queue
-            .track_engine_receive_finish(77, true, false, None);
+            .track_engine_receive_finish(77, false, true, Some("cleanup"));
     }
 }

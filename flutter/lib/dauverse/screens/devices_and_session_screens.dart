@@ -343,7 +343,7 @@ class _DauverseRemoteSessionScreenState extends State<DauverseRemoteSessionScree
                       Expanded(
                         child: Text(
                           connected
-                              ? '${perf['connection_route']}  |  FPS: ${perf['fps']}  |  RTT: ${perf['ping_rtt_ms']} ms  |  Bitrate: ${perf['bitrate_kbps']} kbps  |  ${perf['codec']}'
+                              ? '${perf['connection_route']}  |  ${perf['measured_fps'] != null ? "FPS: ${perf['measured_fps']}" : "FPS: N/A (Target ${perf['configured_target_fps'] ?? 0})"}  |  RTT: ${perf['ping_rtt_ms']} ms  |  ${perf['measured_bitrate_kbps'] != null ? "Bitrate: ${perf['measured_bitrate_kbps']} kbps" : "Bitrate: N/A (Cap ${perf['estimated_bitrate_cap_kbps'] ?? 0} kbps)"}  |  ${perf['codec']}'
                               : 'DISCONNECTED (0 Active Streams)  |  Configured Codec: ${perf['codec'] ?? "H265"} (${perf['encoder'] ?? "NVENC"})',
                           overflow: TextOverflow.ellipsis,
                           style: DauverseTypography.kpi(DauversePalette.dark, size: 12, color: const Color(0xFF38BDF8)),

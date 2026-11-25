@@ -1,6 +1,6 @@
 use super::{
     ai_bridge::{AiEvent, AiEventType, AiTaskStatus, EventSeverity},
-    crypto_util::{redact_sensitive, sha256_hex},
+    crypto_util::{redact_sensitive, sha256_hex, write_atomic_bytes},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -325,6 +325,7 @@ impl NotificationCenter {
             }
             toasts.push_back(item);
         }
+        self.persist_offline_journal();
     }
 
     fn flush_offline_buffer(&self) -> usize {
@@ -362,6 +363,9 @@ impl NotificationCenter {
             .lock()
             .unwrap()
             .retain(|t| t.notification_id != notification_id);
+        if found {
+            self.persist_offline_journal();
+        }
         found
     }
 
@@ -370,6 +374,7 @@ impl NotificationCenter {
             item.is_read = true;
         }
         self.active_toasts.lock().unwrap().clear();
+        self.persist_offline_journal();
     }
 
     pub fn dismiss_toast(&self, notification_id: &str) {
@@ -502,12 +507,19 @@ impl NotificationCenter {
         let Some(path) = self.offline_journal_path.lock().unwrap().clone() else {
             return;
         };
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let items: Vec<NotificationItem> = self.offline_buffer.lock().unwrap().iter().cloned().collect();
-        if let Ok(json) = serde_json::to_string(&items) {
-            let _ = fs::write(path, json);
+        let state = PersistedNotificationJournal {
+            history: self.history.lock().unwrap().iter().cloned().collect(),
+            offline_buffer: self.offline_buffer.lock().unwrap().iter().cloned().collect(),
+        };
+        match serde_json::to_vec(&state) {
+            Ok(bytes) => {
+                if let Err(e) = write_atomic_bytes(&path, &bytes, true) {
+                    hbb_common::log::warn!("DAUVERSE failed persisting notification journal: {}", e);
+                }
+            }
+            Err(e) => {
+                hbb_common::log::warn!("DAUVERSE failed serializing notification journal: {}", e);
+            }
         }
     }
 
@@ -518,13 +530,34 @@ impl NotificationCenter {
         let Ok(raw) = fs::read_to_string(&path) else {
             return;
         };
-        if let Ok(items) = serde_json::from_str::<Vec<NotificationItem>>(&raw) {
+        if let Ok(state) = serde_json::from_str::<PersistedNotificationJournal>(&raw) {
+            {
+                let mut hist = self.history.lock().unwrap();
+                for item in state.history {
+                    hist.push_back(item);
+                }
+            }
+            {
+                let mut buf = self.offline_buffer.lock().unwrap();
+                for item in state.offline_buffer {
+                    buf.push_back(item);
+                }
+            }
+        } else if let Ok(items) = serde_json::from_str::<Vec<NotificationItem>>(&raw) {
             let mut buf = self.offline_buffer.lock().unwrap();
             for item in items {
                 buf.push_back(item);
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct PersistedNotificationJournal {
+    #[serde(default)]
+    history: Vec<NotificationItem>,
+    #[serde(default)]
+    offline_buffer: Vec<NotificationItem>,
 }
 
 #[cfg(test)]

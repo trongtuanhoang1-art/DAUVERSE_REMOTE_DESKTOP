@@ -70,6 +70,10 @@ pub struct NetworkRuntimeSample {
     pub comfyui_rendering: bool,
     pub mini_control_minimized: bool,
     pub mini_control_idle: bool,
+    #[serde(default)]
+    pub measured_fps: Option<u32>,
+    #[serde(default)]
+    pub measured_bitrate_kbps: Option<u32>,
 }
 
 impl Default for NetworkRuntimeSample {
@@ -86,6 +90,8 @@ impl Default for NetworkRuntimeSample {
             comfyui_rendering: false,
             mini_control_minimized: false,
             mini_control_idle: false,
+            measured_fps: None,
+            measured_bitrate_kbps: None,
         }
     }
 }
@@ -94,9 +100,12 @@ impl Default for NetworkRuntimeSample {
 pub struct PerformanceTelemetry {
     pub session_connected: bool,
     pub active_mode: PerformanceMode,
-    pub fps: u32,
+    pub measured_fps: Option<u32>,
+    pub measured_bitrate_kbps: Option<u32>,
+    pub configured_target_fps: u32,
+    pub estimated_bitrate_cap_kbps: u32,
+    pub telemetry_source_scope: String,
     pub ping_rtt_ms: u32,
-    pub bitrate_kbps: u32,
     pub packet_loss_pct: Option<f32>,
     pub codec: String,
     pub encoder: String,
@@ -312,13 +321,22 @@ impl PerformanceEngine {
 
     fn build_telemetry(mode: PerformanceMode, sample: &NetworkRuntimeSample) -> PerformanceTelemetry {
         let params = Self::compute_parameters(mode, sample);
+        let configured_fps = if sample.mini_control_minimized {
+            params.idle_fps
+        } else {
+            params.target_fps
+        };
+        let bitrate_cap = params.max_bitrate_kbps;
         if !sample.session_connected {
             return PerformanceTelemetry {
                 session_connected: false,
                 active_mode: mode,
-                fps: 0,
+                measured_fps: None,
+                measured_bitrate_kbps: None,
+                configured_target_fps: configured_fps,
+                estimated_bitrate_cap_kbps: bitrate_cap,
+                telemetry_source_scope: "DISCONNECTED_NO_ACTIVE_STREAM".to_owned(),
                 ping_rtt_ms: 0,
-                bitrate_kbps: 0,
                 packet_loss_pct: None,
                 codec: params.preferred_codec.clone(),
                 encoder: params.encoder_preference.clone(),
@@ -335,19 +353,20 @@ impl PerformanceEngine {
             sample.packet_loss_pct,
             sample.is_direct_p2p,
         );
-        let effective_fps = if sample.mini_control_minimized {
-            params.idle_fps
+        let scope = if sample.measured_fps.is_some() || sample.measured_bitrate_kbps.is_some() {
+            "MEASURED_TRANSPORT_COUNTERS"
         } else {
-            params.target_fps
+            "CONFIGURED_POLICY_ONLY_NO_LIVE_STREAM_COUNTER"
         };
-        let effective_bitrate = ((params.min_bitrate_kbps + params.max_bitrate_kbps) / 2)
-            .min(params.max_bitrate_kbps);
         PerformanceTelemetry {
             session_connected: true,
             active_mode: mode,
-            fps: effective_fps,
+            measured_fps: sample.measured_fps,
+            measured_bitrate_kbps: sample.measured_bitrate_kbps,
+            configured_target_fps: configured_fps,
+            estimated_bitrate_cap_kbps: bitrate_cap,
+            telemetry_source_scope: scope.to_owned(),
             ping_rtt_ms: sample.rtt_ms,
-            bitrate_kbps: effective_bitrate,
             packet_loss_pct: Some(sample.packet_loss_pct),
             codec: params.preferred_codec.clone(),
             encoder: params.encoder_preference.clone(),
@@ -442,7 +461,7 @@ impl PerformanceEngine {
             target_reference_profile: "Intel Core i5-12400F + NVIDIA RTX 3060 12GB + 16GB RAM + Windows 11 Pro".to_owned(),
             frame_1080p_dirty_scan_ms: (scan_ms * 1000.0).round() / 1000.0,
             loopback_tcp_rtt_ms: (avg_rtt_ms * 1000.0).round() / 1000.0,
-            hmac_event_sign_us: (sign_us * 100.0).round() / 100.0,
+            hmac_event_sign_us: (sign_us * 100.0).round() / 1000.0,
             estimated_1080p_scan_fps_headroom: (headroom * 10.0).round() / 1000.0 * 100.0,
             notes: "Measures local CPU dirty-tile memory scan, HMAC signing, and 127.0.0.1 socket overhead ONLY. End-to-end Remote Desktop LAN/WAN + RTX 3060 NVENC latency requires 2-PC Windows measurement.".to_owned(),
         })
@@ -468,6 +487,34 @@ mod tests {
         let p_min = PerformanceEngine::compute_parameters(PerformanceMode::AutoAdaptive, &sample);
         assert!(p_min.target_fps <= 5);
         assert!(p_min.max_bitrate_kbps <= 800);
+    }
+
+    #[test]
+    fn f10_telemetry_never_fabricates_measured_fps_or_bitrate_from_policy_targets() {
+        let engine = PerformanceEngine::new();
+        let mut sample = NetworkRuntimeSample::default();
+        sample.session_connected = true;
+        sample.rtt_ms = 18;
+        sample.is_direct_p2p = true;
+
+        let tel = engine.update_runtime_sample(sample.clone());
+        assert!(tel.measured_fps.is_none());
+        assert!(tel.measured_bitrate_kbps.is_none());
+        assert_eq!(tel.configured_target_fps, 60);
+        assert_eq!(
+            tel.telemetry_source_scope,
+            "CONFIGURED_POLICY_ONLY_NO_LIVE_STREAM_COUNTER"
+        );
+
+        sample.measured_fps = Some(58);
+        sample.measured_bitrate_kbps = Some(4_120);
+        let tel_measured = engine.update_runtime_sample(sample);
+        assert_eq!(tel_measured.measured_fps, Some(58));
+        assert_eq!(tel_measured.measured_bitrate_kbps, Some(4_120));
+        assert_eq!(
+            tel_measured.telemetry_source_scope,
+            "MEASURED_TRANSPORT_COUNTERS"
+        );
     }
 
     #[test]

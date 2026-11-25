@@ -12,9 +12,28 @@ preserved in both `LICENSE` and `LICENCE`.
   - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
 - **rustdesk-server (Self-Host Reference)** (`https://github.com/rustdesk/rustdesk-server`, v1.1.16)
   - License: GNU Affero General Public License v3.0 (`AGPL-3.0`).
-- **Amyuni USB Mobile Monitor Virtual Display Driver (`usbmmidd_v2`)** (`https://www.amyuni.com/forum/viewtopic.php?t=3030`)
-  - Copyright (C) Amyuni Technologies Inc. All rights reserved.
-  - Acknowledgment: Portions of optional Windows headless virtual display support reference the WHQL-signed Amyuni USB Mobile Monitor Virtual Display Driver (`usbmmidd_v2`, signed by `Microsoft Windows Hardware Compatibility Publisher`), redistributed unmodified under `usbmmidd_v2/License.txt` freeware redistribution terms with attribution. Opt-in only; never installed without explicit administrator approval.
+- **Amyuni USB Mobile Monitor Virtual Display Driver (`usbmmidd_v2`)** (`https://www.amyuni.com` • staging archive `https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip`, SHA-256 `629b51e9944762bae73948171c65d09a79595cf4c771a82ebc003fbba5b24f51`)
+  - Copyright 2014-2021 Amyuni Technologies Inc. (`https://www.amyuni.com`).
+  - Staged Unmodified Member SHA-256 Digests:
+    - `usbmmidd_v2/usbmmidd.cat`: `470149c4cf9970ba59070aa7c9409c9f63a15727de99bab53e7e51f55310779f` (`Microsoft Windows Hardware Compatibility Publisher`)
+    - `usbmmidd_v2/usbmmIdd.inf`: `a8750ca15a86742f3012886c9932bb974158cd2d9779cf891c730d976a47726a`
+    - `usbmmidd_v2/x64/usbmmIdd.dll`: `dc135d675127113915a7e5aa9fe57c84edad6be41d0890b265ef124ab26ea9e3`
+    - `usbmmidd_v2/License.txt`: `44c73fc4110979899dbb5054662de581f7d4350939f19bb2d50574f613314ba2` (preserved unaltered in `usbmmidd_v2/License.txt`)
+  - Acknowledgment & Verbatim License Notice (`usbmmidd_v2/License.txt`, staged opt-in only, never auto-installed):
+    ```text
+    Copyright 2014-2021 Amyuni Technologies Inc.
+    https://www.amyuni.com
+
+    This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
+    By using this software, you accept to be prompted with an advertisement page which is not always under the control of the author. A fully commercial version is available for users who do not wisth to see those advertisements.
+
+    Permission is granted to anyone to use this software for any purpose subject to the following restrictions:
+
+    1. The origin of this software must not be misrepresented; you must not claim that you wrote the original software.
+       If you use this software in a product, an acknowledgment in the product documentation would be required.
+    2. Altered versions must be plainly marked as such, and must not be misrepresented as being the original software.
+    3. This notice may not be removed or altered from any distribution.
+    ```
 - **RustDeskIddDriver (Surveyed Only — Blocked & Not Bundled)** (`https://github.com/rustdesk-org/RustDeskIddDriver`, v0.4)
   - License: Microsoft Public License (`MS-PL`). Status: `BLOCKED_DO_NOT_INSTALL` (uses self-signed `WDKTestCert` SHA-1 certificate; excluded from DAUVERSE staging and installers).
 - **Virtual-Display-Driver (Fallback Reference)** (`https://github.com/VirtualDrivers/Virtual-Display-Driver`, 25.7.23)

@@ -13,6 +13,7 @@ class DauverseSmartPowerScreen extends StatefulWidget {
 class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
   final TextEditingController _macCtrl = TextEditingController();
   final TextEditingController _wolTargetCtrl = TextEditingController(text: '255.255.255.255:9');
+  final TextEditingController _currentPinCtrl = TextEditingController();
   final TextEditingController _stepUpPinCtrl = TextEditingController();
   bool _liveOsExecution = false;
 
@@ -20,6 +21,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
   void dispose() {
     _macCtrl.dispose();
     _wolTargetCtrl.dispose();
+    _currentPinCtrl.dispose();
     _stepUpPinCtrl.dispose();
     super.dispose();
   }
@@ -32,6 +34,9 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
     final sp = c.snapshot['smart_power'] as Map<String, dynamic>? ?? const {};
     final plug = sp['smart_plug'] as Map<String, dynamic>? ?? const {};
     final events = (sp['recent_events'] as List<dynamic>? ?? const []).map((e) => e.toString()).toList();
+    final secWrap = c.snapshot['security'] as Map<String, dynamic>? ?? const {};
+    final sec = secWrap['summary'] as Map<String, dynamic>? ?? secWrap;
+    final pinAlreadyConfigured = sec['step_up_pin_configured'] == true;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -42,8 +47,8 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
               style: DauverseTypography.heading(p, size: 19)),
           Text(
             i18n.t(
-              'Yêu cầu mã Step-Up PIN / Mật khẩu máy chủ đã niêm phong trước lệnh OS thật • Chặn cắt điện AC khi Windows đang chạy hoặc mất mạng.',
-              'Requires verified Vault Step-Up PIN / Host Password for live OS commands • Blocks AC power cut while OS is running or unreachable.',
+              'Yêu cầu mã Step-Up PIN / Mật khẩu máy chủ đã niêm phong trước lệnh OS thật • Đổi PIN bắt buộc xác thực PIN hiện tại.',
+              'Requires verified Vault Step-Up PIN for live OS commands • PIN replacement requires current PIN reauthentication.',
             ),
             style: DauverseTypography.caption(p),
           ),
@@ -58,7 +63,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     SizedBox(
-                      width: 205,
+                      width: 195,
                       child: TextField(
                         controller: _macCtrl,
                         style: DauverseTypography.kpi(p, size: 13),
@@ -71,7 +76,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                       ),
                     ),
                     SizedBox(
-                      width: 180,
+                      width: 170,
                       child: TextField(
                         controller: _wolTargetCtrl,
                         style: DauverseTypography.kpi(p, size: 13),
@@ -82,26 +87,51 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                         ),
                       ),
                     ),
+                    if (pinAlreadyConfigured)
+                      SizedBox(
+                        width: 185,
+                        child: TextField(
+                          controller: _currentPinCtrl,
+                          obscureText: true,
+                          style: DauverseTypography.kpi(p, size: 13),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            labelText: i18n.t('PIN hiện tại (Để đổi)', 'Current PIN (To Rotate)'),
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
                     SizedBox(
-                      width: 215,
+                      width: 205,
                       child: TextField(
                         controller: _stepUpPinCtrl,
                         obscureText: true,
                         style: DauverseTypography.kpi(p, size: 13),
                         decoration: InputDecoration(
                           isDense: true,
-                          labelText: i18n.t('Mã Step-Up PIN (>=6 ký tự)', 'Step-Up PIN (>=6 chars)'),
+                          labelText: pinAlreadyConfigured
+                              ? i18n.t('PIN xác thực / PIN mới', 'Step-Up PIN / New PIN')
+                              : i18n.t('Mã Step-Up PIN (>=6 ký tự)', 'Step-Up PIN (>=6 chars)'),
                           border: const OutlineInputBorder(),
                         ),
                       ),
                     ),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        c.setStepUpPin(_stepUpPinCtrl.text);
-                      },
-                      icon: const Icon(Icons.enhanced_encryption_outlined, size: 16),
-                      label: Text(i18n.t('Lưu PIN vào Vault', 'Seal PIN in Vault')),
-                    ),
+                    if (!pinAlreadyConfigured)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          c.setStepUpPin(_stepUpPinCtrl.text);
+                        },
+                        icon: const Icon(Icons.enhanced_encryption_outlined, size: 16),
+                        label: Text(i18n.t('Đăng ký PIN đầu tiên', 'Enroll Initial PIN')),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          c.changeStepUpPin(_currentPinCtrl.text, _stepUpPinCtrl.text);
+                        },
+                        icon: const Icon(Icons.lock_reset, size: 16),
+                        label: Text(i18n.t('Đổi PIN (Xác thực chủ sở hữu)', 'Rotate PIN (Owner Auth)')),
+                      ),
                     FilterChip(
                       label: Text(_liveOsExecution
                           ? i18n.t('Chế độ: LỆNH OS THẬT (Cần PIN)', 'Mode: LIVE OS COMMAND (PIN Required)')
@@ -119,7 +149,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                     _powerBtn(p, 'Wake-on-LAN (UDP Magic Packet)', Icons.flash_on, p.success, () {
                       c.invokePowerAction(
                         'WAKE_ON_LAN',
-                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        authenticated: _stepUpPinCtrl.text.trim().isNotEmpty,
                         stepUpPin: _stepUpPinCtrl.text,
                         dryRun: !_liveOsExecution,
                         mac: _macCtrl.text.trim(),
@@ -129,7 +159,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                     _powerBtn(p, 'Lock Workstation', Icons.lock_outline, p.cyan, () {
                       c.invokePowerAction(
                         'LOCK_WORKSTATION',
-                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        authenticated: _stepUpPinCtrl.text.trim().isNotEmpty,
                         stepUpPin: _stepUpPinCtrl.text,
                         dryRun: !_liveOsExecution,
                       );
@@ -137,7 +167,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                     _powerBtn(p, 'Sleep (Safe Interlock)', Icons.bedtime_outlined, p.blue, () {
                       c.invokePowerAction(
                         'SLEEP',
-                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        authenticated: _stepUpPinCtrl.text.trim().isNotEmpty,
                         stepUpPin: _stepUpPinCtrl.text,
                         dryRun: !_liveOsExecution,
                       );
@@ -145,7 +175,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                     _powerBtn(p, 'Restart (Safe Interlock)', Icons.restart_alt, p.warning, () {
                       c.invokePowerAction(
                         'RESTART',
-                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        authenticated: _stepUpPinCtrl.text.trim().isNotEmpty,
                         stepUpPin: _stepUpPinCtrl.text,
                         dryRun: !_liveOsExecution,
                       );
@@ -153,7 +183,7 @@ class _DauverseSmartPowerScreenState extends State<DauverseSmartPowerScreen> {
                     _powerBtn(p, 'Safe OS Shutdown', Icons.power_settings_new, p.danger, () {
                       c.invokePowerAction(
                         'SAFE_SHUTDOWN',
-                        authenticated: !_liveOsExecution && _stepUpPinCtrl.text.trim().isNotEmpty,
+                        authenticated: _stepUpPinCtrl.text.trim().isNotEmpty,
                         stepUpPin: _stepUpPinCtrl.text,
                         dryRun: !_liveOsExecution,
                       );
@@ -460,7 +490,7 @@ class DauverseUpdateCenterScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                DauverseStatusBadge(label: 'V1.0.0 RC1 (Engine 1.5.3)', color: p.cyan),
+                DauverseStatusBadge(label: 'V1.0.0 RC2 (Engine 1.5.3)', color: p.cyan),
                 const SizedBox(width: 10),
                 DauverseStatusBadge(label: 'CODE SIGNING: UNSIGNED', color: p.warning),
               ],
@@ -493,6 +523,11 @@ class DauverseSettingsScreen extends StatelessWidget {
     final c = controller;
     final i18n = c.i18n;
     final headless = c.snapshot['headless'] as Map<String, dynamic>? ?? const {};
+    final service = c.snapshot['service'] as Map<String, dynamic>? ?? const {};
+    final headlessOpStatus = headless['operational_status']?.toString() ?? 'CONFIGURED';
+    final virtualDisplayActive = headless['virtual_display_active'] == true;
+    final serviceState = service['service_state']?.toString() ?? 'NOT_INSTALLED';
+    final externalCollision = service['external_service_collision_detected'] == true;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -519,14 +554,24 @@ class DauverseSettingsScreen extends StatelessWidget {
               title: const Text('Headless Virtual Display Driver Policy (Secure Boot + DSE Preserved)'),
               subtitle: Text(
                 'Primary: ${headless['primary_driver'] ?? 'Amyuni usbmmidd_v2 (Microsoft WHQL Signed)'}\n'
-                'Blocked: RustDeskIddDriver v0.4 (Self-signed WDKTestCert SHA-1 rejected)',
+                'State: $headlessOpStatus • Native Active: ${virtualDisplayActive ? "YES" : "NO"} • Blocked: RustDeskIddDriver v0.4 (WDKTestCert)',
               ),
-              trailing: DauverseStatusBadge(label: 'INSTALL: OPT-IN ONLY', color: p.warning),
+              trailing: DauverseStatusBadge(
+                label: virtualDisplayActive ? 'ACTIVE (VERIFIED)' : headlessOpStatus,
+                color: virtualDisplayActive ? p.success : p.warning,
+              ),
             ),
             ListTile(
               title: const Text('Windows Service & Unattended Access'),
-              subtitle: const Text('SCM Name: RustDesk • Disabled/Unchecked by default until Boss approves installation'),
-              trailing: DauverseStatusBadge(label: 'NOT INSTALLED', color: p.cyan),
+              subtitle: Text(
+                externalCollision
+                    ? 'SCM Name: RustDesk • EXTERNAL RUSTDESK SERVICE PRESERVED UNTOUCHED'
+                    : 'SCM Name: RustDesk • Opt-in only; verified against OS SCM & HKCU Run state',
+              ),
+              trailing: DauverseStatusBadge(
+                label: externalCollision ? 'EXTERNAL COLLISION' : serviceState,
+                color: externalCollision ? p.danger : (serviceState == 'RUNNING' ? p.success : p.cyan),
+              ),
             ),
           ],
         ),
@@ -555,7 +600,7 @@ class DauverseAboutScreen extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('DAUVERSE REMOTE DESKTOP V1.0 (RC1)', style: DauverseTypography.heading(p, size: 20)),
+                    Text('DAUVERSE REMOTE DESKTOP V1.0 (RC2)', style: DauverseTypography.heading(p, size: 20)),
                     Text('Autonomous Remote AI Workstation Suite • License: GNU AGPL-3.0',
                         style: DauverseTypography.caption(p)),
                   ],

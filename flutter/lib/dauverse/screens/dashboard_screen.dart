@@ -93,7 +93,7 @@ class _DauverseDashboardScreenState extends State<DauverseDashboardScreen> {
                           color: p.cyan,
                         ),
                         DauverseStatusBadge(
-                          label: 'AGPL-3.0 • V1.0 RC1',
+                          label: 'AGPL-3.0 • V1.0 RC2',
                           color: p.purple,
                         ),
                       ],

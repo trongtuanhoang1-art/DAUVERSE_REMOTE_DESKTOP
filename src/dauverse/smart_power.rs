@@ -261,6 +261,53 @@ impl SmartPowerController {
                         evidence_class: "REAL_VERIFIED".to_owned(),
                     };
                 };
+                let packet = match build_wol_magic_packet(mac) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        return PowerActionOutcome {
+                            allowed: false,
+                            executed: false,
+                            status_code: "WOL_INVALID_MAC".to_owned(),
+                            warnings,
+                            message: e,
+                            evidence_class: "REAL_VERIFIED".to_owned(),
+                        };
+                    }
+                };
+                {
+                    use std::net::ToSocketAddrs;
+                    if addr
+                        .to_socket_addrs()
+                        .map(|mut it| it.next().is_none())
+                        .unwrap_or(true)
+                    {
+                        return PowerActionOutcome {
+                            allowed: false,
+                            executed: false,
+                            status_code: "WOL_INVALID_TARGET_ENDPOINT".to_owned(),
+                            warnings,
+                            message: format!("invalid Wake-on-LAN target endpoint '{addr}'"),
+                            evidence_class: "REAL_VERIFIED".to_owned(),
+                        };
+                    }
+                }
+                if ctx.dry_run_only {
+                    self.log_event(format!(
+                        "WOL_DRY_RUN_VALIDATED mac={mac} target={addr} packet_bytes={}",
+                        packet.len()
+                    ));
+                    return PowerActionOutcome {
+                        allowed: true,
+                        executed: false,
+                        status_code: "WOL_DRY_RUN_VALIDATED".to_owned(),
+                        warnings,
+                        message: format!(
+                            "Dry-run: validated {}-byte Wake-on-LAN magic packet for {addr} (0 UDP bytes transmitted).",
+                            packet.len()
+                        ),
+                        evidence_class: "REAL_VERIFIED".to_owned(),
+                    };
+                }
                 match send_wol_udp(mac, addr) {
                     Ok(bytes) => {
                         self.log_event(format!("WOL_SENT mac={mac} target={addr} bytes={bytes}"));
@@ -487,12 +534,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wol_magic_packet_loopback_verified() {
+    fn f13_wol_dry_run_transmits_zero_udp_packets_and_live_mode_sends_magic_packet() {
         let recv_sock = UdpSocket::bind("127.0.0.1:0").unwrap();
+        recv_sock
+            .set_read_timeout(Some(std::time::Duration::from_millis(80)))
+            .unwrap();
         let addr = recv_sock.local_addr().unwrap();
 
         let ctrl = SmartPowerController::new();
-        let ctx = PowerSafetyContext {
+        let mut ctx = PowerSafetyContext {
             host_state: HostPowerState::ConfirmedOff,
             ai_running_count: 0,
             ai_waiting_approval_count: 0,
@@ -502,14 +552,32 @@ mod tests {
             force_after_warning_acknowledged: false,
             dry_run_only: true,
         };
-        let res = ctrl.evaluate_and_execute(
+
+        // 1. Dry-run MUST NOT transmit any UDP packet (F13)
+        let dry_res = ctrl.evaluate_and_execute(
             PowerOperation::WakeOnLan,
             &ctx,
             Some(("AA:BB:CC:11:22:33", &addr.to_string())),
         );
-        assert!(res.allowed && res.executed);
+        assert!(dry_res.allowed);
+        assert!(!dry_res.executed);
+        assert_eq!(dry_res.status_code, "WOL_DRY_RUN_VALIDATED");
 
         let mut buf = [0u8; 128];
+        assert!(
+            recv_sock.recv_from(&mut buf).is_err(),
+            "dry_run_only=true must send 0 UDP bytes"
+        );
+
+        // 2. Live execution (dry_run_only = false) transmits exact 102-byte magic packet
+        ctx.dry_run_only = false;
+        let live_res = ctrl.evaluate_and_execute(
+            PowerOperation::WakeOnLan,
+            &ctx,
+            Some(("AA:BB:CC:11:22:33", &addr.to_string())),
+        );
+        assert!(live_res.allowed && live_res.executed);
+
         let (n, _) = recv_sock.recv_from(&mut buf).unwrap();
         assert_eq!(n, 102);
         assert_eq!(&buf[0..6], &[0xFF; 6]);

@@ -1,6 +1,6 @@
 warning: patch for the non root package will be ignored, specify patch at the workspace root:
-package:   /home/antigravity/DAUVERSE_REMOTE_DESKTOP/libs/hbb_common/Cargo.toml
-workspace: /home/antigravity/DAUVERSE_REMOTE_DESKTOP/Cargo.toml
+package:   /home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/hbb_common/Cargo.toml
+workspace: /home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/Cargo.toml
 warning: `package.homepage` is redundant with `package.repository`
   --> libs/enigo/Cargo.toml:10:12
    |
@@ -94,7 +94,7 @@ help: use `'_` for type paths
     |                                                   +++
 
 warning: `scrap` (lib) generated 5 warnings (run `cargo fix --lib -p scrap` to apply 2 suggestions)
-   Compiling rustdesk v1.5.3 (/home/antigravity/DAUVERSE_REMOTE_DESKTOP)
+   Compiling rustdesk v1.5.3 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP)
 warning: unused import: `allow_err`
  --> src/server/wayland.rs:2:18
   |
@@ -925,31 +925,37 @@ warning: module `pt_PT` should have a snake case name
    |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
 
 warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.54s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 46.99s
      Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
 
-running 21 tests
+running 27 tests
+test dauverse::ai_bridge::tests::f01_mutating_any_envelope_or_provenance_field_breaks_hmac_and_blocks_fake_completion ... ok
+test dauverse::ai_bridge::tests::loopback_http_gateway_accepts_signed_and_rejects_forged ... ok
 test dauverse::ai_bridge::tests::rejects_spoofing_replay_and_fake_completion_on_process_exit ... ok
 test dauverse::clipboard_guard::tests::oversize_and_disabled_direction_rejected ... ok
 test dauverse::clipboard_guard::tests::vietnamese_unicode_and_code_prompt_allowed_and_loop_blocked ... ok
+test dauverse::crypto_util::tests::atomic_write_and_confined_nofollow_rejects_symlink_swap ... ok
 test dauverse::crypto_util::tests::redacts_tokens_and_credentials ... ok
 test dauverse::crypto_util::tests::rfc4231_hmac_sha256_vectors ... ok
-test dauverse::ai_bridge::tests::loopback_http_gateway_accepts_signed_and_rejects_forged ... ok
+test dauverse::ai_bridge::tests::f09_replay_protection_survives_above_2048_burst_restart_and_fails_closed_at_ceiling ... ok
 test dauverse::crypto_util::tests::seal_unseal_and_reject_tampering ... ok
 test dauverse::hardware::tests::collects_real_host_hardware_metrics_and_evaluates_thresholds ... ok
-test dauverse::headless::tests::enforces_whql_signed_driver_rejects_wdk_test_cert_and_restores_topology ... ok
+test dauverse::headless::tests::f04_headless_never_reports_active_without_approval_or_native_execution_and_rejects_wdk_test_cert ... ok
 test dauverse::notifications::tests::dedup_offline_replay_redaction_and_no_auto_approve ... ok
 test dauverse::performance::tests::auto_adaptive_protects_comfyui_and_throttles_mini_control ... ok
+test dauverse::performance::tests::f10_telemetry_never_fabricates_measured_fps_or_bitrate_from_policy_targets ... ok
 test dauverse::performance::tests::real_pipeline_benchmark_executes ... ok
-test dauverse::security::tests::negative_security_matrix_unauthorized_mitm_hijack_bruteforce_revocation_and_audit ... ok
-test dauverse::service_ctrl::tests::requires_auth_for_unattended_and_supports_instant_revocation ... ok
-test dauverse::session_tools::tests::blocks_silent_recording_and_redacts_diagnostic_export ... ok
-test dauverse::smart_power::tests::interlocks_block_unauthenticated_active_ai_and_live_ac_cut ... ok
-test dauverse::smart_power::tests::wol_magic_packet_loopback_verified ... ok
-test dauverse::transfer_guard::tests::queue_lifecycle_duplicate_rename_and_sha256_integrity ... ok
-test dauverse::transfer_guard::tests::rejects_traversal_unc_reserved_and_symlinks ... ok
-test dauverse::update_center::tests::blocks_downgrade_tampered_hash_and_unsigned_autoupdate ... ok
 test dauverse::ffi::tests::ffi_c_abi_roundtrip_and_auto_bridge_pipeline_works ... ok
+test dauverse::security::tests::negative_security_matrix_unauthorized_mitm_hijack_bruteforce_revocation_and_audit ... ok
+test dauverse::service_ctrl::tests::f03_f08_verifies_service_image_path_ownership_and_synchronizes_unattended_revocation ... ok
+test dauverse::session_tools::tests::blocks_silent_recording_and_redacts_diagnostic_export ... ok
+test dauverse::smart_power::tests::f13_wol_dry_run_transmits_zero_udp_packets_and_live_mode_sends_magic_packet ... ok
+test dauverse::smart_power::tests::interlocks_block_unauthenticated_active_ai_and_live_ac_cut ... ok
+test dauverse::tests::f07_settings_and_vault_persist_across_restart_and_corrupted_files_fail_closed ... ok
+test dauverse::transfer_guard::tests::f14_f16_engine_receive_integrity_verifies_multi_file_hashes_rejects_missing_truncated_and_post_validation_symlink_swap ... ok
+test dauverse::transfer_guard::tests::rejects_traversal_unc_reserved_and_symlinks ... ok
+test dauverse::update_center::tests::f12_blocks_downgrade_tampered_hash_and_ignores_spoofed_caller_signature_enum ... ok
+test dauverse::security::tests::f05_f07_step_up_pin_blocks_unauthenticated_overwrite_enforces_lockout_expiry_and_corrupted_vault_fail_closed ... ok
 
-test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 215 filtered out; finished in 1.57s
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 215 filtered out; finished in 10.60s
 

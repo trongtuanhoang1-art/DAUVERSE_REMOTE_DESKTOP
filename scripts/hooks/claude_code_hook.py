@@ -18,15 +18,45 @@ import urllib.request
 import uuid
 
 
+def canonical_signing_bytes_v2(event: dict, issued_at_ms: int, nonce: str) -> bytes:
+    prov = event["provenance"]
+    progress = event.get("progress")
+    progress_str = None if progress is None else f"{float(progress):.4f}"
+    confidence_str = f"{float(event['confidence']):.4f}"
+    arr = [
+        "DAUVERSE_AI_EVENT_V2",
+        2,
+        issued_at_ms,
+        nonce,
+        event["event_id"],
+        event["timestamp"],
+        event["source"],
+        event["device_id"],
+        event["project_id"],
+        event["task_id"],
+        event["task_name"],
+        event["event_type"],
+        event["status"],
+        event["severity"],
+        progress_str,
+        event["summary"],
+        event["artifact_reference"],
+        confidence_str,
+        [
+            prov["adapter_type"],
+            bool(prov["evidence_verified"]),
+            prov["exit_code"],
+            prov["evidence_badge"],
+        ],
+    ]
+    return json.dumps(arr, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
 def sign_envelope(event: dict, secret_key: bytes, issued_at_ms: int, nonce: str) -> dict:
-    canonical = (
-        f"DAUVERSE_AI_EVENT_V1|{event['event_id']}|{event['timestamp']}|"
-        f"{event['source']}|{event['device_id']}|{event['project_id']}|"
-        f"{event['task_id']}|\"{event['event_type']}\"|\"{event['status']}\""
-        f"|{issued_at_ms}|{nonce}"
-    ).encode("utf-8")
+    canonical = canonical_signing_bytes_v2(event, issued_at_ms, nonce)
     sig_hex = hmac.new(secret_key, canonical, hashlib.sha256).hexdigest()
     return {
+        "schema_version": 2,
         "event": event,
         "issued_at_ms": issued_at_ms,
         "nonce": nonce,
@@ -93,7 +123,7 @@ def main() -> int:
 
     envelope = sign_envelope(event, secret, issued_ms, uuid.uuid4().hex)
     endpoint = os.environ.get("DAUVERSE_EVENT_ENDPOINT", "http://127.0.0.1:21188/v1/events")
-    body = json.dumps(envelope).encode("utf-8")
+    body = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
 
     req = urllib.request.Request(
         endpoint,
@@ -107,8 +137,10 @@ def main() -> int:
     except Exception:
         spool = os.environ.get("DAUVERSE_OFFLINE_SPOOL")
         if spool:
-            with open(spool, "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(event) + "\n")
+            flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+            fd = os.open(spool, flags, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(envelope, ensure_ascii=False) + "\n")
     return 0
 
 

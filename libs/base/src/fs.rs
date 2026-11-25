@@ -609,6 +609,64 @@ pub fn join_validated_path(base: &PathBuf, name: &str) -> ResultType<PathBuf> {
     Ok(TransferJob::join(base, name))
 }
 
+fn is_existing_symlink_or_reparse(path: &Path) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    if meta.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+fn create_download_file_no_follow(path: &str) -> ResultType<std::fs::File> {
+    let p = Path::new(path);
+    if is_existing_symlink_or_reparse(p) {
+        bail!("refusing to open symlink or reparse point '{}'", path);
+    }
+    #[cfg(unix)]
+    let f = {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .custom_flags(hbb_common::libc::O_NOFOLLOW)
+            .open(p)?
+    };
+    #[cfg(windows)]
+    let f = {
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        let opened = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(p)?;
+        let meta = opened.metadata()?;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 || !meta.file_type().is_file() {
+            bail!("refusing reparse or non-regular file handle '{}'", path);
+        }
+        opened.set_len(0)?;
+        opened
+    };
+    #[cfg(not(any(unix, windows)))]
+    let f = std::fs::File::create(p)?;
+
+    let meta = f.metadata()?;
+    if meta.file_type().is_symlink() || !meta.file_type().is_file() {
+        bail!("refusing non-regular file handle '{}'", path);
+    }
+    Ok(f)
+}
+
 impl TransferJob {
     #[allow(clippy::too_many_arguments)]
     pub fn new_write(
@@ -771,6 +829,14 @@ impl TransferJob {
         }
     }
 
+    pub async fn flush_and_close_stream(&mut self) -> ResultType<()> {
+        if let Some(DataStream::FileStream(file)) = self.data_stream.as_mut() {
+            file.sync_all().await?;
+        }
+        self.data_stream = None;
+        Ok(())
+    }
+
     pub fn modify_time(&self) {
         #[cfg(any(target_os = "android", all(test, unix)))]
         if self.is_document() {
@@ -778,7 +844,7 @@ impl TransferJob {
         }
         if self.is_download() {
             if let Err(err) = self.finish_download() {
-                log::error!("Failed to finish download {}: {}", self.id, err);
+                hbb_common::log::error!("Failed to finish download {}: {}", self.id, err);
             }
             return;
         }
@@ -792,6 +858,13 @@ impl TransferJob {
                 let Some(path) = self.resolve_entry_path(p, &entry.name) else {
                     return;
                 };
+                if is_existing_symlink_or_reparse(&path) {
+                    hbb_common::log::error!(
+                        "Refusing transfer rename onto symlink/reparse target: {}",
+                        path.display()
+                    );
+                    return;
+                }
                 let download_path = format!("{}.download", get_string(&path));
                 let digest_path = format!("{}.digest", get_string(&path));
                 std::fs::remove_file(digest_path).ok();
@@ -862,22 +935,25 @@ impl TransferJob {
                     bail!("Wrong file number");
                 }
                 if file_num != self.file_num as usize || self.data_stream.is_none() {
-                    self.modify_time();
                     if let Some(DataStream::FileStream(file)) = self.data_stream.as_mut() {
                         file.sync_all().await?;
                     }
+                    self.data_stream = None;
+                    self.modify_time();
                     self.file_num = block.file_num;
                     let entry = &self.files[file_num];
                     let (path, digest_path) = if self.r#type == JobType::Printer {
                         (p.to_string_lossy().to_string(), None)
                     } else {
                         let path = join_validated_path(p, &entry.name)?;
-                        // NOTE: We intentionally keep path-based validation + regular file open here.
-                        // This still has a known TOCTOU window for symlink races, but avoids a large
-                        // cross-platform rewrite for now.
-                        // Revisit with descriptor/handle-based no-follow open in future hardening.
+                        if is_existing_symlink_or_reparse(&path) {
+                            bail!("Refusing symlink/reparse transfer destination");
+                        }
                         if let Some(pp) = path.parent() {
                             std::fs::create_dir_all(pp).ok();
+                            if is_existing_symlink_or_reparse(pp) {
+                                bail!("Refusing symlink/reparse parent directory");
+                            }
                         }
                         let file_path = get_string(&path);
                         (
@@ -890,7 +966,8 @@ impl TransferJob {
                             std::fs::remove_file(dp)?;
                         }
                     }
-                    self.data_stream = Some(DataStream::FileStream(File::create(&path).await?));
+                    let std_file = create_download_file_no_follow(&path)?;
+                    self.data_stream = Some(DataStream::FileStream(File::from_std(std_file)));
                     if let Some(dp) = digest_path.as_ref() {
                         std::fs::write(dp, json!(self.digest).to_string()).ok();
                     }

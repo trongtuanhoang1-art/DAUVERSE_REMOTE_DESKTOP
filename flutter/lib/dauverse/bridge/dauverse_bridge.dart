@@ -30,6 +30,19 @@ typedef RealSessionLauncher = Future<void> Function(
 class DauverseNativeBridge {
   static final DauverseNativeBridge instance = DauverseNativeBridge._();
 
+  static bool _testHarnessMode = false;
+  static bool _forceUnboundForTest = false;
+
+  @visibleForTesting
+  static void setTestHarnessMode(bool enabled) {
+    _testHarnessMode = enabled;
+  }
+
+  @visibleForTesting
+  static void setForceUnboundForTest(bool forceUnbound) {
+    _forceUnboundForTest = forceUnbound;
+  }
+
   _DauverseInvokeDart? _invoke;
   _DauverseFreeDart? _free;
   bool _bound = false;
@@ -38,7 +51,7 @@ class DauverseNativeBridge {
     _tryBindNative();
   }
 
-  bool get isNativeBound => _bound;
+  bool get isNativeBound => _bound && !_forceUnboundForTest;
 
   void _tryBindNative() {
     if (kIsWeb) return;
@@ -68,7 +81,7 @@ class DauverseNativeBridge {
 
   Map<String, dynamic> call(String command, [Map<String, dynamic>? payload]) {
     final payloadJson = jsonEncode(payload ?? const <String, dynamic>{});
-    if (_bound && _invoke != null && _free != null) {
+    if (isNativeBound && _invoke != null && _free != null) {
       final cmdPtr = command.toNativeUtf8();
       final payloadPtr = payloadJson.toNativeUtf8();
       ffi.Pointer<Utf8> outPtr = ffi.nullptr;
@@ -89,12 +102,20 @@ class DauverseNativeBridge {
         }
       }
     }
-    return _fallbackTestState(command, payload ?? const <String, dynamic>{});
+
+    if (!_testHarnessMode) {
+      return {
+        'ok': false,
+        'backend_available': false,
+        'error':
+            'NATIVE_FFI_UNBOUND_FAIL_CLOSED: librustdesk native backend is unavailable; refused "$command".',
+      };
+    }
+
+    return _widgetTestHarnessOnlyState(command, payload ?? const <String, dynamic>{});
   }
 
-  /// Pure-Dart widget-test fallback ONLY when native librustdesk FFI is unbound.
-  /// Reports honest disconnected/zero state (never fabricates 14ms RTT or fake tasks).
-  Map<String, dynamic> _fallbackTestState(String cmd, Map<String, dynamic> args) {
+  Map<String, dynamic> _widgetTestHarnessOnlyState(String cmd, Map<String, dynamic> args) {
     if (cmd == 'dashboard_snapshot') {
       return {
         'ok': true,
@@ -106,8 +127,8 @@ class DauverseNativeBridge {
           'bridge_endpoint': 'http://127.0.0.1:21188/v1/events',
           'bridge_port': 21188,
           'hardware': {
-            'telemetry_scope': 'TEST_FALLBACK_UNBOUND_FFI',
-            'cpu_brand': 'Widget Test Host CPU (FFI Unbound)',
+            'telemetry_scope': 'WIDGET_TEST_HARNESS_ONLY',
+            'cpu_brand': 'Widget Test Host CPU (Test Harness)',
             'cpu_usage_pct': 0.0,
             'cpu_temp_c': null,
             'ram_used_gb': 0.0,
@@ -134,9 +155,12 @@ class DauverseNativeBridge {
           'performance': {
             'session_connected': false,
             'active_mode': 'AUTO_ADAPTIVE',
-            'fps': 0,
+            'measured_fps': null,
+            'measured_bitrate_kbps': null,
+            'configured_target_fps': 60,
+            'estimated_bitrate_cap_kbps': 8000,
+            'telemetry_source_scope': 'DISCONNECTED_NO_ACTIVE_STREAM',
             'ping_rtt_ms': 0,
-            'bitrate_kbps': 0,
             'packet_loss_pct': null,
             'codec': 'H265',
             'encoder': 'NVENC_BALANCED_P3',
@@ -198,9 +222,16 @@ class DauverseNativeBridge {
             'recent_events': const [],
           },
           'headless': {
+            'operational_status': 'CONFIGURED',
+            'virtual_display_active': false,
             'primary_driver': 'Amyuni USB Mobile Monitor Virtual Display (usbmmidd_v2 — Microsoft WHQL Signed)',
             'rustdesk_idd_v04_audit': 'BLOCKED_DO_NOT_INSTALL: Self-signed WDKTestCert SHA-1 root import.',
             'boss_driver_install_approved': false,
+          },
+          'service': {
+            'scm_service_name': 'RustDesk',
+            'service_state': 'NOT_INSTALLED_PORTABLE_MODE',
+            'external_service_collision_detected': false,
           },
           'security': {
             'summary': {
@@ -224,7 +255,13 @@ class DauverseNativeBridge {
         }
       };
     }
-    return {'ok': true, 'data': args};
+    if (cmd == 'notification_mark_read' || cmd == 'mini_control_state') {
+      return {'ok': true, 'simulated_test_harness': true};
+    }
+    return {
+      'ok': false,
+      'error': 'TEST_HARNESS_UNEXECUTED_COMMAND: "$cmd" requires bound native librustdesk.',
+    };
   }
 }
 
@@ -258,6 +295,8 @@ class DauverseController extends ChangeNotifier {
   int toastAutoHideSeconds = 6;
 
   Map<String, dynamic> snapshot = const {};
+  bool backendAvailable = true;
+  String backendError = '';
   List<double> cpuHistory = [];
   List<double> ramHistory = [];
   String lastActionBanner = '';
@@ -365,9 +404,11 @@ class DauverseController extends ChangeNotifier {
     }
   }
 
-  void refreshSnapshot() {
+  void refreshSnapshot({bool preserveActionBanner = false}) {
     final resp = DauverseNativeBridge.instance.call('dashboard_snapshot');
     if (resp['ok'] == true && resp['data'] is Map<String, dynamic>) {
+      backendAvailable = true;
+      backendError = '';
       snapshot = resp['data'] as Map<String, dynamic>;
       final hw = snapshot['hardware'] as Map<String, dynamic>? ?? const {};
       final cpu = (hw['cpu_usage_pct'] as num?)?.toDouble() ?? 0.0;
@@ -381,7 +422,6 @@ class DauverseController extends ChangeNotifier {
         ramHistory = ramHistory.sublist(ramHistory.length - 30);
       }
 
-      // Surface real unread Corner Toasts emitted by Rust NotificationCenter
       final notif = snapshot['notifications'] as Map<String, dynamic>? ?? const {};
       final toasts = notif['active_toasts'] as List<dynamic>? ?? const [];
       if (toasts.isNotEmpty && !doNotDisturb) {
@@ -402,41 +442,71 @@ class DauverseController extends ChangeNotifier {
         }
       }
       notifyListeners();
+    } else {
+      backendAvailable = false;
+      backendError = resp['error']?.toString() ?? 'NATIVE_FFI_UNBOUND_FAIL_CLOSED';
+      if (!preserveActionBanner && lastActionBanner.isEmpty) {
+        lastActionBanner = 'FAIL-CLOSED: $backendError';
+      }
+      notifyListeners();
     }
   }
 
-  void setPerformanceProfile(String mode) {
-    performanceMode = mode;
-    DauverseNativeBridge.instance.call('set_performance_mode', {'mode': mode});
-    lastActionBanner = i18n.t(
-      'Đã áp dụng chế độ hiệu năng vào Engine: $mode',
-      'Applied performance mode to Engine: $mode',
-    );
-    refreshSnapshot();
+  bool setPerformanceProfile(String mode) {
+    final res = DauverseNativeBridge.instance.call('set_performance_mode', {'mode': mode});
+    if (res['ok'] == true) {
+      performanceMode = mode;
+      lastActionBanner = i18n.t(
+        'Đã áp dụng chế độ hiệu năng vào Engine: $mode',
+        'Applied performance mode to Engine: $mode',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
   }
 
   void syncMiniControlEngineState({bool? minimized, bool? idle}) {
-    DauverseNativeBridge.instance.call('mini_control_state', {
+    final res = DauverseNativeBridge.instance.call('mini_control_state', {
       if (minimized != null) 'minimized': minimized,
       if (idle != null) 'idle': idle,
     });
-    refreshSnapshot();
+    if (res['ok'] != true) {
+      lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+      notifyListeners();
+      return;
+    }
+    refreshSnapshot(preserveActionBanner: true);
   }
 
-  void updateClipboardPolicy(Map<String, dynamic> patch) {
-    DauverseNativeBridge.instance.call('set_clipboard_policy', patch);
-    lastActionBanner = i18n.t(
-      'Đã đồng bộ chính sách Smart Clipboard xuống Rust Engine.',
-      'Synced Smart Clipboard policy to Rust Engine.',
-    );
-    refreshSnapshot();
+  bool updateClipboardPolicy(Map<String, dynamic> patch) {
+    final res = DauverseNativeBridge.instance.call('set_clipboard_policy', patch);
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã đồng bộ chính sách Smart Clipboard xuống Rust Engine.',
+        'Synced Smart Clipboard policy to Rust Engine.',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
   }
 
-  void updateTransferBandwidthCap(int? kbps) {
-    DauverseNativeBridge.instance.call('transfer_set_policy', {
+  bool updateTransferBandwidthCap(int? kbps) {
+    final res = DauverseNativeBridge.instance.call('transfer_set_policy', {
       'bandwidth_limit_kbps': kbps,
     });
-    refreshSnapshot();
+    if (res['ok'] == true) {
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
   }
 
   void controlTransferJob(String action, String jobId) {
@@ -447,19 +517,28 @@ class DauverseController extends ChangeNotifier {
     if (res['ok'] != true) {
       lastActionBanner = 'Transfer $action error: ${res['error'] ?? 'unknown'}';
     }
-    refreshSnapshot();
+    refreshSnapshot(preserveActionBanner: true);
   }
 
-  void updateNotificationPrefs({bool? quiet, bool? dnd, int? autoHideSec}) {
-    if (quiet != null) quietMode = quiet;
-    if (dnd != null) doNotDisturb = dnd;
-    if (autoHideSec != null) toastAutoHideSeconds = autoHideSec;
-    DauverseNativeBridge.instance.call('set_notification_prefs', {
-      'quiet_mode': quietMode,
-      'do_not_disturb': doNotDisturb,
-      'auto_hide_seconds': toastAutoHideSeconds,
+  bool updateNotificationPrefs({bool? quiet, bool? dnd, int? autoHideSec}) {
+    final nextQuiet = quiet ?? quietMode;
+    final nextDnd = dnd ?? doNotDisturb;
+    final nextHide = autoHideSec ?? toastAutoHideSeconds;
+    final res = DauverseNativeBridge.instance.call('set_notification_prefs', {
+      'quiet_mode': nextQuiet,
+      'do_not_disturb': nextDnd,
+      'auto_hide_seconds': nextHide,
     });
-    refreshSnapshot();
+    if (res['ok'] == true) {
+      quietMode = nextQuiet;
+      doNotDisturb = nextDnd;
+      toastAutoHideSeconds = nextHide;
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
   }
 
   void sendSignedLoopbackAiProbe({String source = 'codex_cli', String? summary}) {
@@ -475,7 +554,7 @@ class DauverseController extends ChangeNotifier {
     } else {
       lastActionBanner = 'AI Bridge probe error: ${res['error'] ?? 'failed'}';
     }
-    refreshSnapshot();
+    refreshSnapshot(preserveActionBanner: true);
   }
 
   void triggerCornerToastPreview({
@@ -526,13 +605,31 @@ class DauverseController extends ChangeNotifier {
     });
     if (res['ok'] == true) {
       lastActionBanner = i18n.t(
-        'Đã niêm phong mã Step-Up PIN vào kho mật mã an toàn.',
-        'Sealed Boss Step-Up PIN into encrypted local vault.',
+        'Đã niêm phong mã Step-Up PIN ban đầu vào kho mật mã an toàn.',
+        'Enrolled initial Boss Step-Up PIN into encrypted local vault.',
       );
-      refreshSnapshot();
+      refreshSnapshot(preserveActionBanner: true);
       return true;
     }
     lastActionBanner = 'Step-Up PIN error: ${res['error'] ?? 'invalid'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool changeStepUpPin(String currentPin, String newPin) {
+    final res = DauverseNativeBridge.instance.call('change_step_up_pin', {
+      'current_pin': currentPin,
+      'new_pin': newPin,
+    });
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã xác thực chủ sở hữu & xoay mã Step-Up PIN thành công.',
+        'Verified current PIN and rotated Boss Step-Up PIN in vault.',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Step-Up PIN change denied: ${res['error'] ?? 'invalid'}';
     notifyListeners();
     return false;
   }
@@ -555,18 +652,30 @@ class DauverseController extends ChangeNotifier {
       if (mac != null) 'mac': mac,
       if (target != null) 'target': target,
     });
+    if (res['ok'] != true && res['data'] == null) {
+      final err = res['error']?.toString() ?? 'NATIVE_FFI_UNBOUND_FAIL_CLOSED';
+      lastActionBanner = 'FAIL-CLOSED ($operation): $err';
+      notifyListeners();
+      return {'allowed': false, 'executed': false, 'status_code': 'FAIL_CLOSED', 'message': err};
+    }
     final data = res['data'] as Map<String, dynamic>? ?? const {};
-    lastActionBanner = '${data['status_code'] ?? operation}: ${data['message'] ?? ''}';
-    refreshSnapshot();
+    lastActionBanner = '${data['status_code'] ?? operation}: ${data['message'] ?? res['error'] ?? ''}';
+    refreshSnapshot(preserveActionBanner: true);
     return data;
   }
 
-  void emergencyRevokeAllAccess() {
-    DauverseNativeBridge.instance.call('revoke_all_access');
-    lastActionBanner = i18n.t(
-      'ĐÃ THU HỒI KHẨN CẤP toàn bộ quyền Unattended Access, xoay mật khẩu tạm & khoá đầu vào.',
-      'EMERGENCY REVOCATION EXECUTED: Unattended access disabled, temp password rotated, inputs locked.',
-    );
-    refreshSnapshot();
+  bool emergencyRevokeAllAccess() {
+    final res = DauverseNativeBridge.instance.call('revoke_all_access');
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'ĐÃ THU HỒI KHẨN CẤP toàn bộ quyền Unattended Access, xoay mật khẩu tạm & khoá đầu vào.',
+        'EMERGENCY REVOCATION EXECUTED: Unattended access disabled, temp password rotated, inputs locked.',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED (REVOKE DENIED): ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
   }
 }

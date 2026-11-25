@@ -1124,16 +1124,12 @@ async fn handle_fs(
                     return;
                 }
             }
-            let first_rel = job
-                .files()
-                .first()
-                .map(|f| f.name.clone())
-                .unwrap_or_else(|| "transfer_batch".to_owned());
+            let all_rels: Vec<String> = job.files().iter().map(|f| f.name.clone()).collect();
             job.total_size = total_size;
             job.conn_id = conn_id;
             crate::dauverse::DauverseRuntime::global()
                 .transfer_queue
-                .track_engine_receive_start(id, conn_id, &path, &first_rel, total_size);
+                .track_engine_receive_start_batch(id, conn_id, &path, all_rels, total_size);
             write_jobs.push(job);
         }
         ipc::FS::CancelWrite { id } => {
@@ -1156,20 +1152,45 @@ async fn handle_fs(
             }
         }
         ipc::FS::WriteDone { id, file_num } => {
-            crate::dauverse::DauverseRuntime::global()
-                .transfer_queue
-                .track_engine_receive_finish(id, true, false, None);
-            if let Some(job) = fs::remove_job(id, write_jobs) {
-                #[cfg(target_os = "android")]
-                let mut job = job;
+            if let Some(mut job) = fs::remove_job(id, write_jobs) {
                 #[cfg(target_os = "android")]
                 if let Err(error) = job.finish_document().await {
+                    crate::dauverse::DauverseRuntime::global()
+                        .transfer_queue
+                        .track_engine_receive_finish(id, false, false, Some(&error.to_string()));
                     send_raw(fs::new_error(id, error, file_num), tx);
                     return;
                 }
+                if let Err(flush_err) = job.flush_and_close_stream().await {
+                    let msg = flush_err.to_string();
+                    crate::dauverse::DauverseRuntime::global()
+                        .transfer_queue
+                        .track_engine_receive_finish(id, false, false, Some(&msg));
+                    send_raw(fs::new_error(id, flush_err, file_num), tx);
+                    return;
+                }
                 job.modify_time();
+                if let Err(integrity_err) = crate::dauverse::DauverseRuntime::global()
+                    .transfer_queue
+                    .verify_and_finalize_engine_receive(id)
+                {
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "RECEIVE_INTEGRITY_VERIFICATION",
+                        "FAILED",
+                        &integrity_err,
+                    );
+                    log::warn!("DAUVERSE receive integrity verification failed for job {}: {}", id, integrity_err);
+                    tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &integrity_err)));
+                    send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(integrity_err), file_num), tx);
+                    return;
+                }
                 send_raw(fs::new_done(id, file_num), tx);
                 tx_log.map(|tx| tx.send(serialize_transfer_job(&job, true, false, "")));
+            } else {
+                crate::dauverse::DauverseRuntime::global()
+                    .transfer_queue
+                    .track_engine_receive_finish(id, false, false, Some("ORPHAN_WRITE_DONE_NO_ACTIVE_JOB"));
             }
         }
         ipc::FS::WriteError { id, file_num, err } => {

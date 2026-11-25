@@ -23,11 +23,12 @@
 | RustDesk Client & Core | `rustdesk/rustdesk` | `a0c0963c483fc8f1aeed4547787d1673adcb583c` (`1.5.3`) | `AGPL-3.0` | Native | Direct fork foundation |
 | `hbb_common` | `rustdesk/hbb_common` | `450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb` | `AGPL-3.0` | Native | Git submodule |
 | `rustdesk-server` (`hbbs`/`hbbr`) | `rustdesk/rustdesk-server` | `680b60395ecf99a76f74a1d934e453bb6e5e0aa2` (`1.1.16`) | `AGPL-3.0` | Native | Separate self-host server container |
-| `RustDeskIddDriver` | `rustdesk-org/RustDeskIddDriver` | `f779474e130f641d82102b5128000c6f5c079460` (`v0.4`) | `MS-PL` | Compatible (Separate OS driver binary) | Optional user-approved UMDF driver |
+| `usbmmidd_v2` | `Amyuni Technologies Inc.` (`rustdesk-org/rdev` staging `629b51e9...`) | `v2` (`usbmmidd.cat` WHQL) | `Amyuni Freeware Redistribution Notice` (`usbmmidd_v2/License.txt` preserved unaltered) | Separate unmodified OS driver files (not linked into AGPL binary; opt-in only; free-version prompt disclosed) | Staged in `usbmmidd_v2/` with verbatim `License.txt`; never auto-installed |
+| `RustDeskIddDriver` | `rustdesk-org/RustDeskIddDriver` | `f779474e130f641d82102b5128000c6f5c079460` (`v0.4`) | `MS-PL` | Excluded (`BLOCKED_DO_NOT_INSTALL`) | Rejected and excluded due to self-signed `WDKTestCert` SHA-1 certificate |
 | `Virtual-Display-Driver` | `VirtualDrivers/Virtual-Display-Driver` | `d7244969b2aa8bb38e76d79505eda217996cefea` (`25.7.23`) | `MIT` | Compatible | Documented fallback driver (not bundled) |
 | `sysinfo` | `GuillaumeGomez/sysinfo` (`rustdesk-org/sysinfo`) | `90b1705d909a4902dbbbdea37ee64db17841077d` (`0.29.10`) | `MIT` | Compatible | Linked crate via `Cargo.lock` |
 | `LibreHardwareMonitor` | `LibreHardwareMonitor/LibreHardwareMonitor` | `9e2d677cefff5c614ecc38da88fbc447eb478e2a` (`v0.9.6`) | `MPL-2.0` | Compatible | Optional external HTTP/WMI bridge (not linked) |
-| Flutter Framework | `flutter/flutter` | `3.50.0` (`ab2912035e`) / `3.44.8` | `BSD-3-Clause` | Compatible | UI framework |
+| Flutter Framework | `flutter/flutter` | `3.50.0` | `BSD-3-Clause` | Compatible | UI framework |
 
 ---
 
