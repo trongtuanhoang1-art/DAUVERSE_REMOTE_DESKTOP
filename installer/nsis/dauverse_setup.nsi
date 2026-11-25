@@ -26,6 +26,7 @@ InstallDir "$PROGRAMFILES64\DAUVERSE Remote Desktop"
 Var HasFixedDriveE
 
 Function .onInit
+  SetRegView 64
   StrCpy $HasFixedDriveE "0"
   ; DRIVE_FIXED == 3 (prevents installing onto USB sticks, DVDs, or network shares mounted at E:)
   System::Call 'kernel32::GetDriveTypeW(w "E:\") i .r0'
@@ -33,6 +34,10 @@ Function .onInit
     StrCpy $HasFixedDriveE "1"
     StrCpy $INSTDIR "E:\Program Files\DAUVERSE Remote Desktop"
   ${EndIf}
+FunctionEnd
+
+Function un.onInit
+  SetRegView 64
 FunctionEnd
 
 !insertmacro MUI_PAGE_WELCOME
