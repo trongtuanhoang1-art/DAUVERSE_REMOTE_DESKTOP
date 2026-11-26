@@ -464,6 +464,8 @@ pub struct TransferJob {
     read_stream_integrity: Option<(usize, Sha256, u64)>,
     #[serde(skip)]
     resume_failed_err: Option<String>,
+    #[serde(skip)]
+    is_write_job: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -1055,6 +1057,7 @@ impl TransferJob {
             total_size: 0,
             enable_overwrite_detection,
             download: is_download.then(Default::default),
+            is_write_job: true,
             ..Default::default()
         }
     }
@@ -1107,6 +1110,7 @@ impl TransferJob {
             files,
             total_size,
             enable_overwrite_detection,
+            is_write_job: false,
             ..Default::default()
         })
     }
@@ -1811,89 +1815,130 @@ impl TransferJob {
             let download_path = format!("{}.download", &file_path);
             let digest_path = format!("{}.digest", &file_path);
 
-            let mut f = if !self.is_remote
-                && (Path::new(&download_path).exists() || Path::new(&digest_path).exists())
-            {
-                let resume_res = (|| -> ResultType<std::fs::File> {
-                    #[cfg(windows)]
-                    let pre_canon_root: Option<PathBuf> = {
-                        let entry = &self.files[file_num];
-                        let auth_root = if entry.name.is_empty() {
-                            p.parent()
-                        } else {
-                            Some(p.as_path())
+            let mut f = if self.is_write_job {
+                if Path::new(&download_path).exists() || Path::new(&digest_path).exists() {
+                    let resume_res = (|| -> ResultType<std::fs::File> {
+                        #[cfg(windows)]
+                        let pre_canon_root: Option<PathBuf> = {
+                            let entry = &self.files[file_num];
+                            let auth_root = if entry.name.is_empty() {
+                                p.parent()
+                            } else {
+                                Some(p.as_path())
+                            };
+                            auth_root
+                                .filter(|r| !r.as_os_str().is_empty())
+                                .map(capture_confined_transfer_root)
+                                .transpose()?
                         };
-                        auth_root
-                            .filter(|r| !r.as_os_str().is_empty())
-                            .map(capture_confined_transfer_root)
-                            .transpose()?
-                    };
-                    #[cfg(not(windows))]
-                    let pre_canon_root: Option<PathBuf> = None;
+                        #[cfg(not(windows))]
+                        let pre_canon_root: Option<PathBuf> = None;
 
-                    let _digest_ro = open_readonly_no_follow_single_link(
-                        Path::new(&digest_path),
-                        pre_canon_root.as_deref(),
-                    )?;
-                    #[cfg(unix)]
-                    let opened = {
-                        use std::os::unix::fs::OpenOptionsExt;
-                        std::fs::OpenOptions::new()
+                        let _digest_ro = open_readonly_no_follow_single_link(
+                            Path::new(&digest_path),
+                            pre_canon_root.as_deref(),
+                        )?;
+                        #[cfg(unix)]
+                        let opened = {
+                            use std::os::unix::fs::OpenOptionsExt;
+                            std::fs::OpenOptions::new()
+                                .write(true)
+                                .custom_flags(hbb_common::libc::O_NOFOLLOW)
+                                .open(&download_path)?
+                        };
+                        #[cfg(windows)]
+                        let opened = {
+                            const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+                            std::fs::OpenOptions::new()
+                                .write(true)
+                                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+                                .open(&download_path)?
+                        };
+                        #[cfg(not(any(unix, windows)))]
+                        let opened = std::fs::OpenOptions::new()
                             .write(true)
-                            .custom_flags(hbb_common::libc::O_NOFOLLOW)
-                            .open(&download_path)?
-                    };
-                    #[cfg(windows)]
-                    let opened = {
-                        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-                        std::fs::OpenOptions::new()
-                            .write(true)
-                            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-                            .open(&download_path)?
-                    };
-                    #[cfg(not(any(unix, windows)))]
-                    let opened = std::fs::OpenOptions::new()
-                        .write(true)
-                        .open(&download_path)?;
+                            .open(&download_path)?;
 
-                    verify_std_handle_single_link_regular_confined(
-                        &opened,
-                        pre_canon_root.as_deref(),
-                    )?;
-                    if opened.metadata()?.len() != offset {
-                        bail!(
-                            "upload resume offset {} does not match staging size",
-                            offset
-                        );
+                        verify_std_handle_single_link_regular_confined(
+                            &opened,
+                            pre_canon_root.as_deref(),
+                        )?;
+                        if opened.metadata()?.len() != offset {
+                            bail!(
+                                "upload resume offset {} does not match staging size",
+                                offset
+                            );
+                        }
+                        Ok(opened)
+                    })();
+                    match resume_res {
+                        Ok(std_f) => File::from_std(std_f),
+                        Err(e) => {
+                            let msg = format!(
+                                "refusing unsafe upload resume staging '{}': {e}",
+                                download_path
+                            );
+                            self.resume_failed_err = Some(msg);
+                            return;
+                        }
                     }
-                    Ok(opened)
-                })();
-                match resume_res {
-                    Ok(std_f) => File::from_std(std_f),
-                    Err(e) => {
-                        let msg = format!("refusing unsafe upload resume staging '{}': {e}", download_path);
-                        self.resume_failed_err = Some(msg);
-                        return;
-                    }
-                }
-            } else if self.is_remote && Path::new(&file_path).exists() {
-                match open_readonly_no_follow_single_link(Path::new(&file_path), None)
-                    .or_else(|_| std::fs::File::open(&file_path))
-                {
-                    Ok(std_f) => File::from_std(std_f),
-                    Err(e) => {
-                        log::warn!("Failed to open file {}: {}", file_path, e);
-                        return;
-                    }
-                }
-            } else {
-                if !self.is_remote {
+                } else {
                     self.resume_failed_err = Some(format!(
                         "upload resume staging files missing for '{}'",
                         file_path
                     ));
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(30),
+                        warn,
+                        "Upload resume staging missing for {}, cannot seek to offset {}",
+                        download_path,
+                        offset
+                    );
+                    return;
                 }
-                log::warn!(
+            } else if Path::new(&file_path).exists() {
+                if is_existing_symlink_or_reparse(Path::new(&file_path)) {
+                    self.data_stream = None;
+                    hbb_common::throttled_log!(
+                        Duration::from_secs(30),
+                        warn,
+                        "Refusing symlink or reparse reader resume '{}'",
+                        file_path
+                    );
+                    return;
+                }
+                match File::open(&file_path).await {
+                    Ok(opened) => match opened.metadata().await {
+                        Ok(meta) if meta.is_file() && offset <= meta.len() => opened,
+                        _ => {
+                            self.data_stream = None;
+                            hbb_common::throttled_log!(
+                                Duration::from_secs(30),
+                                warn,
+                                "Invalid reader resume metadata or offset {} beyond file size for '{}'",
+                                offset,
+                                file_path
+                            );
+                            return;
+                        }
+                    },
+                    Err(e) => {
+                        self.data_stream = None;
+                        hbb_common::throttled_log!(
+                            Duration::from_secs(30),
+                            warn,
+                            "Failed to open file {}: {}",
+                            file_path,
+                            e
+                        );
+                        return;
+                    }
+                }
+            } else {
+                self.data_stream = None;
+                hbb_common::throttled_log!(
+                    Duration::from_secs(30),
+                    warn,
                     "File {} not found, cannot seek to offset {}",
                     file_path,
                     offset
@@ -1904,6 +1949,8 @@ impl TransferJob {
                 self.data_stream = Some(DataStream::FileStream(f));
                 self.transferred += offset;
                 self.finished_size += offset;
+            } else {
+                self.data_stream = None;
             }
         }
     }
@@ -2830,5 +2877,289 @@ mod tests {
         valid_writer.flush_and_close_stream().await.unwrap();
         valid_writer.try_finalize_write_files().unwrap();
         assert_eq!(std::fs::read(allowed.join("clean_ok.bin")).unwrap(), b"NEW_DATA");
+    }
+
+    #[tokio::test]
+    async fn rc4_n01_bidirectional_upload_and_download_resume_seeks_reader_and_verifies_end_to_end() {
+        struct ScopedDir(PathBuf);
+        impl Drop for ScopedDir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let workspace = ScopedDir(std::env::temp_dir().join(format!(
+            "dv_rc4_n01_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )));
+        let upload_src_dir = workspace.0.join("upload_src");
+        let upload_dst_dir = workspace.0.join("upload_dst");
+        let host_serve_dir = workspace.0.join("host_serve");
+        let dl_dst_conn_dir = workspace.0.join("dl_dst_conn");
+        let dl_dst_cm_dir = workspace.0.join("dl_dst_cm");
+        for d in [
+            &upload_src_dir,
+            &upload_dst_dir,
+            &host_serve_dir,
+            &dl_dst_conn_dir,
+            &dl_dst_cm_dir,
+        ] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+
+        let src_bytes: &[u8] = b"0123456789ABCDEF_RC4_N01_BIDIRECTIONAL_RESUME_PAYLOAD_64_BYTES!!";
+        assert_eq!(src_bytes.len(), 64);
+
+        // 1. Direction A: Client -> Host Upload Resume (client new_read is_remote=false -> server new_write is_remote=false)
+        let upload_src_file = upload_src_dir.join("upload_payload.bin");
+        std::fs::write(&upload_src_file, src_bytes).unwrap();
+        let mut client_reader = TransferJob::new_read(
+            101,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(upload_src_file.clone()),
+            0,
+            false,
+            false,
+            true,
+        )
+        .unwrap();
+        let src_sha = client_reader.files()[0].sha256.clone();
+        let src_mtime = client_reader.files()[0].modified_time;
+
+        // Seed 24-byte partial upload staging on receiver
+        std::fs::write(
+            upload_dst_dir.join("upload_payload.bin.download"),
+            &src_bytes[..24],
+        )
+        .unwrap();
+        std::fs::write(
+            upload_dst_dir.join("upload_payload.bin.digest"),
+            format!(r#"{{"size":64,"modified":{src_mtime}}}"#),
+        )
+        .unwrap();
+
+        assert!(!client_reader.open_data_stream().await.unwrap());
+        let mut server_writer = TransferJob::new_write(
+            101,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(upload_dst_dir.clone()),
+            0,
+            false,
+            false,
+            true,
+        )
+        .with_files(vec![FileEntry {
+            name: "upload_payload.bin".to_string(),
+            size: 64,
+            modified_time: src_mtime,
+            sha256: src_sha.clone(),
+            ..Default::default()
+        }])
+        .unwrap();
+        server_writer.is_resume = true;
+
+        let confirm_upload_24 = FileTransferSendConfirmRequest {
+            id: 101,
+            file_num: 0,
+            union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(24)),
+            ..Default::default()
+        };
+        client_reader.confirm(&confirm_upload_24).await;
+        server_writer.confirm(&confirm_upload_24).await;
+        assert_eq!(
+            client_reader.finished_size(),
+            24,
+            "client upload reader (is_remote=false) must seek to offset 24 on resume"
+        );
+
+        while let Some(mut block) = client_reader.read().await.unwrap() {
+            if block.data.is_empty() {
+                break;
+            }
+            block.id = 101;
+            server_writer.write(block).await.unwrap();
+        }
+        server_writer.flush_and_close_stream().await.unwrap();
+        server_writer.try_finalize_write_files().unwrap();
+        assert_eq!(
+            std::fs::read(upload_dst_dir.join("upload_payload.bin")).unwrap(),
+            src_bytes
+        );
+
+        // 2. Direction B1: Host Connection -> Client Download Resume (host new_read is_remote=false + stray .download/.digest next to source -> client new_write is_remote=true)
+        let host_src_file = host_serve_dir.join("serve_payload.bin");
+        std::fs::write(&host_src_file, src_bytes).unwrap();
+        let stray_sender_dl = host_serve_dir.join("serve_payload.bin.download");
+        let stray_sender_dg = host_serve_dir.join("serve_payload.bin.digest");
+        let stray_bytes: &[u8] = b"STRAY_LOCAL_STAGING_ON_SENDER_MUST_REMAIN_UNTOUCHED";
+        std::fs::write(&stray_sender_dl, stray_bytes).unwrap();
+        std::fs::write(&stray_sender_dg, r#"{"size":64,"modified":1}"#).unwrap();
+
+        let mut host_conn_reader = TransferJob::new_read(
+            102,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(host_src_file.clone()),
+            0,
+            false,
+            false,
+            true,
+        )
+        .unwrap();
+        let host_mtime = host_conn_reader.files()[0].modified_time;
+        let host_sha = host_conn_reader.files()[0].sha256.clone();
+
+        let client_dl_target_a = dl_dst_conn_dir.join("serve_payload.bin");
+        std::fs::write(
+            dl_dst_conn_dir.join("serve_payload.bin.download"),
+            &src_bytes[..29],
+        )
+        .unwrap();
+        std::fs::write(
+            dl_dst_conn_dir.join("serve_payload.bin.digest"),
+            format!(r#"{{"size":64,"modified":{host_mtime}}}"#),
+        )
+        .unwrap();
+
+        let mut client_dl_writer_a = TransferJob::new_write(
+            102,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(client_dl_target_a.clone()),
+            0,
+            false,
+            true,
+            true,
+        )
+        .with_files(vec![FileEntry {
+            name: "".to_string(),
+            size: 64,
+            modified_time: host_mtime,
+            sha256: host_sha.clone(),
+            ..Default::default()
+        }])
+        .unwrap();
+        client_dl_writer_a.is_resume = true;
+        client_dl_writer_a.set_digest(64, host_mtime);
+        let digest_check = client_dl_writer_a
+            .download_digest(
+                true,
+                &FileTransferDigest {
+                    id: 102,
+                    file_num: 0,
+                    last_modified: host_mtime,
+                    file_size: 64,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        match digest_check {
+            DigestCheckResult::NeedConfirm(d) => {
+                assert!(d.is_identical);
+                assert_eq!(d.transferred_size, 29);
+            }
+            _ => panic!("expected DigestCheckResult::NeedConfirm(29)"),
+        }
+
+        assert!(!host_conn_reader.open_data_stream().await.unwrap());
+        let confirm_dl_29 = FileTransferSendConfirmRequest {
+            id: 102,
+            file_num: 0,
+            union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(29)),
+            ..Default::default()
+        };
+        host_conn_reader.confirm(&confirm_dl_29).await;
+        client_dl_writer_a.confirm(&confirm_dl_29).await;
+        assert_eq!(host_conn_reader.finished_size(), 29);
+
+        while let Some(mut block) = host_conn_reader.read().await.unwrap() {
+            if block.data.is_empty() {
+                break;
+            }
+            block.id = 102;
+            client_dl_writer_a.write(block).await.unwrap();
+        }
+        client_dl_writer_a.finish_download().unwrap();
+        assert_eq!(std::fs::read(&client_dl_target_a).unwrap(), src_bytes);
+        assert_eq!(std::fs::read(&stray_sender_dl).unwrap(), stray_bytes);
+
+        // 3. Direction B2: Host CM -> Client Download Resume (host CM new_read is_remote=true -> client new_write is_remote=true)
+        let mut host_cm_reader = TransferJob::new_read(
+            103,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(host_src_file.clone()),
+            0,
+            false,
+            true,
+            true,
+        )
+        .unwrap();
+        let client_dl_target_b = dl_dst_cm_dir.join("serve_cm.bin");
+        std::fs::write(
+            dl_dst_cm_dir.join("serve_cm.bin.download"),
+            &src_bytes[..37],
+        )
+        .unwrap();
+        std::fs::write(
+            dl_dst_cm_dir.join("serve_cm.bin.digest"),
+            format!(r#"{{"size":64,"modified":{host_mtime}}}"#),
+        )
+        .unwrap();
+        let mut client_dl_writer_b = TransferJob::new_write(
+            103,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(client_dl_target_b.clone()),
+            0,
+            false,
+            true,
+            true,
+        )
+        .with_files(vec![FileEntry {
+            name: "".to_string(),
+            size: 64,
+            modified_time: host_mtime,
+            sha256: host_sha,
+            ..Default::default()
+        }])
+        .unwrap();
+        client_dl_writer_b.is_resume = true;
+        client_dl_writer_b.set_digest(64, host_mtime);
+        let _ = client_dl_writer_b
+            .download_digest(
+                true,
+                &FileTransferDigest {
+                    id: 103,
+                    file_num: 0,
+                    last_modified: host_mtime,
+                    file_size: 64,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(!host_cm_reader.open_data_stream().await.unwrap());
+        let confirm_dl_37 = FileTransferSendConfirmRequest {
+            id: 103,
+            file_num: 0,
+            union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(37)),
+            ..Default::default()
+        };
+        host_cm_reader.confirm(&confirm_dl_37).await;
+        client_dl_writer_b.confirm(&confirm_dl_37).await;
+        while let Some(mut block) = host_cm_reader.read().await.unwrap() {
+            if block.data.is_empty() {
+                break;
+            }
+            block.id = 103;
+            client_dl_writer_b.write(block).await.unwrap();
+        }
+        client_dl_writer_b.finish_download().unwrap();
+        assert_eq!(std::fs::read(&client_dl_target_b).unwrap(), src_bytes);
     }
 }

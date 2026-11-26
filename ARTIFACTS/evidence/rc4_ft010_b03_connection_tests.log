@@ -1,0 +1,940 @@
+warning: patch for the non root package will be ignored, specify patch at the workspace root:
+package:   /home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/hbb_common/Cargo.toml
+workspace: /home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/Cargo.toml
+warning: `package.homepage` is redundant with `package.repository`
+  --> libs/enigo/Cargo.toml:10:12
+   |
+10 | homepage = "https://github.com/enigo-rs/enigo"
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+11 | repository = "https://github.com/enigo-rs/enigo"
+   |              -----------------------------------
+   |
+   = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `enigo` (manifest) generated 1 warning
+warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
+   --> libs/hbb_common/src/lib.rs:192:41
+    |
+192 |         let tm = (number >> 17) & (u32::max_value() as u128);
+    |                                         ^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+   --> libs/hbb_common/src/lib.rs:365:22
+    |
+365 |                     .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+    |                      ^^^^^^^^^^^^
+    |
+help: replace the use of the deprecated method
+    |
+365 -                     .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+365 +                     .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+    |
+
+warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_common` to apply 1 suggestion)
+   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
+warning: type `useconds_t` should have an upper camel case name
+  --> libs/libxdo-sys-stub/src/lib.rs:31:10
+   |
+31 | pub type useconds_t = c_uint;
+   |          ^^^^^^^^^^ help: convert the identifier to upper camel case: `UsecondsT`
+   |
+   = note: `#[warn(non_camel_case_types)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: `libxdo-sys` (lib) generated 1 warning
+warning: `hbb_common` (lib) generated 2 warnings (2 duplicates)
+   Compiling scrap v0.5.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/scrap)
+   Compiling clipboard v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/clipboard)
+   Compiling enigo v0.0.14 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/enigo)
+warning: unused import: `tokio`
+  --> libs/scrap/src/wayland/pipewire.rs:27:60
+   |
+27 | use hbb_common::{anyhow::anyhow, bail, config, serde_json, tokio, ResultType};
+   |                                                            ^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `available_source_types` is never used
+  --> libs/scrap/src/wayland/screencast_portal.rs:26:8
+   |
+ 8 | pub trait OrgFreedesktopPortalScreenCast {
+   |           ------------------------------ method in this trait
+...
+26 |     fn available_source_types(&self) -> Result<u32, dbus::Error>;
+   |        ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: trait `OrgFreedesktopPortalRequest` is never used
+ --> libs/scrap/src/wayland/request_portal.rs:8:11
+  |
+8 | pub trait OrgFreedesktopPortalRequest {
+  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `2` is never read
+ --> libs/scrap/src/common/wayland.rs:9:49
+  |
+9 | pub struct Capturer(Display, Box<dyn Recorder>, Vec<u8>);
+  |            -------- field in this struct        ^^^^^^^
+  |
+  = help: consider removing this field
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> libs/scrap/src/wayland/pipewire.rs:964:25
+    |
+964 | pub fn get_portal(conn: &SyncConnection) -> Proxy<&SyncConnection> {
+    |                         ^^^^^^^^^^^^^^^     ^^^^^^^^^^^^^^^^^^^^^^
+    |                         |                   |     |
+    |                         |                   |     the same lifetime is elided here
+    |                         |                   the same lifetime is hidden here
+    |                         the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+964 | pub fn get_portal(conn: &SyncConnection) -> Proxy<'_, &SyncConnection> {
+    |                                                   +++
+
+warning: `scrap` (lib) generated 5 warnings (run `cargo fix --lib -p scrap` to apply 2 suggestions)
+   Compiling rustdesk v1.5.3 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP)
+warning: unused import: `allow_err`
+ --> src/server/wayland.rs:2:18
+  |
+2 | use hbb_common::{allow_err, anyhow};
+  |                  ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `crate::clipboard_file::*`
+  --> src/server/connection.rs:12:5
+   |
+12 | use crate::clipboard_file::*;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `current_update_artifact_query`, `verified_update_artifact_for_download_url`, and `verified_update_artifact_for_release_page_url`
+ --> src/updater.rs:8:5
+  |
+8 |     current_update_artifact_query, get_update_download_file_from_url,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+9 |     verified_update_artifact_for_download_url, verified_update_artifact_for_release_page_url,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `download::remove_update_file`
+  --> src/updater.rs:13:16
+   |
+13 | pub(crate) use download::remove_update_file;
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `path::Path`
+  --> src/updater.rs:16:5
+   |
+16 |     path::Path,
+   |     ^^^^^^^^^^
+
+warning: unused import: `bail`
+  --> src/ui_cm_interface.rs:23:16
+   |
+23 |     allow_err, bail,
+   |                ^^^^
+
+warning: unused import: `uuid::Uuid`
+  --> src/ui_session_interface.rs:42:5
+   |
+42 | use uuid::Uuid;
+   |     ^^^^^^^^^^
+
+warning: use of deprecated function `hbb_common::whoami::hostname`: use `fallible::hostname()` instead
+    --> src/platform/linux.rs:2613:51
+     |
+2613 |                     .replace(&hbb_common::whoami::hostname(), "");
+     |                                                   ^^^^^^^^
+     |
+     = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated function `hbb_common::whoami::hostname`: use `fallible::hostname()` instead
+    --> src/platform/linux.rs:2628:47
+     |
+2628 |                 .replace(&hbb_common::whoami::hostname(), "")
+     |                                               ^^^^^^^^
+
+warning: use of deprecated function `hbb_common::base64::encode`: Use Engine::encode
+   --> src/hbbs_http/sync.rs:184:52
+    |
+184 |                         hash = hbb_common::base64::encode(&res[..]);
+    |                                                    ^^^^^^
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+   --> src/rendezvous_mediator.rs:114:14
+    |
+114 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+    |              ^^^^^^^^^^^^
+    |
+help: replace the use of the deprecated method
+    |
+114 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+114 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+    |
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+   --> src/rendezvous_mediator.rs:162:14
+    |
+162 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+    |              ^^^^^^^^^^^^
+    |
+help: replace the use of the deprecated method
+    |
+162 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+162 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+    |
+
+warning: unused variable: `is_press`
+   --> src/keyboard.rs:743:17
+    |
+743 |             let is_press = matches!(event.event_type, EventType::KeyPress(_));
+    |                 ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_is_press`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/server/display_service.rs:345:24
+    |
+345 |     let (live_changed, mut drifted) = {
+    |                        ----^^^^^^^
+    |                        |
+    |                        help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/tray.rs:156:17
+    |
+156 |             let mut builder = TrayIconBuilder::new()
+    |                 ----^^^^^^^
+    |                 |
+    |                 help: remove this `mut`
+
+warning: variable does not need to be mutable
+  --> src/tray.rs:64:9
+   |
+64 |     let mut event_loop = EventLoopBuilder::new().build();
+   |         ----^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/privacy_mode.rs:153:13
+    |
+153 |         let mut map: HashMap<&'static str, PrivacyModeCreator> = HashMap::new();
+    |             ----^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: constant `LOCAL_CONFIG_KEY` is never used
+ --> src/keyboard/shortcuts.rs:8:7
+  |
+8 | const LOCAL_CONFIG_KEY: &str = "keyboard-shortcuts";
+  |       ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `reload_from_config` is never used
+   --> src/keyboard/shortcuts.rs:249:8
+    |
+249 | pub fn reload_from_config() {
+    |        ^^^^^^^^^^^^^^^^^^
+
+warning: function `match_event` is never used
+   --> src/keyboard/shortcuts.rs:320:8
+    |
+320 | pub fn match_event(event: &rdev::Event) -> Option<String> {
+    |        ^^^^^^^^^^^
+
+warning: function `is_opensuse` is never used
+    --> src/platform/linux.rs:1710:4
+     |
+1710 | fn is_opensuse() -> bool {
+     |    ^^^^^^^^^^^
+
+warning: fields `0` and `1` are never read
+    --> src/platform/linux.rs:3008:21
+     |
+3008 | pub struct WakeLock(Option<keepawake::AwakeHandle>, Option<SessionIdleInhibit>);
+     |            -------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |            |
+     |            fields in this struct
+     |
+     = help: consider removing these fields
+
+warning: variants `Side`, `Extra`, `Back`, `Forward`, and `Task` are never constructed
+    --> src/server/uinput.rs:1346:9
+     |
+1343 |     pub enum MouseButton {
+     |              ----------- variants in this enum
+...
+1346 |         Side,
+     |         ^^^^
+1347 |         Extra,
+     |         ^^^^^
+1348 |         Right,
+1349 |         Back,
+     |         ^^^^
+1350 |         Forward,
+     |         ^^^^^^^
+1351 |         Task,
+     |         ^^^^
+     |
+     = note: `MouseButton` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `resolution` is never read
+   --> src/server/rdp_input.rs:322:9
+    |
+318 |     pub struct RdpInputMouse {
+    |                ------------- field in this struct
+...
+322 |         resolution: (usize, usize),
+    |         ^^^^^^^^^^
+
+warning: constant `MOUSE_MOVE_PROTECTION_TIMEOUT` is never used
+   --> src/server/input_service.rs:635:7
+    |
+635 | const MOUSE_MOVE_PROTECTION_TIMEOUT: Duration = Duration::from_millis(1_000);
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `MOUSE_ACTIVE_DISTANCE` is never used
+   --> src/server/input_service.rs:637:7
+    |
+637 | const MOUSE_ACTIVE_DISTANCE: i32 = 5;
+    |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: variant `SwitchSides` is never constructed
+   --> src/server/connection.rs:317:5
+    |
+312 | enum ConnAuditPrimaryAuth {
+    |      -------------------- variant in this enum
+...
+317 |     SwitchSides = 4,
+    |     ^^^^^^^^^^^
+    |
+    = note: `ConnAuditPrimaryAuth` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: field `enable_file_transfer` is never read
+   --> src/server/connection.rs:412:5
+    |
+358 | pub struct Connection {
+    |            ---------- field in this struct
+...
+412 |     enable_file_transfer: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_capturer_mag_supported` is never used
+   --> src/server/display_service.rs:610:4
+    |
+610 | fn is_capturer_mag_supported() -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `produced_fps` is never read
+   --> src/server/video_qos/tests/sim.rs:282:9
+    |
+271 | pub struct Report {
+    |            ------ field in this struct
+...
+282 |     pub produced_fps: f64,
+    |         ^^^^^^^^^^^^
+    |
+    = note: `Report` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `send_switch_login_request` is never used
+    --> src/client.rs:4908:10
+     |
+4908 | async fn send_switch_login_request(
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `get_login_method` is never used
+  --> src/client/login_method.rs:23:19
+   |
+10 | impl LoginConfigHandler {
+   | ----------------------- method in this implementation
+...
+23 |     pub(crate) fn get_login_method(&self) -> &'static str {
+   |                   ^^^^^^^^^^^^^^^^
+
+warning: methods `read_empty_dirs`, `set_confirm_override_file`, and `rename_file` are never used
+   --> src/client/file_trait.rs:55:8
+    |
+  6 | pub trait FileManager: Interface {
+    |           ----------- methods in this trait
+...
+ 55 |     fn read_empty_dirs(&self, path: String, include_hidden: bool) {
+    |        ^^^^^^^^^^^^^^^
+...
+163 |     fn set_confirm_override_file(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+185 |     fn rename_file(&self, act_id: i32, path: String, new_name: String, is_remote: bool) {
+    |        ^^^^^^^^^^^
+
+warning: function `query_online_states` is never used
+    --> src/client.rs:5349:18
+     |
+5349 |     pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
+     |                  ^^^^^^^^^^^^^^^^^^^
+
+warning: function `create_online_stream` is never used
+    --> src/client.rs:5369:14
+     |
+5369 |     async fn create_online_stream() -> ResultType<Stream> {
+     |              ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `query_online_states_` is never used
+    --> src/client.rs:5384:14
+     |
+5384 |     async fn query_online_states_(
+     |              ^^^^^^^^^^^^^^^^^^^^
+
+warning: methods `http_request` and `get_http_status` are never used
+   --> src/ui.rs:614:8
+    |
+198 | impl UI {
+    | ------- methods in this implementation
+...
+614 |     fn http_request(&self, url: String, method: String, body: Option<String>, header: String) {
+    |        ^^^^^^^^^^^^
+...
+630 |     fn get_http_status(&self, url: String) -> Option<String> {
+    |        ^^^^^^^^^^^^^^^
+
+warning: constant `UPDATE_METADATA_SIGNATURE_CONTEXT` is never used
+  --> src/update_metadata.rs:23:7
+   |
+23 | const UPDATE_METADATA_SIGNATURE_CONTEXT: &[u8] = b"RustDesk update metadata v1\n";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `UPDATE_APP` is never used
+  --> src/update_metadata.rs:24:7
+   |
+24 | const UPDATE_APP: &str = "rustdesk";
+   |       ^^^^^^^^^^
+
+warning: constant `PUBLIC_UPDATE_PACKAGE_ID` is never used
+  --> src/update_metadata.rs:25:18
+   |
+25 | pub(crate) const PUBLIC_UPDATE_PACKAGE_ID: &str = "rustdesk";
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `METADATA_SCHEMA_VERSION` is never used
+  --> src/update_metadata.rs:26:7
+   |
+26 | const METADATA_SCHEMA_VERSION: u32 = 1;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SIGNATURE_SCHEMA_VERSION` is never used
+  --> src/update_metadata.rs:27:7
+   |
+27 | const SIGNATURE_SCHEMA_VERSION: u32 = 1;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SIGNATURE_ALGORITHM` is never used
+  --> src/update_metadata.rs:28:7
+   |
+28 | const SIGNATURE_ALGORITHM: &str = "ed25519";
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `TRUSTED_UPDATE_KEYS` is never used
+  --> src/update_metadata.rs:30:7
+   |
+30 | const TRUSTED_UPDATE_KEYS: &[TrustedUpdateKey] = &[TrustedUpdateKey {
+   |       ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `UpdateMetadata` is never constructed
+  --> src/update_metadata.rs:40:8
+   |
+40 | struct UpdateMetadata {
+   |        ^^^^^^^^^^^^^^
+
+warning: struct `UpdateArtifact` is never constructed
+  --> src/update_metadata.rs:53:8
+   |
+53 | struct UpdateArtifact {
+   |        ^^^^^^^^^^^^^^
+
+warning: struct `UpdateSignature` is never constructed
+  --> src/update_metadata.rs:64:8
+   |
+64 | struct UpdateSignature {
+   |        ^^^^^^^^^^^^^^^
+
+warning: struct `TrustedUpdateKey` is never constructed
+  --> src/update_metadata.rs:71:8
+   |
+71 | struct TrustedUpdateKey {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: struct `UpdateArtifactQuery` is never constructed
+  --> src/update_metadata.rs:78:19
+   |
+78 | pub(crate) struct UpdateArtifactQuery<'a> {
+   |                   ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `UpdateMetadataRequirements` is never constructed
+  --> src/update_metadata.rs:85:19
+   |
+85 | pub(crate) struct UpdateMetadataRequirements<'a> {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `VerifiedUpdateArtifact` is never constructed
+  --> src/update_metadata.rs:93:19
+   |
+93 | pub(crate) struct VerifiedUpdateArtifact {
+   |                   ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: struct `VerificationOptions` is never constructed
+   --> src/update_metadata.rs:102:8
+    |
+102 | struct VerificationOptions<'a> {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: struct `MetadataRequirements` is never constructed
+   --> src/update_metadata.rs:110:8
+    |
+110 | struct MetadataRequirements<'a> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_update_metadata_with_options` is never used
+   --> src/update_metadata.rs:116:4
+    |
+116 | fn verify_update_metadata_with_options(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_update_metadata` is never used
+   --> src/update_metadata.rs:148:15
+    |
+148 | pub(crate) fn verify_update_metadata(
+    |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_signature_schema` is never used
+   --> src/update_metadata.rs:172:4
+    |
+172 | fn validate_signature_schema(signature: &UpdateSignature) -> ResultType<()> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `decode_signature` is never used
+   --> src/update_metadata.rs:182:4
+    |
+182 | fn decode_signature(encoded: &str) -> ResultType<Signature> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `verify_metadata_signature` is never used
+   --> src/update_metadata.rs:194:4
+    |
+194 | fn verify_metadata_signature(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `init_sodiumoxide` is never used
+   --> src/update_metadata.rs:210:4
+    |
+210 | fn init_sodiumoxide() -> ResultType<()> {
+    |    ^^^^^^^^^^^^^^^^
+
+warning: function `validate_metadata` is never used
+   --> src/update_metadata.rs:221:4
+    |
+221 | fn validate_metadata(
+    |    ^^^^^^^^^^^^^^^^^
+
+warning: function `select_artifact` is never used
+   --> src/update_metadata.rs:250:4
+    |
+250 | fn select_artifact<'a>(
+    |    ^^^^^^^^^^^^^^^
+
+warning: enum `ArtifactUrlPolicy` is never used
+ --> src/update_metadata/artifact.rs:9:17
+  |
+9 | pub(super) enum ArtifactUrlPolicy<'a> {
+  |                 ^^^^^^^^^^^^^^^^^
+
+warning: function `validate_artifact` is never used
+  --> src/update_metadata/artifact.rs:15:15
+   |
+15 | pub(super) fn validate_artifact(
+   |               ^^^^^^^^^^^^^^^^^
+
+warning: function `validate_artifact_url_policy` is never used
+  --> src/update_metadata/artifact.rs:40:4
+   |
+40 | fn validate_artifact_url_policy(
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `validate_artifact_file_name` is never used
+  --> src/update_metadata/artifact.rs:70:15
+   |
+70 | pub(super) fn validate_artifact_file_name(file_name: &str) -> ResultType<()> {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_sha256_hex` is never used
+  --> src/update_metadata/artifact.rs:82:4
+   |
+82 | fn is_sha256_hex(value: &str) -> bool {
+   |    ^^^^^^^^^^^^^
+
+warning: methods `into_string` and `save` are never used
+   --> src/auth_2fa.rs:123:8
+    |
+122 | impl TelegramBot {
+    | ---------------- methods in this implementation
+123 |     fn into_string(&self) -> ResultType<String> {
+    |        ^^^^^^^^^^^
+...
+133 |     fn save(&self) -> ResultType<()> {
+    |        ^^^^
+
+warning: function `get_chatid_telegram` is never used
+   --> src/auth_2fa.rs:165:8
+    |
+165 | pub fn get_chatid_telegram(bot_token: &str) -> ResultType<Option<String>> {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `set_config` is never used
+   --> src/trusted_devices/config.rs:265:8
+    |
+265 | pub fn set_config(value: Config) -> ResultType<bool> {
+    |        ^^^^^^^^^^
+
+warning: constant `OPTION_ALLOW_SYNC_CLIPBOARD_BETWEEN_SESSIONS` is never used
+  --> src/clipboard.rs:17:11
+   |
+17 | pub const OPTION_ALLOW_SYNC_CLIPBOARD_BETWEEN_SESSIONS: &str =
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: static `CONTROLLING_SESSION_COUNT` is never used
+  --> src/updater.rs:82:8
+   |
+82 | static CONTROLLING_SESSION_COUNT: AtomicUsize = AtomicUsize::new(0);
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `INITIAL_CHECK_DELAY` is never used
+  --> src/updater.rs:85:11
+   |
+85 | pub const INITIAL_CHECK_DELAY: Duration = Duration::from_secs(30);
+   |           ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `DUR_ONE_DAY` is never used
+  --> src/updater.rs:88:11
+   |
+88 | pub const DUR_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
+   |           ^^^^^^^^^^^
+
+warning: constant `MIN_INTERVAL` is never used
+  --> src/updater.rs:91:11
+   |
+91 | pub const MIN_INTERVAL: Duration = Duration::from_secs(60 * 10);
+   |           ^^^^^^^^^^^^
+
+warning: constant `RETRY_INTERVAL` is never used
+  --> src/updater.rs:94:11
+   |
+94 | pub const RETRY_INTERVAL: Duration = Duration::from_secs(60 * 30);
+   |           ^^^^^^^^^^^^^^
+
+warning: function `update_controlling_session_count` is never used
+  --> src/updater.rs:96:8
+   |
+96 | pub fn update_controlling_session_count(count: usize) {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `has_no_active_conns` is never used
+   --> src/updater.rs:121:8
+    |
+121 | pub fn has_no_active_conns() -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: function `has_no_controlling_conns` is never used
+   --> src/updater.rs:127:4
+    |
+127 | fn has_no_controlling_conns() -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `start_auto_update_check` is never used
+   --> src/updater.rs:149:4
+    |
+149 | fn start_auto_update_check() -> Sender<UpdateMsg> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `start_auto_update_check_` is never used
+   --> src/updater.rs:155:4
+    |
+155 | fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_update` is never used
+   --> src/updater.rs:189:4
+    |
+189 | fn check_update(manually: bool) -> ResultType<()> {
+    |    ^^^^^^^^^^^^
+
+warning: constant `UPDATE_SIDECAR_HTTP_REQUEST_TIMEOUT` is never used
+  --> src/updater/artifact.rs:14:7
+   |
+14 | const UPDATE_SIDECAR_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `UPDATE_METADATA_SIDECAR_MAX_BYTES` is never used
+  --> src/updater/artifact.rs:15:7
+   |
+15 | const UPDATE_METADATA_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `current_update_platform` is never used
+  --> src/updater/artifact.rs:21:15
+   |
+21 | pub(crate) fn current_update_platform() -> &'static str {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `current_update_arch` is never used
+  --> src/updater/artifact.rs:36:15
+   |
+36 | pub(crate) fn current_update_arch() -> &'static str {
+   |               ^^^^^^^^^^^^^^^^^^^
+
+warning: function `current_update_format` is never used
+  --> src/updater/artifact.rs:47:15
+   |
+47 | pub(crate) fn current_update_format(update_msi: bool) -> &'static str {
+   |               ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `current_update_artifact_query` is never used
+  --> src/updater/artifact.rs:74:8
+   |
+74 | pub fn current_update_artifact_query(update_msi: bool) -> UpdateArtifactQuery<'static> {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verified_update_artifact_for_release_page_url` is never used
+  --> src/updater/artifact.rs:82:8
+   |
+82 | pub fn verified_update_artifact_for_release_page_url(
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verified_update_artifact_for_download_url` is never used
+  --> src/updater/artifact.rs:91:8
+   |
+91 | pub fn verified_update_artifact_for_download_url(
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verified_update_artifact_from_release_page_url` is never used
+   --> src/updater/artifact.rs:103:15
+    |
+103 | pub(super) fn verified_update_artifact_from_release_page_url(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `fetch_update_sidecar_bytes` is never used
+   --> src/updater/artifact.rs:124:4
+    |
+124 | fn fetch_update_sidecar_bytes(url: &str) -> ResultType<Vec<u8>> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `read_limited_response_bytes` is never used
+   --> src/updater/artifact.rs:143:4
+    |
+143 | fn read_limited_response_bytes<R: Read>(
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `ensure_verified_update_artifact` is never used
+  --> src/updater/download.rs:10:15
+   |
+10 | pub(super) fn ensure_verified_update_artifact(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `cached_update_artifact_size` is never used
+  --> src/updater/download.rs:52:4
+   |
+52 | fn cached_update_artifact_size(file_path: &Path) -> ResultType<Option<u64>> {
+   |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `verify_file_sha256` is never used
+   --> src/updater/download.rs:195:4
+    |
+195 | fn verify_file_sha256(path: &Path, expected_sha256: &str) -> ResultType<()> {
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `close_window` is never used
+   --> src/ui_cm_interface.rs:412:8
+    |
+412 | pub fn close_window(id: i32) {
+    |        ^^^^^^^^^^^^
+
+warning: function `http_request` is never used
+   --> src/ui_interface.rs:911:8
+    |
+911 | pub fn http_request(url: String, method: String, body: Option<String>, header: String) {
+    |        ^^^^^^^^^^^^
+
+warning: function `get_async_http_status` is never used
+   --> src/ui_interface.rs:931:8
+    |
+931 | pub fn get_async_http_status(url: String) -> Option<String> {
+    |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `message` is never used
+    --> src/ui_interface.rs:1119:12
+     |
+1118 | impl DeployResult {
+     | ----------------- method in this implementation
+1119 |     pub fn message(&self) -> String {
+     |            ^^^^^^^
+
+warning: function `has_valid_bot` is never used
+    --> src/ui_interface.rs:1708:8
+     |
+1708 | pub fn has_valid_bot() -> bool {
+     |        ^^^^^^^^^^^^^
+
+warning: function `verify_bot` is never used
+    --> src/ui_interface.rs:1712:8
+     |
+1712 | pub fn verify_bot(token: String) -> String {
+     |        ^^^^^^^^^^
+
+warning: enum `HbbHttpResponse` is never used
+  --> src/hbbs_http.rs:17:10
+   |
+17 | pub enum HbbHttpResponse<T> {
+   |          ^^^^^^^^^^^^^^^
+
+warning: associated function `parse` is never used
+  --> src/hbbs_http.rs:25:12
+   |
+24 | impl<T: DeserializeOwned> HbbHttpResponse<T> {
+   | -------------------------------------------- associated function in this implementation
+25 |     pub fn parse(body: &str) -> ResultType<Self> {
+   |            ^^^^^
+
+warning: struct `DownloadData` is never constructed
+  --> src/hbbs_http/downloader.rs:26:12
+   |
+26 | pub struct DownloadData {
+   |            ^^^^^^^^^^^^
+
+warning: struct `Downloader` is never constructed
+  --> src/hbbs_http/downloader.rs:39:8
+   |
+39 | struct Downloader {
+   |        ^^^^^^^^^^
+
+warning: method `matches_request` is never used
+  --> src/hbbs_http/downloader.rs:51:8
+   |
+50 | impl Downloader {
+   | --------------- method in this implementation
+51 |     fn matches_request(&self, path: &Option<PathBuf>, options: &DownloadOptions) -> bool {
+   |        ^^^^^^^^^^^^^^^
+
+warning: struct `DownloadOptions` is never constructed
+  --> src/hbbs_http/downloader.rs:58:12
+   |
+58 | pub struct DownloadOptions {
+   |            ^^^^^^^^^^^^^^^
+
+warning: struct `DownloadRequest` is never constructed
+  --> src/hbbs_http/downloader.rs:63:8
+   |
+63 | struct DownloadRequest {
+   |        ^^^^^^^^^^^^^^^
+
+warning: function `download_file` is never used
+  --> src/hbbs_http/downloader.rs:71:8
+   |
+71 | pub fn download_file(
+   |        ^^^^^^^^^^^^^
+
+warning: function `prepare_download_path` is never used
+   --> src/hbbs_http/downloader.rs:183:4
+    |
+183 | fn prepare_download_path(path: &PathBuf) -> ResultType<()> {
+    |    ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `do_download` is never used
+   --> src/hbbs_http/downloader.rs:196:10
+    |
+196 | async fn do_download(
+    |          ^^^^^^^^^^^
+
+warning: function `get_download_data` is never used
+   --> src/hbbs_http/downloader.rs:297:8
+    |
+297 | pub fn get_download_data(id: &str) -> ResultType<DownloadData> {
+    |        ^^^^^^^^^^^^^^^^^
+
+warning: function `cancel` is never used
+   --> src/hbbs_http/downloader.rs:319:8
+    |
+319 | pub fn cancel(id: &str) {
+    |        ^^^^^^
+
+warning: function `remove` is never used
+   --> src/hbbs_http/downloader.rs:326:8
+    |
+326 | pub fn remove(id: &str) {
+    |        ^^^^^^
+
+warning: function `create_http_client_with_url_strict` is never used
+   --> src/hbbs_http/http_client.rs:142:8
+    |
+142 | pub fn create_http_client_with_url_strict(url: &str) -> ResultType<SyncClient> {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `create_http_client_async_with_url` is never used
+   --> src/hbbs_http/http_client.rs:260:14
+    |
+260 | pub async fn create_http_client_async_with_url(url: &str) -> AsyncClient {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `create_http_client_async_with_url_strict` is never used
+   --> src/hbbs_http/http_client.rs:278:14
+    |
+278 | pub async fn create_http_client_async_with_url_strict(url: &str) -> ResultType<AsyncClient> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `create_http_client_async_with_url_` is never used
+   --> src/hbbs_http/http_client.rs:306:10
+    |
+306 | async fn create_http_client_async_with_url_(
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: suspicious definition of the runtime `write` symbol used by the standard library
+    --> src/server/uinput.rs:1339:9
+     |
+1339 |         fn write(fd: c_int, buf: *mut InputEvent, count: usize) -> c_long;
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: expected `unsafe extern "C" fn(i32, *const c_void, usize) -> isize` (for the current target)
+             found    `unsafe extern "C" fn(i32, *mut server::uinput::mouce::InputEvent, usize) -> i64`
+     = help: either fix the signature or remove any attributes like `#[unsafe(no_mangle)]`, `#[unsafe(export_name = "write")]`, or `#[link_name = "write"]`
+     = help: allow this lint if the signature is compatible
+     = note: `#[warn(suspicious_runtime_symbol_definitions)]` on by default
+
+warning: module `pt_BR` should have a snake case name
+  --> src/lang.rs:36:5
+   |
+36 | mod pt_BR;
+   |     ^^^^^ help: convert the identifier to snake case: `pt_br`
+   |
+   = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: module `pt_PT` should have a snake case name
+  --> src/lang.rs:37:5
+   |
+37 | mod pt_PT;
+   |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
+
+warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 22s
+     Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
+
+running 2 tests
+test dauverse::service_ctrl::tests::ft010_b03_live_engine_connection_revoke_cuts_capabilities_disconnects_and_fails_on_timeout ... ok
+test server::connection::test::ft010_b03_real_engine_connection_capability_and_port_forward_cutoff_on_revoke ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 247 filtered out; finished in 0.47s
+

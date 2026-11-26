@@ -924,7 +924,7 @@ warning: module `pt_PT` should have a snake case name
    |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
 
 warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.72s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.85s
      Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
 
 running 33 tests
@@ -962,5 +962,5 @@ test dauverse::transfer_guard::tests::rejects_traversal_unc_reserved_and_symlink
 test dauverse::update_center::tests::f12_blocks_downgrade_tampered_hash_and_ignores_spoofed_caller_signature_enum ... ok
 test dauverse::security::tests::f05_f07_step_up_pin_blocks_unauthenticated_overwrite_enforces_lockout_expiry_and_corrupted_vault_fail_closed ... ok
 
-test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 216 filtered out; finished in 9.70s
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 216 filtered out; finished in 11.05s
 
