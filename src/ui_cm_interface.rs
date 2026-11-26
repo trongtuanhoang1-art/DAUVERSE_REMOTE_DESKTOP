@@ -1085,7 +1085,9 @@ async fn handle_fs(
                 .drain(..)
                 .map(|f| FileEntry {
                     name: f.0,
-                    modified_time: f.1,
+                    size: f.1,
+                    modified_time: f.2,
+                    sha256: f.3,
                     ..Default::default()
                 })
                 .collect();
@@ -1107,29 +1109,77 @@ async fn handle_fs(
                 send_raw(fs::new_error(id, e, file_num), tx);
                 return;
             }
-            for entry in job.files() {
-                if let Err(guard_err) = crate::dauverse::transfer_guard::validate_and_resolve_destination(
-                    std::path::Path::new(&path),
-                    &entry.name,
-                    crate::dauverse::transfer_guard::DuplicateFileStrategy::OverwriteConfirmed,
-                ) {
+            job.total_size = total_size;
+            job.conn_id = conn_id;
+            if job.files().is_empty() {
+                if total_size > 0 {
+                    let msg =
+                        "SECURITY_REJECT_EMPTY_FILES_WITH_NONZERO_SIZE: empty file manifest declared non-zero total_size"
+                            .to_owned();
                     crate::dauverse::DauverseRuntime::global().security.append_audit(
                         "FILE_TRANSFER_HOST",
                         "INCOMING_FILE_WRITE_GUARD",
                         "DENIED",
-                        &guard_err,
+                        &msg,
                     );
-                    log::warn!("DAUVERSE transfer_guard rejected incoming file '{}': {}", entry.name, guard_err);
-                    send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(guard_err), file_num), tx);
+                    send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(msg), file_num), tx);
                     return;
                 }
+                if let Err(sym_err) =
+                    crate::dauverse::crypto_util::check_no_symlink_or_reparse_component(
+                        std::path::Path::new(&path),
+                    )
+                {
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "INCOMING_FILE_WRITE_GUARD",
+                        "DENIED",
+                        &sym_err,
+                    );
+                    send_raw(
+                        fs::new_error(id, hbb_common::anyhow::anyhow!(sym_err), file_num),
+                        tx,
+                    );
+                    return;
+                }
+            } else {
+                let (dest_root, file_specs) =
+                    match crate::dauverse::transfer_guard::resolve_transfer_manifest_root_and_specs(
+                        std::path::Path::new(&path),
+                        job.files(),
+                    ) {
+                        Ok(v) => v,
+                        Err(guard_err) => {
+                            crate::dauverse::DauverseRuntime::global().security.append_audit(
+                                "FILE_TRANSFER_HOST",
+                                "INCOMING_FILE_WRITE_GUARD",
+                                "DENIED",
+                                &guard_err,
+                            );
+                            hbb_common::throttled_log!(
+                                std::time::Duration::from_secs(30),
+                                warn,
+                                "DAUVERSE transfer_guard rejected incoming manifest for '{}': {}",
+                                path,
+                                guard_err
+                            );
+                            send_raw(
+                                fs::new_error(id, hbb_common::anyhow::anyhow!(guard_err), file_num),
+                                tx,
+                            );
+                            return;
+                        }
+                    };
+                crate::dauverse::DauverseRuntime::global()
+                    .transfer_queue
+                    .track_engine_receive_start_manifest(
+                        id,
+                        conn_id,
+                        &dest_root.to_string_lossy(),
+                        file_specs,
+                        total_size,
+                    );
             }
-            let all_rels: Vec<String> = job.files().iter().map(|f| f.name.clone()).collect();
-            job.total_size = total_size;
-            job.conn_id = conn_id;
-            crate::dauverse::DauverseRuntime::global()
-                .transfer_queue
-                .track_engine_receive_start_batch(id, conn_id, &path, all_rels, total_size);
             write_jobs.push(job);
         }
         ipc::FS::CancelWrite { id } => {
@@ -1169,21 +1219,37 @@ async fn handle_fs(
                     send_raw(fs::new_error(id, flush_err, file_num), tx);
                     return;
                 }
-                job.modify_time();
-                if let Err(integrity_err) = crate::dauverse::DauverseRuntime::global()
-                    .transfer_queue
-                    .verify_and_finalize_engine_receive(id)
-                {
-                    crate::dauverse::DauverseRuntime::global().security.append_audit(
-                        "FILE_TRANSFER_HOST",
-                        "RECEIVE_INTEGRITY_VERIFICATION",
-                        "FAILED",
-                        &integrity_err,
-                    );
-                    log::warn!("DAUVERSE receive integrity verification failed for job {}: {}", id, integrity_err);
-                    tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &integrity_err)));
-                    send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(integrity_err), file_num), tx);
+                if job.job_skipped() {
+                    crate::dauverse::DauverseRuntime::global()
+                        .transfer_queue
+                        .track_engine_receive_finish(id, false, true, Some("skipped"));
+                    tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, true, "skipped")));
+                    send_raw(fs::new_error(id, "skipped", file_num), tx);
                     return;
+                }
+                job.modify_time();
+                if !job.files().is_empty() {
+                    if let Err(integrity_err) = crate::dauverse::DauverseRuntime::global()
+                        .transfer_queue
+                        .verify_and_finalize_engine_receive(id)
+                    {
+                        crate::dauverse::DauverseRuntime::global().security.append_audit(
+                            "FILE_TRANSFER_HOST",
+                            "RECEIVE_INTEGRITY_VERIFICATION",
+                            "FAILED",
+                            &integrity_err,
+                        );
+                        hbb_common::throttled_log!(
+                            std::time::Duration::from_secs(30),
+                            warn,
+                            "DAUVERSE receive integrity verification failed for job {}: {}",
+                            id,
+                            integrity_err
+                        );
+                        tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &integrity_err)));
+                        send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(integrity_err), file_num), tx);
+                        return;
+                    }
                 }
                 send_raw(fs::new_done(id, file_num), tx);
                 tx_log.map(|tx| tx.send(serialize_transfer_job(&job, true, false, "")));

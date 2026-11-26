@@ -12,287 +12,6 @@ warning: `package.homepage` is redundant with `package.repository`
    = note: `cargo::redundant_homepage` is set to `warn` by default
 help: consider removing `package.homepage`
 warning: `enigo` (manifest) generated 1 warning
- Downloading crates ...
-  Downloaded ansi_term v0.12.1
-  Downloaded addr2line v0.22.0
-  Downloaded calloop v0.14.3
-  Downloaded calloop-wayland-source v0.4.1
-  Downloaded cfg_aliases v0.1.1
-  Downloaded cursor-icon v1.2.0
-  Downloaded foreign-types v0.3.2
-  Downloaded foreign-types-shared v0.1.1
-  Downloaded gimli v0.29.0
-  Downloaded iana-time-zone v0.1.60
-  Downloaded memoffset v0.9.1
-  Downloaded linux-raw-sys v0.4.14
-  Downloaded linux-raw-sys v0.11.0
-  Downloaded nix v0.28.0
-  Downloaded object v0.36.1
-  Downloaded openssl-macros v0.1.1
-  Downloaded openssl-probe v0.1.5
-  Downloaded openssl-sys v0.9.104
-  Downloaded openssl v0.10.68
-  Downloaded polling v3.7.2
-  Downloaded quick-xml v0.37.5
-  Downloaded rustix v1.1.2
-  Downloaded signal-hook-registry v1.4.2
-  Downloaded smithay-client-toolkit v0.20.0
-  Downloaded users v0.11.0
-  Downloaded vcpkg v0.2.15
-  Downloaded wayland-client v0.31.11
-  Downloaded wayland-csd-frame v0.3.0
-  Downloaded wayland-cursor v0.31.5
-  Downloaded wayland-backend v0.3.11
-  Downloaded wayland-protocols v0.32.9
-  Downloaded wayland-protocols-experimental v20250721.0.1
-  Downloaded wayland-protocols-misc v0.3.9
-  Downloaded wayland-protocols-wlr v0.3.9
-  Downloaded wayland-scanner v0.31.7
-  Downloaded wayland-sys v0.31.7
-  Downloaded x11 v2.21.0
-  Downloaded xkeysym v0.2.1
-  Downloaded xcursor v0.3.10
-   Compiling libc v0.2.171
-   Compiling cfg-if v1.0.0
-   Compiling proc-macro2 v1.0.93
-   Compiling unicode-ident v1.0.12
-   Compiling quote v1.0.36
-   Compiling shlex v1.3.0
-   Compiling jobserver v0.1.31
-   Compiling cc v1.2.13
-   Compiling memchr v2.7.4
-   Compiling pkg-config v0.3.30
-   Compiling syn v2.0.98
-   Compiling bitflags v2.9.1
-   Compiling autocfg v1.3.0
-   Compiling log v0.4.22
-   Compiling serde_core v1.0.228
-   Compiling serde v1.0.228
-   Compiling smallvec v1.15.1
-   Compiling once_cell v1.19.0
-   Compiling aho-corasick v1.1.3
-   Compiling regex-syntax v0.8.5
-   Compiling regex-automata v0.4.9
-   Compiling rustix v0.38.34
-   Compiling either v1.13.0
-   Compiling pin-project-lite v0.2.14
-   Compiling thiserror v1.0.61
-   Compiling linux-raw-sys v0.4.14
-   Compiling regex v1.11.1
-   Compiling thiserror-impl v1.0.61
-   Compiling rustix v1.1.2
-   Compiling slab v0.4.9
-   Compiling wayland-sys v0.31.7
-   Compiling home v0.5.9
-   Compiling linux-raw-sys v0.11.0
-   Compiling which v4.4.2
-   Compiling wayland-backend v0.3.11
-   Compiling getrandom v0.2.15
-   Compiling version_check v0.9.4
-   Compiling crossbeam-utils v0.8.20
-   Compiling zeroize v1.8.1
-   Compiling vcpkg v0.2.15
-   Compiling typenum v1.17.0
-   Compiling openssl-sys v0.9.104
-   Compiling rustls-pki-types v1.15.1
-   Compiling generic-array v0.14.7
-   Compiling bytes v1.11.1
-   Compiling lock_api v0.4.12
-   Compiling ring v0.17.14
-   Compiling anyhow v1.0.98
-   Compiling equivalent v1.0.1
-   Compiling downcast-rs v1.2.1
-   Compiling parking_lot_core v0.9.10
-   Compiling hashbrown v0.14.5
-   Compiling glob v0.3.1
-   Compiling indexmap v2.2.6
-   Compiling protobuf-support v3.7.2
-   Compiling quick-xml v0.37.5
-   Compiling getrandom v0.3.2
-   Compiling wayland-client v0.31.11
-   Compiling protobuf v3.7.2
-   Compiling scopeguard v1.2.0
-   Compiling wayland-scanner v0.31.7
-   Compiling clang-sys v1.8.1
-   Compiling futures-sink v0.3.31
-   Compiling fastrand v2.1.0
-   Compiling futures-core v0.3.31
-   Compiling untrusted v0.9.0
-   Compiling futures-channel v0.3.31
-   Compiling tempfile v3.10.1
-   Compiling parking_lot v0.12.3
-   Compiling tokio-macros v2.5.0
-   Compiling futures-macro v0.3.31
-   Compiling socket2 v0.5.10
-   Compiling mio v1.0.3
-   Compiling signal-hook-registry v1.4.2
-   Compiling atty v0.2.14
-   Compiling pin-utils v0.1.0
-   Compiling minimal-lexical v0.2.1
-   Compiling lazy_static v1.5.0
-   Compiling openssl v0.10.68
-   Compiling openssl-probe v0.1.5
-   Compiling rustls v0.23.28
-   Compiling foreign-types-shared v0.1.1
-   Compiling futures-io v0.3.31
-   Compiling proc-macro2 v0.4.30
-   Compiling humantime v2.1.0
-   Compiling ppv-lite86 v0.2.17
-   Compiling unicode-width v0.1.13
-   Compiling crossbeam-epoch v0.9.20
-   Compiling thiserror v2.0.17
-   Compiling futures-task v0.3.31
-   Compiling futures-util v0.3.31
-   Compiling textwrap v0.11.0
-   Compiling foreign-types v0.3.2
-   Compiling protobuf-parse v3.7.2
-   Compiling nom v7.1.3
-   Compiling tokio v1.44.2
-   Compiling rustls-webpki v0.103.16
-   Compiling crypto-common v0.1.6
-   Compiling block-buffer v0.10.4
-   Compiling thiserror-impl v2.0.17
-   Compiling openssl-macros v0.1.1
-   Compiling zstd-sys v2.0.11+zstd.1.5.6
-   Compiling libloading v0.8.4
-   Compiling strsim v0.8.0
-   Compiling subtle v2.6.1
-   Compiling native-tls v0.2.12
-   Compiling same-file v1.0.6
-   Compiling bindgen v0.59.2
-   Compiling ansi_term v0.12.1
-   Compiling vec_map v0.8.2
-   Compiling bitflags v1.3.2
-   Compiling unicode-xid v0.1.0
-   Compiling termcolor v1.4.1
-   Compiling env_logger v0.9.3
-   Compiling clap v2.34.0
-   Compiling walkdir v2.5.0
-   Compiling digest v0.10.7
-   Compiling cexpr v0.6.0
-   Compiling protobuf-codegen v3.7.2
-   Compiling rand_core v0.9.3
-   Compiling memoffset v0.9.1
-   Compiling num-traits v0.2.19
-   Compiling tinyvec_macros v0.1.1
-   Compiling tracing-core v0.1.34
-   Compiling lazycell v1.3.0
-   Compiling rustc-hash v1.1.0
-   Compiling httparse v1.10.1
-   Compiling peeking_take_while v0.1.2
-   Compiling cpufeatures v0.2.12
-   Compiling rayon-core v1.12.1
-   Compiling cfg_aliases v0.1.1
-   Compiling syn v0.15.44
-   Compiling itoa v1.0.11
-   Compiling nix v0.28.0
-   Compiling tracing v0.1.41
-   Compiling tinyvec v1.6.1
-   Compiling rand_chacha v0.9.0
-   Compiling crossbeam-deque v0.8.5
-   Compiling libsodium-sys v0.2.7
-   Compiling quote v0.6.13
-   Compiling rustls-native-certs v0.8.1
-   Compiling wayland-protocols v0.32.9
-   Compiling webpki-roots v1.0.12
-   Compiling dirs-sys-next v0.1.2
-   Compiling fnv v1.0.7
-   Compiling utf8parse v0.2.2
-   Compiling zstd-safe v7.1.0
-   Compiling anstyle-parse v0.2.4
-   Compiling http v1.3.1
-   Compiling webpki-roots v0.26.11
-   Compiling rand v0.9.2
-   Compiling unicode-normalization v0.1.23
-   Compiling machine-uid v0.3.0 (https://github.com/rustdesk-org/machine-uid#381ff579)
-   Compiling polling v3.7.2
-   Compiling sha1 v0.10.6
-   Compiling rand_core v0.6.4
-   Compiling serde_spanned v0.6.6
-   Compiling toml_datetime v0.6.3
-   Compiling pin-project-internal v1.1.5
-   Compiling x11 v2.21.0
-   Compiling colorchoice v1.0.1
-   Compiling data-encoding v2.9.0
-   Compiling percent-encoding v2.3.1
-   Compiling serde_json v1.0.118
-   Compiling winnow v0.5.40
-   Compiling is_terminal_polyfill v1.70.0
-   Compiling iana-time-zone v0.1.60
-   Compiling anstyle v1.0.13
-   Compiling unicode-bidi v0.3.15
-   Compiling signature v1.6.4
-   Compiling anstyle-query v1.1.0
-   Compiling anstream v0.6.14
-   Compiling ed25519 v1.5.3
-   Compiling idna v0.5.0
-   Compiling chrono v0.4.41
-   Compiling toml_edit v0.19.15
-   Compiling form_urlencoded v1.2.1
-   Compiling tungstenite v0.29.0 (https://github.com/rustdesk-org/tungstenite-rs?rev=efce47e5364f00a63302cf07ab1fb13ded478914#efce47e5)
-   Compiling pin-project v1.1.5
-   Compiling rand_chacha v0.3.1
-   Compiling calloop v0.14.3
-   Compiling rayon v1.10.0
-   Compiling dlopen_derive v0.1.4
-   Compiling directories-next v2.0.0
-   Compiling tokio-native-tls v0.3.1
-   Compiling hbb_common v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/hbb_common)
-   Compiling tokio-rustls v0.26.0
-   Compiling tokio-util v0.7.15
-   Compiling futures-executor v0.3.30
-   Compiling crossbeam-channel v0.5.13
-   Compiling crossbeam-queue v0.3.11
-   Compiling env_filter v0.1.3
-   Compiling toml v0.5.11
-   Compiling backtrace v0.3.73
-   Compiling is-terminal v0.4.16
-   Compiling gimli v0.29.0
-   Compiling nu-ansi-term v0.49.0
-   Compiling adler v1.0.2
-   Compiling smithay-client-toolkit v0.20.0
-   Compiling cursor-icon v1.2.0
-   Compiling ryu v1.0.18
-   Compiling xcursor v0.3.10
-   Compiling wayland-cursor v0.31.5
-   Compiling wayland-csd-frame v0.3.0
-   Compiling miniz_oxide v0.7.4
-   Compiling flexi_logger v0.27.4
-   Compiling addr2line v0.22.0
-   Compiling confy v0.4.0-2 (https://github.com/rustdesk-org/confy#83db9ec1)
-   Compiling env_logger v0.11.6
-   Compiling futures v0.3.30
-   Compiling tokio-socks v0.5.2-3 (https://github.com/rustdesk-org/tokio-socks#bdb9aa3d)
-   Compiling tokio-tungstenite v0.29.0 (https://github.com/rustdesk-org/tokio-tungstenite?rev=c241b11b03de4881faf1ecd2fe6e867c92f3013b#c241b11b)
-   Compiling dlopen v0.1.8
-   Compiling sysinfo v0.29.10 (https://github.com/rustdesk-org/sysinfo?branch=rlim_max#90b1705d)
-   Compiling calloop-wayland-source v0.4.1
-   Compiling zstd v0.13.1
-   Compiling mac_address v1.1.7
-   Compiling rand v0.8.5
-   Compiling url v2.5.2
-   Compiling toml v0.7.8
-   Compiling wayland-protocols-wlr v0.3.9
-   Compiling wayland-protocols-experimental v20250721.0.1
-   Compiling wayland-protocols-misc v0.3.9
-   Compiling dirs-next v2.0.0
-   Compiling rustls-platform-verifier v0.6.2
-   Compiling sha2 v0.10.8
-   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
-   Compiling uuid v1.16.0
-   Compiling default_net v0.1.0 (https://github.com/rustdesk-org/default_net#78f8f70c)
-   Compiling async-recursion v1.1.1
-   Compiling serde_derive v1.0.228
-   Compiling users v0.11.0
-   Compiling object v0.36.1
-   Compiling memmap2 v0.9.8
-   Compiling socket2 v0.3.19
-   Compiling rustc-demangle v0.1.24
-   Compiling base64 v0.22.1
-   Compiling whoami v1.6.0
-   Compiling xkeysym v0.2.1
-   Compiling filetime v0.2.23
-   Compiling sodiumoxide v0.2.7
 warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
    --> libs/hbb_common/src/lib.rs:192:41
     |
@@ -313,11 +32,12 @@ help: replace the use of the deprecated method
 365 +                     .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
     |
 
+   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
 warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_common` to apply 1 suggestion)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 4m 38s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.43s
      Running unittests src/lib.rs (target/debug/build/base/ef3382270ef47cae/out/base-ef3382270ef47cae)
 
-running 24 tests
+running 26 tests
 test fs::android::metadata_tests::negative_modification_time_is_unknown ... ok
 test fs::android::tests::document_paths_cannot_escape_the_selected_location ... ok
 test config::keys::tests::key_names_do_not_collide_with_hbb_common ... ok
@@ -329,7 +49,9 @@ test fs::download_tests::download_refuses_linked_target_and_staging_files ... ok
 test fs::download_tests::download_refuses_symlink_destination_directory ... ok
 test fs::download_tests::download_requires_confirmation_to_overwrite ... ok
 test fs::download_tests::download_requires_separate_confirmation_for_each_existing_file ... ok
+test fs::download_tests::f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch ... ok
 test fs::tests::compressed_file_extensions_ignore_case ... ok
+test fs::tests::f16_new_read_populates_sha256_and_detects_mid_transfer_mutation_and_corrupted_staging ... ok
 test fs::tests::path_traversal_e2e_write_rejects_absolute_path ... ok
 test fs::tests::path_traversal_e2e_write_rejects_relative_escape ... ok
 test fs::tests::path_traversal_e2e_write_rejects_symlink_escape ... ok
@@ -343,5 +65,5 @@ test platform::linux::tests::test_shell_quote_metacharacters ... ok
 test platform::linux::tests::test_shell_quote_single_quotes ... ok
 test fs::android::tests::selected_folder_transfers_directly_and_preserves_data_on_publish_failure ... ok
 
-test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
 

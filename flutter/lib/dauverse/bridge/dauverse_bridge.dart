@@ -30,17 +30,44 @@ typedef RealSessionLauncher = Future<void> Function(
 class DauverseNativeBridge {
   static final DauverseNativeBridge instance = DauverseNativeBridge._();
 
+  static const bool isReleaseBuild = bool.fromEnvironment('dart.vm.product');
+
   static bool _testHarnessMode = false;
   static bool _forceUnboundForTest = false;
 
   @visibleForTesting
   static void setTestHarnessMode(bool enabled) {
-    _testHarnessMode = enabled;
+    if (isReleaseBuild) {
+      throw UnsupportedError(
+        'SECURITY_DENY_RELEASE_TEST_HARNESS: Test harness mode is compiled out of release builds.',
+      );
+    }
+    assert(() {
+      _testHarnessMode = enabled;
+      return true;
+    }());
   }
 
   @visibleForTesting
   static void setForceUnboundForTest(bool forceUnbound) {
-    _forceUnboundForTest = forceUnbound;
+    if (isReleaseBuild) {
+      throw UnsupportedError(
+        'SECURITY_DENY_RELEASE_TEST_HARNESS: Force-unbound test hook is compiled out of release builds.',
+      );
+    }
+    assert(() {
+      _forceUnboundForTest = forceUnbound;
+      return true;
+    }());
+  }
+
+  @visibleForTesting
+  static void assertReleaseIsolationPolicy({required bool simulatedReleaseFlag}) {
+    if (simulatedReleaseFlag) {
+      throw UnsupportedError(
+        'SECURITY_DENY_RELEASE_TEST_HARNESS: Test harness mode is compiled out of release builds.',
+      );
+    }
   }
 
   _DauverseInvokeDart? _invoke;
@@ -51,7 +78,17 @@ class DauverseNativeBridge {
     _tryBindNative();
   }
 
-  bool get isNativeBound => _bound && !_forceUnboundForTest;
+  bool get isNativeBound {
+    if (isReleaseBuild) {
+      return _bound;
+    }
+    var forcedUnbound = false;
+    assert(() {
+      forcedUnbound = _forceUnboundForTest;
+      return true;
+    }());
+    return _bound && !forcedUnbound;
+  }
 
   void _tryBindNative() {
     if (kIsWeb) return;
@@ -103,16 +140,28 @@ class DauverseNativeBridge {
       }
     }
 
-    if (!_testHarnessMode) {
-      return {
-        'ok': false,
-        'backend_available': false,
-        'error':
-            'NATIVE_FFI_UNBOUND_FAIL_CLOSED: librustdesk native backend is unavailable; refused "$command".',
-      };
+    if (!isReleaseBuild) {
+      Map<String, dynamic>? harnessResult;
+      assert(() {
+        if (_testHarnessMode) {
+          harnessResult = _widgetTestHarnessOnlyState(
+            command,
+            payload ?? const <String, dynamic>{},
+          );
+        }
+        return true;
+      }());
+      if (harnessResult != null) {
+        return harnessResult!;
+      }
     }
 
-    return _widgetTestHarnessOnlyState(command, payload ?? const <String, dynamic>{});
+    return {
+      'ok': false,
+      'backend_available': false,
+      'error':
+          'NATIVE_FFI_UNBOUND_FAIL_CLOSED: librustdesk native backend is unavailable; refused "$command".',
+    };
   }
 
   Map<String, dynamic> _widgetTestHarnessOnlyState(String cmd, Map<String, dynamic> args) {

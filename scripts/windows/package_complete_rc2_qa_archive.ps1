@@ -35,6 +35,7 @@ $OutputDir     = (Resolve-Path -LiteralPath $OutputDir).Path
 $ReleaseDir    = Join-Path $WorkspaceRoot "RELEASE"
 $StagingAppDir = Join-Path $WorkspaceRoot "STAGING\DAUVERSE_REMOTE_APP"
 $ExpectedCodexReportSha = "f07b61edbd82a376cc5e3f854d72d0cc3331735094bc0631e37fbc9ebc60a913"
+$ExpectedCodexRc2ReQaReportSha = "c23d36e7d83b2fb1402238d8a8501b9de899fcd94b2774155b6a602fd77fb954"
 
 function Assert-PackCondition {
     param([bool]$Condition, [string]$Message)
@@ -104,12 +105,23 @@ if (Test-Path -LiteralPath $RepoEvDir) {
     }
 }
 
-Write-Host "=== [2/5] Staging Original Codex QA Report, Remediation Matrix, Handoff, Docs & Licenses ==="
+Write-Host "=== [2/5] Staging Original Codex QA Reports, Remediation Matrix, Handoff, Docs & Licenses ==="
 $CodexReportSrc = Join-Path $RepoRoot "QA\DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md"
 Assert-PackCondition (Test-Path -LiteralPath $CodexReportSrc) "Missing QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md"
 $ActualCodexSha = (Get-FileHash -LiteralPath $CodexReportSrc -Algorithm SHA256).Hash.ToLowerInvariant()
 Assert-PackCondition ($ActualCodexSha -eq $ExpectedCodexReportSha) "Codex QA report SHA-256 mismatch! Expected $ExpectedCodexReportSha, got $ActualCodexSha"
 Copy-Item -LiteralPath $CodexReportSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md") -Force
+
+$CodexReQaReportSrc = Join-Path $RepoRoot "QA\DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md"
+Assert-PackCondition (Test-Path -LiteralPath $CodexReQaReportSrc) "Missing QA/DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md"
+$ActualCodexReQaSha = (Get-FileHash -LiteralPath $CodexReQaReportSrc -Algorithm SHA256).Hash.ToLowerInvariant()
+Assert-PackCondition ($ActualCodexReQaSha -eq $ExpectedCodexRc2ReQaReportSha) "Codex RC2 Re-QA report SHA-256 mismatch! Expected $ExpectedCodexRc2ReQaReportSha, got $ActualCodexReQaSha"
+Copy-Item -LiteralPath $CodexReQaReportSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md") -Force
+
+$Rc3HandoffSrc = Join-Path $RepoRoot "DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md"
+if (Test-Path -LiteralPath $Rc3HandoffSrc) {
+    Copy-Item -LiteralPath $Rc3HandoffSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md") -Force
+}
 
 $MatrixSrc = Join-Path $RepoRoot "FINDINGS_REMEDIATION_MATRIX.md"
 Assert-PackCondition (Test-Path -LiteralPath $MatrixSrc) "Missing FINDINGS_REMEDIATION_MATRIX.md"

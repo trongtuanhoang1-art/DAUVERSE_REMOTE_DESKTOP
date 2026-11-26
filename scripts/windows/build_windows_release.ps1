@@ -389,9 +389,9 @@ try {
     }
 
     $BuildProv = [ordered]@{
-        schema_version = 2
-        task_id = "DREMOTE-V1-REMEDIATION-005"
-        release_candidate = "RC2"
+        schema_version = 3
+        task_id = "DREMOTE-V1-REMEDIATION-007"
+        release_candidate = "RC3"
         built_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         source = [ordered]@{
             repository = "trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP"
@@ -403,12 +403,12 @@ try {
         }
         ci_environment = [ordered]@{
             github_actions = ($env:GITHUB_ACTIONS -eq "true")
-            github_run_id = ($env:GITHUB_RUN_ID ?? "")
-            github_run_number = ($env:GITHUB_RUN_NUMBER ?? "")
-            github_workflow = ($env:GITHUB_WORKFLOW ?? "")
+            github_run_id = $(if ($env:GITHUB_RUN_ID) { $env:GITHUB_RUN_ID } else { "" })
+            github_run_number = $(if ($env:GITHUB_RUN_NUMBER) { $env:GITHUB_RUN_NUMBER } else { "" })
+            github_workflow = $(if ($env:GITHUB_WORKFLOW) { $env:GITHUB_WORKFLOW } else { "" })
             runner_os = [System.Environment]::OSVersion.VersionString
-            image_os = ($env:ImageOS ?? "")
-            image_version = ($env:ImageVersion ?? "")
+            image_os = $(if ($env:ImageOS) { $env:ImageOS } else { "" })
+            image_version = $(if ($env:ImageVersion) { $env:ImageVersion } else { "" })
         }
         resolved_toolchains = [ordered]@{
             rustc_verbose = $RustcVerbose

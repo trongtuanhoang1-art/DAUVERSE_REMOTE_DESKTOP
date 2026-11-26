@@ -11,22 +11,47 @@ import datetime
 import hashlib
 import hmac
 import json
+import math
 import os
 import socket
+import struct
 import sys
 import urllib.request
 import uuid
 
 
-def canonical_signing_bytes_v2(event: dict, issued_at_ms: int, nonce: str) -> bytes:
+def quantize_and_encode_f32(val: float, min_v: float, max_v: float, field_name: str) -> tuple[float, str]:
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"EVENT_REJECT_NON_NUMERIC_{field_name.upper()}")
+    f64 = float(val)
+    if not math.isfinite(f64):
+        raise ValueError(f"EVENT_REJECT_NON_FINITE_{field_name.upper()}")
+    raw_be = struct.pack(">f", f64)
+    f32_val = struct.unpack(">f", raw_be)[0]
+    bits = struct.unpack(">I", raw_be)[0]
+    if not math.isfinite(f32_val):
+        raise ValueError(f"EVENT_REJECT_NON_FINITE_{field_name.upper()}")
+    if bits == 0x80000000:
+        raise ValueError(f"EVENT_REJECT_NEGATIVE_ZERO_{field_name.upper()}")
+    if f32_val < min_v or f32_val > max_v:
+        raise ValueError(f"EVENT_REJECT_OUT_OF_RANGE_{field_name.upper()}")
+    return f32_val, f"f32:{bits:08x}"
+
+
+def canonical_signing_bytes_v3(event: dict, issued_at_ms: int, nonce: str) -> bytes:
     prov = event["provenance"]
     progress = event.get("progress")
-    progress_str = None if progress is None else f"{float(progress):.4f}"
-    confidence_str = f"{float(event['confidence']):.4f}"
+    if progress is None:
+        progress_tag = None
+    else:
+        f32_p, progress_tag = quantize_and_encode_f32(progress, 0.0, 100.0, "progress")
+        event["progress"] = f32_p
+    f32_c, confidence_tag = quantize_and_encode_f32(event["confidence"], 0.0, 1.0, "confidence")
+    event["confidence"] = f32_c
     arr = [
-        "DAUVERSE_AI_EVENT_V2",
-        2,
-        issued_at_ms,
+        "DAUVERSE_AI_EVENT_V3",
+        3,
+        int(issued_at_ms),
         nonce,
         event["event_id"],
         event["timestamp"],
@@ -38,10 +63,10 @@ def canonical_signing_bytes_v2(event: dict, issued_at_ms: int, nonce: str) -> by
         event["event_type"],
         event["status"],
         event["severity"],
-        progress_str,
+        progress_tag,
         event["summary"],
         event["artifact_reference"],
-        confidence_str,
+        confidence_tag,
         [
             prov["adapter_type"],
             bool(prov["evidence_verified"]),
@@ -49,16 +74,16 @@ def canonical_signing_bytes_v2(event: dict, issued_at_ms: int, nonce: str) -> by
             prov["evidence_badge"],
         ],
     ]
-    return json.dumps(arr, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(arr, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
 def sign_envelope(event: dict, secret_key: bytes, issued_at_ms: int, nonce: str) -> dict:
-    canonical = canonical_signing_bytes_v2(event, issued_at_ms, nonce)
+    canonical = canonical_signing_bytes_v3(event, issued_at_ms, nonce)
     sig_hex = hmac.new(secret_key, canonical, hashlib.sha256).hexdigest()
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "event": event,
-        "issued_at_ms": issued_at_ms,
+        "issued_at_ms": int(issued_at_ms),
         "nonce": nonce,
         "signature_hex": sig_hex,
     }

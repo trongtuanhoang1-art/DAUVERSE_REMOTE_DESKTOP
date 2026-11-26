@@ -3,9 +3,10 @@
   "phases": {
     "phase1": {
       "phase1": "PASS",
-      "bridge_port": 39109,
+      "bridge_port": 40349,
       "claude_exit": 0,
       "codex_exit": 0,
+      "pwsh_wrapper_tested": true,
       "vault_mode_octal": "0o600"
     },
     "phase2": {
@@ -17,6 +18,8 @@
         "summary",
         "severity",
         "progress",
+        "progress_f32_neighbor_42c80001",
+        "confidence_f32_neighbor_3f7fffff",
         "artifact_reference",
         "confidence",
         "provenance.adapter_type",
@@ -24,7 +27,9 @@
         "provenance.exit_code",
         "provenance.evidence_badge"
       ],
-      "schema_v1_rejected_http": 401,
+      "schema_v1_v2_downgrade_rejected": true,
+      "missing_schema_and_unknown_field_rejected_http_400": true,
+      "invalid_utf8_and_truncated_body_rejected_http_400": true,
       "untrusted_source_rejected_http": 401,
       "step_up_pin_overwrite_blocked": true,
       "step_up_pin_rotation_and_lockout_verified": true,
@@ -32,10 +37,14 @@
       "disconnected_measured_fps_is_none": true,
       "spoofed_unsigned_auto_update_blocked": true,
       "wol_dry_run_zero_side_effect": true,
-      "receive_sha256_truncation_and_symlink_defended": true
+      "f16_per_file_sha256_and_negative_suite_verified": true,
+      "n01_hmac_microsecond_scale_verified": true
     },
     "phase3_corrupt": {
       "phase3_corrupt_vault_fail_closed": "PASS"
+    },
+    "phase4_corrupt_replay": {
+      "phase4_corrupt_replay_journal_fail_closed_http": 503
     }
   }
 }

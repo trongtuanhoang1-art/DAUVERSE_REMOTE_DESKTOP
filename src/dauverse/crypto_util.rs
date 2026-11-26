@@ -397,8 +397,15 @@ pub fn default_durable_app_data_dir() -> PathBuf {
 }
 
 pub fn check_no_symlink_or_reparse_component(path: &Path) -> Result<(), String> {
-    let Ok(meta) = fs::symlink_metadata(path) else {
-        return Ok(());
+    let meta = match fs::symlink_metadata(path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(format!(
+                "SECURITY_STAT_FAILED: failed inspecting '{}': {e}",
+                path.display()
+            ));
+        }
     };
     if meta.file_type().is_symlink() {
         return Err(format!(
@@ -418,6 +425,196 @@ pub fn check_no_symlink_or_reparse_component(path: &Path) -> Result<(), String> 
         }
     }
     Ok(())
+}
+
+#[cfg(any(windows, test))]
+#[derive(Debug, PartialEq, Eq)]
+enum WinVolumeAuthority {
+    Drive(char),
+    Unc { server: String, share: String },
+}
+
+#[cfg(any(windows, test))]
+fn parse_windows_normalized_path(raw: &str) -> Result<(WinVolumeAuthority, Vec<String>), String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.contains('\0') {
+        return Err("SECURITY_REJECT_INVALID_WINDOWS_PATH: empty or NUL path".to_owned());
+    }
+    if trimmed.starts_with(r"\\.\") || trimmed.starts_with("//./") {
+        return Err(format!(
+            "SECURITY_REJECT_DEVICE_NAMESPACE: raw device path '{}' forbidden",
+            raw
+        ));
+    }
+
+    let unified = trimmed.replace('/', "\\");
+    let unc_rest = unified
+        .strip_prefix(r"\\?\UNC\")
+        .or_else(|| unified.strip_prefix(r"\\?\unc\"))
+        .or_else(|| unified.strip_prefix(r"\??\UNC\"))
+        .or_else(|| unified.strip_prefix(r"\??\unc\"))
+        .or_else(|| {
+            if unified.starts_with(r"\\?\") || unified.starts_with(r"\??\") {
+                None
+            } else {
+                unified.strip_prefix(r"\\")
+            }
+        });
+    let (authority, remainder) = if let Some(rest) = unc_rest {
+        let mut iter = rest.split('\\').filter(|s| !s.is_empty());
+        let Some(server) = iter.next() else {
+            return Err(format!("SECURITY_REJECT_MALFORMED_UNC: missing server in '{raw}'"));
+        };
+        let Some(share) = iter.next() else {
+            return Err(format!("SECURITY_REJECT_MALFORMED_UNC: missing share in '{raw}'"));
+        };
+        if server == "?"
+            || server == "."
+            || server == ".."
+            || share == "."
+            || share == ".."
+            || server.contains(':')
+            || share.contains(':')
+        {
+            return Err(format!("SECURITY_REJECT_MALFORMED_UNC: invalid UNC authority in '{raw}'"));
+        }
+        let rem: Vec<&str> = iter.collect();
+        (
+            WinVolumeAuthority::Unc {
+                server: server.to_ascii_lowercase(),
+                share: share.to_ascii_lowercase(),
+            },
+            rem.join("\\"),
+        )
+    } else {
+        let stripped = unified
+            .strip_prefix(r"\\?\")
+            .or_else(|| unified.strip_prefix(r"\??\"))
+            .unwrap_or(&unified);
+        let bytes = stripped.as_bytes();
+        if bytes.len() < 2 || !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' {
+            return Err(format!(
+                "SECURITY_REJECT_NON_ABSOLUTE_WINDOWS_PATH: '{}' lacks drive or UNC authority",
+                raw
+            ));
+        }
+        let after_colon = &stripped[2..];
+        if !after_colon.is_empty() && !after_colon.starts_with('\\') {
+            return Err(format!(
+                "SECURITY_REJECT_DRIVE_RELATIVE_PATH: '{}' is drive-relative",
+                raw
+            ));
+        }
+        (
+            WinVolumeAuthority::Drive((bytes[0] as char).to_ascii_lowercase()),
+            after_colon.trim_start_matches('\\').to_owned(),
+        )
+    };
+
+    let mut components = Vec::new();
+    if !remainder.is_empty() {
+        for raw_seg in remainder.split('\\') {
+            if raw_seg.is_empty() {
+                continue;
+            }
+            if raw_seg == "." || raw_seg == ".." {
+                return Err(format!(
+                    "SECURITY_REJECT_PATH_TRAVERSAL: dot traversal segment in '{raw}'"
+                ));
+            }
+            if raw_seg.contains(':') {
+                return Err(format!(
+                    "SECURITY_REJECT_ADS_STREAM: alternate data stream forbidden in '{raw}'"
+                ));
+            }
+            if raw_seg.ends_with('.') || raw_seg.ends_with(' ') {
+                return Err(format!(
+                    "SECURITY_REJECT_AMBIGUOUS_WINDOWS_SEGMENT: trailing dot/space in '{raw}'"
+                ));
+            }
+            components.push(raw_seg.to_ascii_lowercase());
+        }
+    }
+    Ok((authority, components))
+}
+
+#[cfg(any(windows, test))]
+pub fn verify_windows_final_path_confined(final_raw: &str, root_raw: &str) -> Result<(), String> {
+    let (final_auth, final_comps) = parse_windows_normalized_path(final_raw)?;
+    let (root_auth, root_comps) = parse_windows_normalized_path(root_raw)?;
+    if final_auth != root_auth {
+        return Err(format!(
+            "SECURITY_REJECT_HANDLE_ESCAPE: volume mismatch between '{}' and authorized root '{}'",
+            final_raw, root_raw
+        ));
+    }
+    if final_comps.len() <= root_comps.len() {
+        return Err(format!(
+            "SECURITY_REJECT_HANDLE_ESCAPE: handle '{}' is not strictly beneath authorized root '{}'",
+            final_raw, root_raw
+        ));
+    }
+    for (idx, root_seg) in root_comps.iter().enumerate() {
+        if &final_comps[idx] != root_seg {
+            return Err(format!(
+                "SECURITY_REJECT_HANDLE_ESCAPE: handle resolved to '{}' outside authorized root '{}'",
+                final_raw, root_raw
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn query_windows_final_handle_path(file: &File) -> Result<String, String> {
+    use std::os::windows::io::AsRawHandle;
+    use winapi::um::fileapi::GetFinalPathNameByHandleW;
+
+    const MAX_FINAL_PATH_WCHARS: usize = 32_768;
+    let mut buf = vec![0u16; 1024];
+    let first_len = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle() as *mut _,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            0,
+        )
+    } as usize;
+    if first_len == 0 {
+        return Err(format!(
+            "SECURITY_REJECT_HANDLE_FINAL_PATH_UNAVAILABLE: GetFinalPathNameByHandleW returned 0 ({})",
+            std::io::Error::last_os_error()
+        ));
+    }
+    if first_len < buf.len() {
+        return String::from_utf16(&buf[..first_len]).map_err(|e| {
+            format!("SECURITY_REJECT_INVALID_UTF16_FINAL_PATH: GetFinalPathNameByHandleW invalid UTF-16: {e}")
+        });
+    }
+    if first_len >= MAX_FINAL_PATH_WCHARS {
+        return Err(format!(
+            "SECURITY_REJECT_HANDLE_FINAL_PATH_OVERFLOW: required buffer {} exceeds {}",
+            first_len, MAX_FINAL_PATH_WCHARS
+        ));
+    }
+    buf.resize(first_len + 1, 0);
+    let second_len = unsafe {
+        GetFinalPathNameByHandleW(
+            file.as_raw_handle() as *mut _,
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+            0,
+        )
+    } as usize;
+    if second_len == 0 || second_len >= buf.len() {
+        return Err(format!(
+            "SECURITY_REJECT_HANDLE_FINAL_PATH_RETRY_FAILED: second_len={second_len}, cap={}",
+            buf.len()
+        ));
+    }
+    String::from_utf16(&buf[..second_len]).map_err(|e| {
+        format!("SECURITY_REJECT_INVALID_UTF16_FINAL_PATH: GetFinalPathNameByHandleW invalid UTF-16: {e}")
+    })
 }
 
 pub fn ensure_private_dir(dir: &Path) -> Result<(), String> {
@@ -451,6 +648,7 @@ pub fn write_atomic_bytes(path: &Path, data: &[u8], private_mode: bool) -> Resul
         check_no_symlink_or_reparse_component(parent)?;
         fs::create_dir_all(parent)
             .map_err(|e| format!("failed creating directory '{}': {e}", parent.display()))?;
+        check_no_symlink_or_reparse_component(parent)?;
     }
     check_no_symlink_or_reparse_component(path)?;
 
@@ -480,7 +678,35 @@ pub fn write_atomic_bytes(path: &Path, data: &[u8], private_mode: bool) -> Resul
             f.sync_all()
                 .map_err(|e| format!("failed syncing atomic temp file: {e}"))?;
         }
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+            let _ = private_mode;
+            const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+            const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+            let canon_parent = parent
+                .canonicalize()
+                .map_err(|e| format!("failed canonicalizing atomic write parent: {e}"))?;
+            let mut f = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&tmp_path)
+                .map_err(|e| format!("failed opening atomic temp file: {e}"))?;
+            let meta = f
+                .metadata()
+                .map_err(|e| format!("failed reading atomic temp metadata: {e}"))?;
+            if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 || !meta.file_type().is_file() {
+                return Err("SECURITY_REJECT_REPARSE_HANDLE: atomic temp handle is reparse or non-regular".to_owned());
+            }
+            let final_handle_path = query_windows_final_handle_path(&f)?;
+            verify_windows_final_path_confined(&final_handle_path, &canon_parent.to_string_lossy())?;
+            f.write_all(data)
+                .map_err(|e| format!("failed writing atomic temp file: {e}"))?;
+            f.sync_all()
+                .map_err(|e| format!("failed syncing atomic temp file: {e}"))?;
+        }
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = private_mode;
             let mut f = fs::OpenOptions::new()
@@ -493,6 +719,7 @@ pub fn write_atomic_bytes(path: &Path, data: &[u8], private_mode: bool) -> Resul
             f.sync_all()
                 .map_err(|e| format!("failed syncing atomic temp file: {e}"))?;
         }
+        check_no_symlink_or_reparse_component(parent)?;
         check_no_symlink_or_reparse_component(path)?;
         fs::rename(&tmp_path, path)
             .map_err(|e| format!("failed atomic rename into '{}': {e}", path.display()))?;
@@ -585,37 +812,20 @@ pub fn sha256_file_confined_no_follow(
     let file_name = target_path
         .file_name()
         .ok_or_else(|| "missing target file name".to_owned())?;
+    if let Some(name_str) = file_name.to_str() {
+        if name_str.contains(':') || name_str.ends_with('.') || name_str.ends_with(' ') {
+            return Err(format!(
+                "SECURITY_REJECT_UNSAFE_FILENAME: refusing ADS or ambiguous leaf '{name_str}'"
+            ));
+        }
+    }
     let confined_target = canon_parent.join(file_name);
     let (mut file, expected_len) = open_no_follow_regular_file(&confined_target)?;
 
     #[cfg(windows)]
     {
-        use std::os::windows::io::AsRawHandle;
-        use winapi::um::fileapi::GetFinalPathNameByHandleW;
-        let mut buf = vec![0u16; 1024];
-        let len = unsafe {
-            GetFinalPathNameByHandleW(
-                file.as_raw_handle() as *mut _,
-                buf.as_mut_ptr(),
-                buf.len() as u32,
-                0,
-            )
-        } as usize;
-        if len > 0 && len < buf.len() {
-            let final_str = String::from_utf16_lossy(&buf[..len]);
-            let root_str = canon_root.to_string_lossy();
-            let clean_final = final_str.trim_start_matches(r"\\?\");
-            let clean_root = root_str.trim_start_matches(r"\\?\");
-            if !clean_final
-                .to_ascii_lowercase()
-                .starts_with(&clean_root.to_ascii_lowercase())
-            {
-                return Err(format!(
-                    "SECURITY_REJECT_HANDLE_ESCAPE: handle resolved to '{}' outside '{}'",
-                    clean_final, clean_root
-                ));
-            }
-        }
+        let final_str = query_windows_final_handle_path(&file)?;
+        verify_windows_final_path_confined(&final_str, &canon_root.to_string_lossy())?;
     }
 
     let mut hasher = Sha256::new();
@@ -807,5 +1017,85 @@ mod tests {
             fs::remove_file(&outside).ok();
         }
         fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn f14_windows_final_path_confinement_enforces_component_boundary_unc_and_ads() {
+        assert!(verify_windows_final_path_confined(
+            r"\\?\E:\QA\allowed\sub\payload.bin",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_ok());
+        assert!(verify_windows_final_path_confined(
+            r"E:\QA\ALLOWED\sub\payload.bin",
+            r"\\?\e:\qa\allowed"
+        )
+        .is_ok());
+
+        assert!(verify_windows_final_path_confined(
+            r"\\?\E:\QA\allowed-elsewhere\file.bin",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+        assert!(verify_windows_final_path_confined(
+            r"\\?\E:\QA\allowed",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+        assert!(verify_windows_final_path_confined(
+            r"\\?\C:\QA\allowed\file.bin",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+
+        assert!(verify_windows_final_path_confined(
+            r"\\?\UNC\filesrv\share\allowed\dir\ok.bin",
+            r"\\filesrv\share\allowed"
+        )
+        .is_ok());
+        assert!(verify_windows_final_path_confined(
+            r"\\?\UNC\filesrv\share\allowed-other\ok.bin",
+            r"\\filesrv\share\allowed"
+        )
+        .is_err());
+        assert!(verify_windows_final_path_confined(
+            r"\\?\UNC\filesrv\other_share\allowed\ok.bin",
+            r"\\filesrv\share\allowed"
+        )
+        .is_err());
+
+        assert!(verify_windows_final_path_confined(
+            r"\\?\E:\QA\allowed\file.bin:Zone.Identifier",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+        assert!(verify_windows_final_path_confined(
+            r"\\?\E:\QA\allowed\file.bin:$DATA",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+        assert!(verify_windows_final_path_confined(
+            r"\\.\PhysicalDrive0",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+        assert!(verify_windows_final_path_confined(
+            r"\\?\E:\QA\allowed\..\outside\file.bin",
+            r"\\?\E:\QA\allowed"
+        )
+        .is_err());
+
+        let deep_seg = "a".repeat(220);
+        let long_valid = format!(
+            r"\\?\E:\QA\allowed\{0}\{0}\{0}\{0}\{0}\deep.bin",
+            deep_seg
+        );
+        assert!(long_valid.len() > 1100);
+        assert!(verify_windows_final_path_confined(&long_valid, r"\\?\E:\QA\allowed").is_ok());
+        let long_escape = format!(
+            r"\\?\E:\QA\allowed-escape\{0}\{0}\{0}\{0}\{0}\deep.bin",
+            deep_seg
+        );
+        assert!(verify_windows_final_path_confined(&long_escape, r"\\?\E:\QA\allowed").is_err());
     }
 }

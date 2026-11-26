@@ -279,7 +279,6 @@ fn download_rejects_windows_streams_and_ambiguous_components() {
 }
 
 #[tokio::test]
-#[cfg_attr(windows, ignore = "requires symlink privilege")]
 async fn download_refuses_symlink_destination_directory() {
     let dir = DownloadDir::new();
     let outside = dir.0.join("outside");
@@ -288,7 +287,7 @@ async fn download_refuses_symlink_destination_directory() {
     #[cfg(unix)]
     std::os::unix::fs::symlink(&outside, &link).unwrap();
     #[cfg(windows)]
-    std::os::windows::fs::symlink_dir(&outside, &link).unwrap();
+    super::tests::create_dir_link_or_junction_for_test(&outside, &link);
     let mut job = dir.job_with_files(vec![FileEntry {
         name: "child.txt".into(),
         ..Default::default()
@@ -297,10 +296,11 @@ async fn download_refuses_symlink_destination_directory() {
     job.modify_time();
     assert!(!outside.join("child.txt").exists());
     assert!(!outside.join("child.txt.download").exists());
+    let _ = std::fs::remove_dir(&link);
 }
 
 #[tokio::test]
-#[cfg_attr(windows, ignore = "requires symlink privilege")]
+#[cfg_attr(windows, ignore = "file symlinks require SeCreateSymbolicLinkPrivilege; hardlink/junction covered below")]
 async fn download_refuses_linked_target_and_staging_files() {
     for suffix in ["", ".download", ".digest"] {
         let dir = DownloadDir::new();
@@ -321,4 +321,46 @@ async fn download_refuses_linked_target_and_staging_files() {
             .file_type()
             .is_symlink());
     }
+}
+
+#[tokio::test]
+async fn f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch() {
+    let dir = DownloadDir::new();
+    let outside = dir.0.join("outside_hard.txt");
+    std::fs::write(&outside, b"rec").unwrap();
+    let staging = dir.0.join("file.txt.download");
+    let digest = dir.0.join("file.txt.digest");
+    std::fs::hard_link(&outside, &staging).unwrap();
+    std::fs::write(&digest, r#"{"size":8,"modified":1}"#).unwrap();
+
+    let mut resume_job = dir.job();
+    resume_job.is_resume = true;
+    resume_job.set_digest(8, 1);
+    resume_job.confirm(&approval(0, 3)).await;
+    assert!(
+        resume_job
+            .write(FileTransferBlock {
+                data: b"eived".to_vec().into(),
+                ..block()
+            })
+            .await
+            .is_err(),
+        "hard-linked staging file must be rejected on resume"
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), b"rec");
+
+    let dir_sha = DownloadDir::new();
+    let wrong_sha = "0000000000000000000000000000000000000000000000000000000000000000";
+    let mut sha_job = dir_sha.job_with_files(vec![FileEntry {
+        size: 8,
+        sha256: wrong_sha.into(),
+        ..Default::default()
+    }]);
+    sha_job.write(block()).await.unwrap();
+    assert!(
+        sha_job.finish_download().is_err(),
+        "finish_download must reject mismatched sender SHA-256 before rename"
+    );
+    assert!(!dir_sha.0.join("file.txt").exists());
+    assert!(dir_sha.0.join("file.txt.download").exists());
 }

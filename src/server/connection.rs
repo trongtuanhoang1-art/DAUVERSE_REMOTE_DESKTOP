@@ -3836,7 +3836,7 @@ impl Connection {
                                         .files
                                         .to_vec()
                                         .drain(..)
-                                        .map(|f| (f.name, f.modified_time))
+                                        .map(|f| (f.name, f.size, f.modified_time, f.sha256))
                                         .collect(),
                                     overwrite_detection: od,
                                     total_size: r.total_size,
@@ -5776,16 +5776,21 @@ impl Connection {
             }
         };
         #[cfg(not(target_os = "android"))]
-        let result = fs::TransferJob::new_read(
-            id,
-            job_type,
-            "".to_string(),
-            data_source,
-            file_num,
-            include_hidden,
-            false,
-            overwrite_detection,
-        );
+        let result = tokio::task::spawn_blocking(move || {
+            fs::TransferJob::new_read(
+                id,
+                job_type,
+                "".to_string(),
+                data_source,
+                file_num,
+                include_hidden,
+                false,
+                overwrite_detection,
+            )
+        })
+        .await
+        .map_err(hbb_common::anyhow::Error::from)
+        .and_then(|result| result);
         match result {
             Err(err) => {
                 self.send(fs::new_error(id, err, 0)).await;

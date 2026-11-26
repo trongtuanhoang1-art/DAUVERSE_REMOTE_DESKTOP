@@ -910,16 +910,25 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     };
                     #[cfg(not(target_os = "android"))]
-                    let result = fs::TransferJob::new_read(
-                        id,
-                        r#type,
-                        to.clone(),
-                        fs::DataSource::FilePath(PathBuf::from(&path)),
-                        file_num,
-                        include_hidden,
-                        is_remote,
-                        od,
-                    );
+                    let result = {
+                        let source = fs::DataSource::FilePath(PathBuf::from(&path));
+                        let destination = to.clone();
+                        tokio::task::spawn_blocking(move || {
+                            fs::TransferJob::new_read(
+                                id,
+                                r#type,
+                                destination,
+                                source,
+                                file_num,
+                                include_hidden,
+                                is_remote,
+                                od,
+                            )
+                        })
+                        .await
+                        .map_err(hbb_common::anyhow::Error::from)
+                        .and_then(|result| result)
+                    };
                     match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
@@ -1007,16 +1016,25 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     };
                     #[cfg(not(target_os = "android"))]
-                    let result = fs::TransferJob::new_read(
-                        id,
-                        r#type,
-                        to.clone(),
-                        fs::DataSource::FilePath(PathBuf::from(&path)),
-                        file_num,
-                        include_hidden,
-                        is_remote,
-                        od,
-                    );
+                    let result = {
+                        let source = fs::DataSource::FilePath(PathBuf::from(&path));
+                        let destination = to.clone();
+                        tokio::task::spawn_blocking(move || {
+                            fs::TransferJob::new_read(
+                                id,
+                                r#type,
+                                destination,
+                                source,
+                                file_num,
+                                include_hidden,
+                                is_remote,
+                                od,
+                            )
+                        })
+                        .await
+                        .map_err(hbb_common::anyhow::Error::from)
+                        .and_then(|result| result)
+                    };
                     match result {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
@@ -1449,6 +1467,9 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handle_job_status(id, job.file_num(), Some(error.to_string()));
             }
             job.remove_download_file();
+            crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .track_engine_receive_finish(id, false, true, Some("Cancelled"));
         }
         let _ = fs::remove_job(id, &mut self.read_jobs);
         self.remove_jobs.remove(&id);
@@ -1975,14 +1996,74 @@ impl<T: InvokeUiSession> Remote<T> {
                                 if let Err(err) = job.set_files(entries) {
                                     set_files_err = Some(err.to_string());
                                 } else {
-                                    job.set_finished_size_on_resume();
-                                    self.handler.update_folder_files(
-                                        fd.id,
-                                        job.files(),
-                                        fd.path,
-                                        false,
-                                        false,
-                                    );
+                                    let mut guard_rejected = None;
+                                    if job.r#type == fs::JobType::Generic {
+                                        if let fs::DataSource::FilePath(base) = &job.data_source {
+                                            #[cfg(target_os = "android")]
+                                            let is_android_doc = fs::android::is_path(base);
+                                            #[cfg(not(target_os = "android"))]
+                                            let is_android_doc = false;
+                                            if !is_android_doc {
+                                                if job.files().is_empty() {
+                                                    if job.total_size() > 0 {
+                                                        guard_rejected = Some(
+                                                            "SECURITY_REJECT_EMPTY_FILES_WITH_NONZERO_SIZE: empty file manifest declared non-zero total_size"
+                                                                .to_owned(),
+                                                        );
+                                                    } else if let Err(sym_err) =
+                                                        crate::dauverse::crypto_util::check_no_symlink_or_reparse_component(base)
+                                                    {
+                                                        crate::dauverse::DauverseRuntime::global()
+                                                            .security
+                                                            .append_audit(
+                                                                "FILE_TRANSFER_CLIENT",
+                                                                "INCOMING_DOWNLOAD_MANIFEST_GUARD",
+                                                                "DENIED",
+                                                                &sym_err,
+                                                            );
+                                                        guard_rejected = Some(sym_err);
+                                                    }
+                                                } else {
+                                                    match crate::dauverse::transfer_guard::resolve_transfer_manifest_root_and_specs(base, job.files()) {
+                                                        Ok((dest_root, file_specs)) => {
+                                                            crate::dauverse::DauverseRuntime::global()
+                                                                .transfer_queue
+                                                                .track_engine_receive_start_manifest(
+                                                                    fd.id,
+                                                                    0,
+                                                                    &dest_root.to_string_lossy(),
+                                                                    file_specs,
+                                                                    job.total_size(),
+                                                                );
+                                                        }
+                                                        Err(guard_err) => {
+                                                            crate::dauverse::DauverseRuntime::global()
+                                                                .security
+                                                                .append_audit(
+                                                                    "FILE_TRANSFER_CLIENT",
+                                                                    "INCOMING_DOWNLOAD_MANIFEST_GUARD",
+                                                                    "DENIED",
+                                                                    &guard_err,
+                                                                );
+                                                            guard_rejected = Some(guard_err);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if let Some(guard_err) = guard_rejected {
+                                        set_files_err = Some(guard_err);
+                                    } else {
+                                        job.set_finished_size_on_resume();
+                                        self.handler.update_folder_files(
+                                            fd.id,
+                                            job.files(),
+                                            fd.path,
+                                            false,
+                                            false,
+                                        );
+                                    }
                                 }
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
                                 // Intentionally keep raw entries here:
@@ -2176,19 +2257,57 @@ impl<T: InvokeUiSession> Remote<T> {
                             let mut err: Option<String> = None;
                             let mut job_type = fs::JobType::Generic;
                             let mut printer_data = None;
-                            if let Some(job) = fs::remove_job(d.id, &mut self.write_jobs) {
-                                #[cfg(target_os = "android")]
-                                let mut job = job;
-                                err = job
-                                    .finish_download()
-                                    .err()
-                                    .map(|err| err.to_string())
-                                    .or_else(|| job.job_error());
+                            if let Some(mut job) = fs::remove_job(d.id, &mut self.write_jobs) {
+                                if let Err(sync_err) = job.sync_stream().await {
+                                    err = Some(sync_err.to_string());
+                                }
+                                if err.is_none() {
+                                    err = job
+                                        .finish_download()
+                                        .err()
+                                        .map(|err| err.to_string())
+                                        .or_else(|| job.job_error());
+                                }
                                 #[cfg(target_os = "android")]
                                 if let Err(error) = job.finish_document().await {
                                     err = Some(error.to_string());
                                 }
                                 job_type = job.r#type;
+                                #[cfg(target_os = "android")]
+                                let is_android_doc = match &job.data_source {
+                                    fs::DataSource::FilePath(p) => fs::android::is_path(p),
+                                    _ => false,
+                                };
+                                #[cfg(not(target_os = "android"))]
+                                let is_android_doc = false;
+                                if job_type == fs::JobType::Generic && !is_android_doc {
+                                    if let Some(ref failure_msg) = err {
+                                        crate::dauverse::DauverseRuntime::global()
+                                            .transfer_queue
+                                            .track_engine_receive_finish(
+                                                d.id,
+                                                false,
+                                                failure_msg == "skipped",
+                                                Some(failure_msg),
+                                            );
+                                    } else if !job.files().is_empty() {
+                                        if let Err(integrity_err) =
+                                            crate::dauverse::DauverseRuntime::global()
+                                                .transfer_queue
+                                                .verify_and_finalize_engine_receive(d.id)
+                                        {
+                                            crate::dauverse::DauverseRuntime::global()
+                                                .security
+                                                .append_audit(
+                                                    "FILE_TRANSFER_CLIENT",
+                                                    "DOWNLOAD_INTEGRITY_VERIFICATION",
+                                                    "FAILED",
+                                                    &integrity_err,
+                                                );
+                                            err = Some(integrity_err);
+                                        }
+                                    }
+                                }
                                 printer_data = match job.get_buf_data().await {
                                     Ok(d) => d,
                                     Err(e) => {
@@ -2249,7 +2368,18 @@ impl<T: InvokeUiSession> Remote<T> {
                                     );
                                 }
                             }
-                            let job_type = fs::remove_job(e.id, &mut self.write_jobs)
+                            let removed_write = fs::remove_job(e.id, &mut self.write_jobs);
+                            if removed_write.is_some() {
+                                crate::dauverse::DauverseRuntime::global()
+                                    .transfer_queue
+                                    .track_engine_receive_finish(
+                                        e.id,
+                                        false,
+                                        false,
+                                        Some(&e.error),
+                                    );
+                            }
+                            let job_type = removed_write
                                 .or_else(|| fs::remove_job(e.id, &mut self.read_jobs))
                                 .map(|j| j.r#type)
                                 .unwrap_or(fs::JobType::Generic);

@@ -1,6 +1,7 @@
 use super::{
     get_string, is_write_need_confirmation, join_validated_path, validate_file_name_no_traversal,
-    validate_no_symlink_components, DataSource, DataStream, DigestCheckResult, TransferJob,
+    validate_no_symlink_components, verify_staging_file_sha256, DataSource, DataStream,
+    DigestCheckResult, TransferJob,
 };
 use crate::message_proto::{
     file_transfer_send_confirm_request, FileEntry, FileTransferBlock, FileTransferDigest,
@@ -211,10 +212,32 @@ impl TransferJob {
         (*confirmed == file_num).then_some(*offset)
     }
 
+    #[cfg(windows)]
+    fn capture_download_root_before_open(&self, file_num: i32) -> ResultType<Option<PathBuf>> {
+        let entry = self
+            .files
+            .get(file_num as usize)
+            .ok_or_else(|| anyhow!("Wrong file number"))?;
+        let DataSource::FilePath(base) = &self.data_source else {
+            return Ok(None);
+        };
+        let auth_root = if entry.name.is_empty() {
+            base.parent()
+        } else {
+            Some(base.as_path())
+        };
+        auth_root
+            .filter(|r| !r.as_os_str().is_empty())
+            .map(super::capture_confined_transfer_root)
+            .transpose()
+    }
+
     async fn start_download_file(&mut self, file_num: i32) -> ResultType<()> {
         let result = self.finish_download();
         self.data_stream.take();
         result?;
+        #[cfg(windows)]
+        let pre_canon_root = self.capture_download_root_before_open(file_num)?;
         let target = self.download_target(file_num)?;
         let staging = PathBuf::from(format!("{}.download", target.display()));
         let digest = PathBuf::from(format!("{}.digest", target.display()));
@@ -238,6 +261,11 @@ impl TransferJob {
             .create_new(true)
             .open(&staging)
             .await?;
+        #[cfg(windows)]
+        super::verify_windows_raw_handle_confined(
+            std::os::windows::io::AsRawHandle::as_raw_handle(&file),
+            pre_canon_root.as_deref(),
+        )?;
         self.file_num = file_num;
         self.data_stream = Some(DataStream::FileStream(file));
         remove_if_exists_async(&digest).await?;
@@ -254,6 +282,8 @@ impl TransferJob {
     }
 
     async fn resume_download(&mut self, file_num: i32, offset: u32) -> ResultType<()> {
+        #[cfg(windows)]
+        let pre_canon_root = self.capture_download_root_before_open(file_num)?;
         let target = self.download_target(file_num)?;
         if fs::try_exists(&target).await? {
             bail!("download overwrite requires confirmation");
@@ -262,11 +292,21 @@ impl TransferJob {
         if !digest.is_file() {
             bail!("download resume metadata is not a regular file");
         }
-        let mut file = OpenOptions::new()
-            .write(true)
+        let mut open_opts = OpenOptions::new();
+        open_opts.write(true);
+        #[cfg(windows)]
+        {
+            open_opts.custom_flags(0x0020_0000);
+        }
+        let mut file = open_opts
             .open(format!("{}.download", target.display()))
             .await?;
         validate_resume_file(&file).await?;
+        #[cfg(windows)]
+        super::verify_windows_raw_handle_confined(
+            std::os::windows::io::AsRawHandle::as_raw_handle(&file),
+            pre_canon_root.as_deref(),
+        )?;
         if file.metadata().await?.len() != u64::from(offset) {
             bail!("download resume offset does not match staging file size");
         }
@@ -316,12 +356,16 @@ impl TransferJob {
         if target.try_exists()? && self.download_confirmation_offset(self.file_num) != Some(0) {
             bail!("download overwrite requires confirmation");
         }
-        std::fs::rename(format!("{}.download", target.display()), &target)?;
-        remove_if_exists(&PathBuf::from(format!("{}.digest", target.display())))?;
         let entry = self
             .files
             .get(self.file_num as usize)
             .ok_or_else(|| anyhow!("Wrong file number"))?;
+        let staging = PathBuf::from(format!("{}.download", target.display()));
+        if !entry.sha256.trim().is_empty() {
+            verify_staging_file_sha256(&staging, entry.size, entry.sha256.trim())?;
+        }
+        std::fs::rename(&staging, &target)?;
+        remove_if_exists(&PathBuf::from(format!("{}.digest", target.display())))?;
         filetime::set_file_mtime(
             &target,
             filetime::FileTime::from_unix_time(entry.modified_time as _, 0),

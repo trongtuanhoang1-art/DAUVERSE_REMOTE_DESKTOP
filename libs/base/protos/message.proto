@@ -371,6 +371,7 @@ message FileEntry {
   bool is_hidden = 3;
   uint64 size = 4;
   uint64 modified_time = 5;
+  string sha256 = 6;
 }
 
 message FileDirectory {

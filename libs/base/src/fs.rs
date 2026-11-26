@@ -2,7 +2,7 @@
 use std::os::windows::prelude::*;
 use std::{
     fmt::{Debug, Display},
-    io::Cursor,
+    io::{Cursor, Read},
     path::{Path, PathBuf},
     sync::atomic::{AtomicI32, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -22,7 +22,9 @@ use hbb_common::{
     bail,
     compress::{compress, decompress},
     config::Config,
-    get_version_number, ResultType, Stream,
+    get_version_number,
+    sha2::{Digest, Sha256},
+    ResultType, Stream,
 };
 
 static NEXT_JOB_ID: AtomicI32 = AtomicI32::new(1);
@@ -458,6 +460,8 @@ pub struct TransferJob {
     digest: FileDigest,
     #[serde(skip)]
     download: Option<download::DownloadState>,
+    #[serde(skip)]
+    read_stream_integrity: Option<(usize, Sha256, u64)>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -580,6 +584,10 @@ fn validate_no_symlink_components(base: &PathBuf, name: &str) -> ResultType<()> 
                         if meta.file_type().is_symlink() {
                             bail!("symlink path component is not allowed");
                         }
+                        #[cfg(windows)]
+                        if (meta.file_attributes() & 0x0400) != 0 {
+                            bail!("symlink or reparse point path component is not allowed");
+                        }
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                         // Component does not exist yet, continue best-effort validation.
@@ -626,7 +634,176 @@ fn is_existing_symlink_or_reparse(path: &Path) -> bool {
     false
 }
 
-fn create_download_file_no_follow(path: &str) -> ResultType<std::fs::File> {
+pub fn compute_file_sha256_and_size(path: &Path) -> ResultType<(String, u64)> {
+    if is_existing_symlink_or_reparse(path) {
+        bail!(
+            "refusing to hash symlink or reparse point '{}'",
+            path.display()
+        );
+    }
+    let mut f = std::fs::File::open(path)?;
+    let meta = f.metadata()?;
+    if meta.file_type().is_symlink() || !meta.file_type().is_file() {
+        bail!("refusing to hash non-regular file '{}'", path.display());
+    }
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 65536];
+    let mut total_bytes = 0u64;
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        total_bytes = total_bytes.saturating_add(n as u64);
+    }
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(64);
+    for byte in digest.iter() {
+        use std::fmt::Write as _;
+        let _ = write!(&mut hex, "{byte:02x}");
+    }
+    Ok((hex, total_bytes))
+}
+
+pub(crate) fn constant_time_eq_ascii_hex(a: &str, b: &str) -> bool {
+    let a = a.trim();
+    let b = b.trim();
+    if a.len() != 64 || b.len() != 64 {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (ab, bb) in a.bytes().zip(b.bytes()) {
+        if !ab.is_ascii_hexdigit() || !bb.is_ascii_hexdigit() {
+            return false;
+        }
+        diff |= ab.to_ascii_lowercase() ^ bb.to_ascii_lowercase();
+    }
+    diff == 0
+}
+
+pub(crate) fn verify_staging_file_sha256(
+    staging_path: &Path,
+    expected_size: u64,
+    expected_sha256: &str,
+) -> ResultType<()> {
+    let (actual_sha, actual_size) = compute_file_sha256_and_size(staging_path)?;
+    if actual_size != expected_size {
+        bail!(
+            "transfer staging size mismatch for '{}': expected {} bytes, got {} bytes",
+            staging_path.display(),
+            expected_size,
+            actual_size
+        );
+    }
+    if !constant_time_eq_ascii_hex(&actual_sha, expected_sha256) {
+        bail!(
+            "transfer staging SHA-256 mismatch for '{}': expected {}, got {}",
+            staging_path.display(),
+            expected_sha256.trim(),
+            actual_sha
+        );
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+pub(super) fn capture_confined_transfer_root(root: &Path) -> ResultType<PathBuf> {
+    if is_existing_symlink_or_reparse(root) {
+        bail!(
+            "refusing symlink or reparse transfer root '{}'",
+            root.display()
+        );
+    }
+    if !root.exists() {
+        std::fs::create_dir_all(root)?;
+    }
+    if is_existing_symlink_or_reparse(root) {
+        bail!(
+            "refusing symlink or reparse transfer root '{}'",
+            root.display()
+        );
+    }
+    Ok(root.canonicalize()?)
+}
+
+#[cfg(windows)]
+pub(super) fn verify_windows_raw_handle_confined(
+    raw_handle: std::os::windows::io::RawHandle,
+    pre_captured_canon_root: Option<&Path>,
+) -> ResultType<()> {
+    use winapi::um::fileapi::GetFinalPathNameByHandleW;
+    let mut cap: usize = 1024;
+    let final_str = loop {
+        let mut buf = vec![0u16; cap];
+        let len =
+            unsafe { GetFinalPathNameByHandleW(raw_handle as _, buf.as_mut_ptr(), cap as u32, 0) }
+                as usize;
+        if len == 0 {
+            bail!(
+                "GetFinalPathNameByHandleW failed: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        if len < cap {
+            break String::from_utf16(&buf[..len])
+                .map_err(|e| anyhow!("GetFinalPathNameByHandleW returned invalid UTF-16: {e}"))?;
+        }
+        if cap >= 65536 {
+            bail!("GetFinalPathNameByHandleW path exceeded 65536 wide chars");
+        }
+        cap = (len + 1).max(cap.saturating_mul(2));
+    };
+    let norm = final_str.replace('/', "\\");
+    if norm.starts_with("\\\\.\\") || norm.starts_with("\\??\\") {
+        bail!("raw device or NT namespace handle rejected '{}'", norm);
+    }
+    let stripped = if let Some(unc) = norm.strip_prefix("\\\\?\\UNC\\") {
+        format!("\\\\{unc}")
+    } else if let Some(local) = norm.strip_prefix("\\\\?\\") {
+        local.to_owned()
+    } else {
+        norm
+    };
+    let tail_after_drive = if stripped.len() >= 2
+        && stripped.as_bytes()[0].is_ascii_alphabetic()
+        && stripped.as_bytes()[1] == b':'
+    {
+        &stripped[2..]
+    } else {
+        stripped.as_str()
+    };
+    if tail_after_drive.contains(':') {
+        bail!("NTFS alternate data stream rejected on handle '{}'", stripped);
+    }
+    if let Some(canon_root) = pre_captured_canon_root.filter(|p| !p.as_os_str().is_empty()) {
+        let canon_str = canon_root.to_string_lossy().replace('/', "\\");
+        let root_stripped = if let Some(unc) = canon_str.strip_prefix("\\\\?\\UNC\\") {
+            format!("\\\\{unc}")
+        } else if let Some(local) = canon_str.strip_prefix("\\\\?\\") {
+            local.to_owned()
+        } else {
+            canon_str
+        };
+        let root_trimmed = root_stripped.trim_end_matches('\\').to_ascii_lowercase();
+        let file_lower = stripped.to_ascii_lowercase();
+        if !file_lower.starts_with(&root_trimmed)
+            || file_lower.as_bytes().get(root_trimmed.len()) != Some(&b'\\')
+        {
+            bail!(
+                "opened file handle '{}' escaped transfer root '{}'",
+                stripped,
+                root_stripped
+            );
+        }
+    }
+    Ok(())
+}
+
+fn create_download_file_no_follow(
+    path: &str,
+    #[allow(unused_variables)] pre_captured_canon_root: Option<&Path>,
+) -> ResultType<std::fs::File> {
     let p = Path::new(path);
     if is_existing_symlink_or_reparse(p) {
         bail!("refusing to open symlink or reparse point '{}'", path);
@@ -654,6 +831,7 @@ fn create_download_file_no_follow(path: &str) -> ResultType<std::fs::File> {
         if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 || !meta.file_type().is_file() {
             bail!("refusing reparse or non-regular file handle '{}'", path);
         }
+        verify_windows_raw_handle_confined(opened.as_raw_handle(), pre_captured_canon_root)?;
         opened.set_len(0)?;
         opened
     };
@@ -718,8 +896,20 @@ impl TransferJob {
         log::info!("new read {}", data_source);
         let (files, total_size) = match &data_source {
             DataSource::FilePath(p) => {
-                let p = p.to_str().ok_or(anyhow!("Invalid path"))?;
-                let files = get_recursive_files(p, show_hidden)?;
+                let p_str = p.to_str().ok_or(anyhow!("Invalid path"))?;
+                let mut files = get_recursive_files(p_str, show_hidden)?;
+                #[cfg(any(target_os = "android", test))]
+                let is_android_doc = android::is_path(p);
+                #[cfg(not(any(target_os = "android", test)))]
+                let is_android_doc = false;
+                if r#type == JobType::Generic && !is_android_doc {
+                    for entry in &mut files {
+                        let full_path = Self::join(p, &entry.name);
+                        let (sha256, exact_size) = compute_file_sha256_and_size(&full_path)?;
+                        entry.sha256 = sha256;
+                        entry.size = exact_size;
+                    }
+                }
                 let total_size = files.iter().map(|x| x.size).sum();
                 (files, total_size)
             }
@@ -829,10 +1019,15 @@ impl TransferJob {
         }
     }
 
-    pub async fn flush_and_close_stream(&mut self) -> ResultType<()> {
+    pub async fn sync_stream(&mut self) -> ResultType<()> {
         if let Some(DataStream::FileStream(file)) = self.data_stream.as_mut() {
             file.sync_all().await?;
         }
+        Ok(())
+    }
+
+    pub async fn flush_and_close_stream(&mut self) -> ResultType<()> {
+        self.sync_stream().await?;
         self.data_stream = None;
         Ok(())
     }
@@ -866,6 +1061,24 @@ impl TransferJob {
                     return;
                 }
                 let download_path = format!("{}.download", get_string(&path));
+                if !Path::new(&download_path).exists() {
+                    return;
+                }
+                if !entry.sha256.trim().is_empty() {
+                    if let Err(err) = verify_staging_file_sha256(
+                        Path::new(&download_path),
+                        entry.size,
+                        entry.sha256.trim(),
+                    ) {
+                        hbb_common::throttled_log!(
+                            std::time::Duration::from_secs(30),
+                            error,
+                            "Refusing transfer rename due to SHA-256/size mismatch: {}",
+                            err
+                        );
+                        return;
+                    }
+                }
                 let digest_path = format!("{}.digest", get_string(&path));
                 std::fs::remove_file(digest_path).ok();
                 std::fs::rename(download_path, &path).ok();
@@ -942,6 +1155,22 @@ impl TransferJob {
                     self.modify_time();
                     self.file_num = block.file_num;
                     let entry = &self.files[file_num];
+                    #[cfg(windows)]
+                    let pre_canon_root: Option<PathBuf> = if self.r#type == JobType::Printer {
+                        None
+                    } else {
+                        let auth_root = if entry.name.is_empty() {
+                            p.parent()
+                        } else {
+                            Some(p.as_path())
+                        };
+                        auth_root
+                            .filter(|r| !r.as_os_str().is_empty())
+                            .map(capture_confined_transfer_root)
+                            .transpose()?
+                    };
+                    #[cfg(not(windows))]
+                    let pre_canon_root: Option<PathBuf> = None;
                     let (path, digest_path) = if self.r#type == JobType::Printer {
                         (p.to_string_lossy().to_string(), None)
                     } else {
@@ -966,7 +1195,7 @@ impl TransferJob {
                             std::fs::remove_file(dp)?;
                         }
                     }
-                    let std_file = create_download_file_no_follow(&path)?;
+                    let std_file = create_download_file_no_follow(&path, pre_canon_root.as_deref())?;
                     self.data_stream = Some(DataStream::FileStream(File::from_std(std_file)));
                     if let Some(dp) = digest_path.as_ref() {
                         std::fs::write(dp, json!(self.digest).to_string()).ok();
@@ -1021,12 +1250,14 @@ impl TransferJob {
                 if file_num >= self.files.len() {
                     // job done
                     self.data_stream.take();
+                    self.read_stream_integrity = None;
                     return Ok(true);
                 };
                 if self.data_stream.is_none() {
                     match File::open(Self::join(p, &self.files[file_num].name)).await {
                         Ok(file) => {
                             self.data_stream = Some(DataStream::FileStream(file));
+                            self.read_stream_integrity = Some((file_num, Sha256::new(), 0));
                             self.file_confirmed = false;
                             self.file_is_waiting = false;
                         }
@@ -1034,6 +1265,7 @@ impl TransferJob {
                         // to next file and return the error.
                         Err(err) => {
                             self.file_num += 1;
+                            self.read_stream_integrity = None;
                             self.file_confirmed = false;
                             self.file_is_waiting = false;
                             return Err(err.into());
@@ -1148,6 +1380,7 @@ impl TransferJob {
                 Err(err) => {
                     self.file_num += 1;
                     self.data_stream = None;
+                    self.read_stream_integrity = None;
                     self.file_confirmed = false;
                     self.file_is_waiting = false;
                     #[cfg(any(target_os = "android", all(test, unix)))]
@@ -1174,11 +1407,72 @@ impl TransferJob {
                 self.data_stream.take();
                 return Ok(None);
             }
+            let integrity_failure = if self.r#type == JobType::Generic {
+                let expected_sha = self.files[file_num].sha256.trim().to_owned();
+                let expected_size = self.files[file_num].size;
+                if !expected_sha.is_empty() {
+                    if let Some((tracked_idx, hasher, streamed_bytes)) =
+                        self.read_stream_integrity.take()
+                    {
+                        if tracked_idx == file_num {
+                            let digest = hasher.finalize();
+                            let mut actual_sha = String::with_capacity(64);
+                            for byte in digest.iter() {
+                                use std::fmt::Write as _;
+                                let _ = write!(&mut actual_sha, "{byte:02x}");
+                            }
+                            if streamed_bytes != expected_size
+                                || !constant_time_eq_ascii_hex(&actual_sha, &expected_sha)
+                            {
+                                Some(format!(
+                                    "sender file mutated during transfer for file {}: expected ({} bytes, {}), streamed ({} bytes, {})",
+                                    file_num, expected_size, expected_sha, streamed_bytes, actual_sha
+                                ))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else if let DataSource::FilePath(p) = &self.data_source {
+                        #[cfg(any(target_os = "android", test))]
+                        let is_android_doc = android::is_path(p);
+                        #[cfg(not(any(target_os = "android", test)))]
+                        let is_android_doc = false;
+                        if !is_android_doc {
+                            let full_path = Self::join(p, &self.files[file_num].name);
+                            verify_staging_file_sha256(&full_path, expected_size, &expected_sha)
+                                .err()
+                                .map(|e| format!("sender file mutated during resumed transfer: {e}"))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    self.read_stream_integrity = None;
+                    None
+                }
+            } else {
+                self.read_stream_integrity = None;
+                None
+            };
             self.file_num += 1;
             self.data_stream = None;
             self.file_confirmed = false;
             self.file_is_waiting = false;
+            if let Some(msg) = integrity_failure {
+                bail!("{msg}");
+            }
         } else {
+            if let Some((tracked_idx, hasher, streamed_bytes)) = self.read_stream_integrity.as_mut()
+            {
+                if *tracked_idx == file_num {
+                    hasher.update(&buf);
+                    *streamed_bytes = streamed_bytes.saturating_add(offset as u64);
+                }
+            }
             self.finished_size += offset as u64;
             if matches!(self.data_source, DataSource::FilePath(_)) && !is_compressed_file(name) {
                 let tmp = compress(&buf);
@@ -1290,6 +1584,7 @@ impl TransferJob {
     pub fn set_file_skipped(&mut self) -> bool {
         log::debug!("skip file {} in job {}", self.file_num, self.id);
         self.data_stream.take();
+        self.read_stream_integrity = None;
         self.set_file_confirmed(false);
         self.set_file_is_waiting(false);
         self.file_num += 1;
@@ -1298,6 +1593,7 @@ impl TransferJob {
     }
 
     async fn set_stream_offset(&mut self, file_num: usize, offset: u64) {
+        self.read_stream_integrity = None;
         #[cfg(any(target_os = "android", all(test, unix)))]
         if self.is_document() {
             if let Err(error) = self.seek_document(offset).await {
@@ -1880,8 +2176,25 @@ mod tests {
         assert!(!absolute_target.exists());
     }
 
+    #[cfg(windows)]
+    pub(super) fn create_dir_link_or_junction_for_test(target: &Path, link: &Path) {
+        if std::os::windows::fs::symlink_dir(target, link).is_ok() {
+            return;
+        }
+        let status = std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "mklink",
+                "/J",
+                &link.to_string_lossy(),
+                &target.to_string_lossy(),
+            ])
+            .status()
+            .expect("invoke mklink /J for unprivileged NTFS junction");
+        assert!(status.success(), "mklink /J failed with status: {status}");
+    }
+
     #[test]
-    #[cfg_attr(windows, ignore = "requires symlink privilege to create test symlink")]
     fn path_traversal_e2e_write_rejects_symlink_escape() {
         let tmp_root = TestTempDir::new("rustdesk_e2e_symlink");
         let downloads = tmp_root.join("downloads");
@@ -1898,14 +2211,14 @@ mod tests {
         }
         #[cfg(windows)]
         {
-            use std::os::windows::fs::symlink_dir;
-            symlink_dir(&outside, &symlink_path).expect("create directory symlink for test");
+            create_dir_link_or_junction_for_test(&outside, &symlink_path);
         }
 
         let err = new_write_job(3, downloads, "link/escape.txt")
-            .expect_err("symlink traversal must be rejected");
+            .expect_err("symlink or junction traversal must be rejected");
         assert_err_contains(err, "symlink");
         assert!(!escaped_target.exists());
+        let _ = std::fs::remove_dir(&symlink_path);
     }
 
     #[test]
@@ -2000,5 +2313,81 @@ mod tests {
         // Cameras and phones name their photos IMG_0001.JPG.
         assert!(is_compressed_file("IMG_0001.JPG"));
         assert!(is_compressed_file("Backup.ZIP"));
+    }
+
+    #[tokio::test]
+    async fn f16_new_read_populates_sha256_and_detects_mid_transfer_mutation_and_corrupted_staging() {
+        let tmp_root = TestTempDir::new("rustdesk_f16_integrity");
+        let src_dir = tmp_root.join("src");
+        let dst_dir = tmp_root.join("dst");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::create_dir_all(&dst_dir).unwrap();
+
+        let src_file = src_dir.join("payload.bin");
+        std::fs::write(&src_file, b"AAAA").unwrap();
+
+        let mut reader = TransferJob::new_read(
+            41,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(src_file.clone()),
+            0,
+            false,
+            false,
+            false,
+        )
+        .unwrap();
+        assert_eq!(reader.files().len(), 1);
+        assert_eq!(reader.files()[0].size, 4);
+        assert_eq!(reader.files()[0].sha256.len(), 64);
+
+        // Mutate sender file before read stream finishes -> EOF read MUST fail
+        std::fs::write(&src_file, b"BBBB").unwrap();
+        assert!(!reader.open_data_stream().await.unwrap());
+        let first_block = reader.read().await.unwrap().unwrap();
+        assert!(!first_block.data.is_empty());
+        let eof_err = reader
+            .read()
+            .await
+            .expect_err("sender file mutation must fail at EOF before FileTransferDone");
+        assert!(eof_err.to_string().contains("sender file mutated"));
+
+        // Receiver modify_time refuses to publish corrupted .download when entry.sha256 mismatches
+        let (expected_sha_aaaa, _) = {
+            let clean_file = src_dir.join("clean.bin");
+            std::fs::write(&clean_file, b"AAAA").unwrap();
+            compute_file_sha256_and_size(&clean_file).unwrap()
+        };
+        let mut writer = TransferJob::new_write(
+            42,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(dst_dir.clone()),
+            0,
+            false,
+            false,
+            false,
+        )
+        .with_files(vec![FileEntry {
+            name: "out.bin".to_string(),
+            size: 4,
+            sha256: expected_sha_aaaa,
+            ..Default::default()
+        }])
+        .unwrap();
+        writer
+            .write(FileTransferBlock {
+                id: 42,
+                file_num: 0,
+                data: b"BBBB".to_vec().into(),
+                compressed: false,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        writer.flush_and_close_stream().await.unwrap();
+        writer.modify_time();
+        assert!(!dst_dir.join("out.bin").exists());
+        assert!(dst_dir.join("out.bin.download").exists());
     }
 }

@@ -67,6 +67,8 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 "recent_events": rt.ai_bridge.recent_events(),
                 "sources_catalog": super::ai_bridge::AiEventBridge::supported_sources_catalog(),
                 "rejected_security_count": rt.ai_bridge.rejected_security_count(),
+                "replay_journal_healthy": rt.ai_bridge.is_replay_journal_healthy(),
+                "replay_journal_error": rt.ai_bridge.replay_journal_error(),
             }
         }),
         "ai_ingest_signed_event" => {
@@ -97,6 +99,8 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                     "active_toasts": rt.notifications.active_toasts(),
                     "items": rt.notifications.query_history(&filter),
                     "preferences": rt.notifications.preferences(),
+                    "journal_healthy": rt.notifications.journal_healthy(),
+                    "journal_error": rt.notifications.journal_error(),
                 }
             })
         }
@@ -309,14 +313,33 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
             serde_json::json!({ "ok": true, "data": st })
         }
         "revoke_all_access" => {
-            let svc = rt.service_ctrl.revoke_all_access_immediately();
-            rt.security.append_audit(
-                "BOSS",
-                "EMERGENCY_REVOKE_ALL_ACCESS",
-                "OK",
-                "Revoked unattended & service access",
-            );
-            serde_json::json!({ "ok": true, "data": svc })
+            let revoked_sessions = rt.security.revoke_all_active_sessions();
+            match rt.service_ctrl.revoke_all_access_immediately() {
+                Ok(svc) => {
+                    rt.security.append_audit(
+                        "BOSS",
+                        "EMERGENCY_REVOKE_ALL_ACCESS",
+                        "OK",
+                        &format!(
+                            "Revoked unattended, auto-start, owned service, and {revoked_sessions} active session(s)"
+                        ),
+                    );
+                    serde_json::json!({ "ok": true, "data": svc })
+                }
+                Err(e) => {
+                    rt.security.append_audit(
+                        "BOSS",
+                        "EMERGENCY_REVOKE_ALL_ACCESS",
+                        "FAILED",
+                        &e,
+                    );
+                    serde_json::json!({
+                        "ok": false,
+                        "error": e,
+                        "data": rt.service_ctrl.status()
+                    })
+                }
+            }
         }
         "network_probe" => {
             let target = args
@@ -421,23 +444,44 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
             let conn_id = args.get("conn_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
             let dest_dir = args.get("dest_dir").and_then(|v| v.as_str()).unwrap_or("");
             let total_bytes = args.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
-            let files: Vec<String> = args
-                .get("files")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|x| x.as_str().map(str::to_owned))
-                        .collect()
-                })
-                .unwrap_or_default();
-            rt.transfer_queue.track_engine_receive_start_batch(
-                engine_id,
-                conn_id,
-                dest_dir,
-                files,
-                total_bytes,
-            );
-            serde_json::json!({ "ok": true })
+            if let Some(specs_val) = args.get("file_specs") {
+                match serde_json::from_value::<Vec<super::transfer_guard::ExpectedFileIntegritySpec>>(
+                    specs_val.clone(),
+                ) {
+                    Ok(specs) => {
+                        rt.transfer_queue.track_engine_receive_start_manifest(
+                            engine_id,
+                            conn_id,
+                            dest_dir,
+                            specs,
+                            total_bytes,
+                        );
+                        serde_json::json!({ "ok": true })
+                    }
+                    Err(e) => serde_json::json!({
+                        "ok": false,
+                        "error": format!("INVALID_FILE_SPECS: {e}")
+                    }),
+                }
+            } else {
+                let files: Vec<String> = args
+                    .get("files")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|x| x.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                rt.transfer_queue.track_engine_receive_start_batch(
+                    engine_id,
+                    conn_id,
+                    dest_dir,
+                    files,
+                    total_bytes,
+                );
+                serde_json::json!({ "ok": true })
+            }
         }
         "transfer_finalize_receive" => {
             let engine_id = args.get("engine_job_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;

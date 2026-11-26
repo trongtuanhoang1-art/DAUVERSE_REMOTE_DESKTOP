@@ -9,7 +9,8 @@ $ErrorActionPreference = "Stop"
 $StartUtc = (Get-Date).ToUniversalTime()
 
 Write-Host "[DAUVERSE JOB WRAPPER] Starting $JobKind job '$TaskName' for $ProjectId..."
-$OutputLines = & powershell -NoProfile -Command $CommandToRun 2>&1 | Out-String
+$PsExe = if (Get-Command powershell -ErrorAction SilentlyContinue) { "powershell" } else { "pwsh" }
+$OutputLines = & $PsExe -NoProfile -Command $CommandToRun 2>&1 | Out-String
 $ExitCode = $LASTEXITCODE
 if ($null -eq $ExitCode) { $ExitCode = 0 }
 
@@ -18,7 +19,13 @@ $IssuedMs = [int64]([DateTimeOffset]$NowUtc).ToUnixTimeMilliseconds()
 $EventId = [guid]::NewGuid().ToString()
 $Nonce = [guid]::NewGuid().ToString("N")
 $Timestamp = $NowUtc.ToString("yyyy-MM-ddTHH:mm:ssZ")
-$DeviceId = $env:COMPUTERNAME
+$DeviceId = if (-not [string]::IsNullOrWhiteSpace($env:COMPUTERNAME)) {
+    $env:COMPUTERNAME
+} elseif (-not [string]::IsNullOrWhiteSpace([System.Environment]::MachineName)) {
+    [System.Environment]::MachineName
+} else {
+    "UNKNOWN-HOST"
+}
 
 if ($ExitCode -eq 0) {
     $EventType = switch ($JobKind) {
@@ -65,12 +72,42 @@ function ConvertTo-SerdeJsonScalar {
     return $sb.ToString()
 }
 
+function ConvertTo-CanonicalF32Tag {
+    param(
+        [Parameter(Mandatory = $true)][single]$Val,
+        [Parameter(Mandatory = $true)][single]$MinVal,
+        [Parameter(Mandatory = $true)][single]$MaxVal
+    )
+    if ([single]::IsNaN($Val) -or [single]::IsInfinity($Val)) {
+        throw "EVENT_REJECT_NON_FINITE_FLOAT"
+    }
+    $bytes = [System.BitConverter]::GetBytes([single]$Val)
+    if ([System.BitConverter]::IsLittleEndian) {
+        [Array]::Reverse($bytes)
+    }
+    $hex = -join ($bytes | ForEach-Object { $_.ToString("x2") })
+    if ($hex -eq "80000000") {
+        throw "EVENT_REJECT_NEGATIVE_ZERO_FLOAT"
+    }
+    if ($Val -lt $MinVal -or $Val -gt $MaxVal) {
+        throw "EVENT_REJECT_OUT_OF_RANGE_FLOAT"
+    }
+    return "f32:$hex"
+}
+
 $Secret = $env:DAUVERSE_EVENT_HMAC_KEY
 if (-not [string]::IsNullOrEmpty($Secret) -and $Secret.Length -ge 16) {
+    $StrictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
     $SummaryText = "$JobKind job '$TaskName' exited with code $ExitCode"
     $BadgeText = "ExitCode=$ExitCode"
-    $ProgressJson = if ($ExitCode -eq 0) { '"100.0000"' } else { "null" }
-    $ConfidenceJson = '"1.0000"'
+    $ProgressSingle = if ($ExitCode -eq 0) { [single]100.0 } else { $null }
+    $ConfidenceSingle = [single]1.0
+    $ProgressJson = if ($null -ne $ProgressSingle) {
+        ConvertTo-SerdeJsonScalar (ConvertTo-CanonicalF32Tag -Val $ProgressSingle -MinVal ([single]0.0) -MaxVal ([single]100.0))
+    } else {
+        "null"
+    }
+    $ConfidenceJson = ConvertTo-SerdeJsonScalar (ConvertTo-CanonicalF32Tag -Val $ConfidenceSingle -MinVal ([single]0.0) -MaxVal ([single]1.0))
 
     $ProvJson = "[" + ((@(
         (ConvertTo-SerdeJsonScalar "APPROVED_WRAPPER_ADAPTER"),
@@ -80,8 +117,8 @@ if (-not [string]::IsNullOrEmpty($Secret) -and $Secret.Length -ge 16) {
     )) -join ",") + "]"
 
     $Canonical = "[" + ((@(
-        (ConvertTo-SerdeJsonScalar "DAUVERSE_AI_EVENT_V2"),
-        "2",
+        (ConvertTo-SerdeJsonScalar "DAUVERSE_AI_EVENT_V3"),
+        "3",
         (ConvertTo-SerdeJsonScalar ([int64]$IssuedMs)),
         (ConvertTo-SerdeJsonScalar $Nonce),
         (ConvertTo-SerdeJsonScalar $EventId),
@@ -101,12 +138,12 @@ if (-not [string]::IsNullOrEmpty($Secret) -and $Secret.Length -ge 16) {
         $ProvJson
     )) -join ",") + "]"
 
-    $Hmac = [System.Security.Cryptography.HMACSHA256]::new([System.Text.Encoding]::UTF8.GetBytes($Secret))
-    $SigBytes = $Hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Canonical))
+    $Hmac = [System.Security.Cryptography.HMACSHA256]::new($StrictUtf8.GetBytes($Secret))
+    $SigBytes = $Hmac.ComputeHash($StrictUtf8.GetBytes($Canonical))
     $SigHex = -join ($SigBytes | ForEach-Object { $_.ToString("x2") })
 
     $BodyObj = [ordered]@{
-        schema_version = 2
+        schema_version = 3
         event = [ordered]@{
             event_id = $EventId
             timestamp = $Timestamp
@@ -118,10 +155,10 @@ if (-not [string]::IsNullOrEmpty($Secret) -and $Secret.Length -ge 16) {
             event_type = $EventType
             status = $Status
             severity = $Severity
-            progress = if ($ExitCode -eq 0) { 100.0 } else { $null }
+            progress = if ($null -ne $ProgressSingle) { [double]$ProgressSingle } else { $null }
             summary = $SummaryText
             artifact_reference = $null
-            confidence = 1.0
+            confidence = [double]$ConfidenceSingle
             provenance = [ordered]@{
                 adapter_type = "APPROVED_WRAPPER_ADAPTER"
                 evidence_verified = $true
@@ -136,7 +173,7 @@ if (-not [string]::IsNullOrEmpty($Secret) -and $Secret.Length -ge 16) {
 
     $Endpoint = if ($env:DAUVERSE_EVENT_ENDPOINT) { $env:DAUVERSE_EVENT_ENDPOINT } else { "http://127.0.0.1:21188/v1/events" }
     try {
-        Invoke-RestMethod -Uri $Endpoint -Method Post -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($BodyObj)) -TimeoutSec 2 | Out-Null
+        Invoke-RestMethod -Uri $Endpoint -Method Post -ContentType "application/json; charset=utf-8" -Body ($StrictUtf8.GetBytes($BodyObj)) -TimeoutSec 2 | Out-Null
     } catch {
         Write-Verbose "DAUVERSE loopback bridge unreachable; continuing."
     }

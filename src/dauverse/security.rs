@@ -178,8 +178,8 @@ impl DeviceShieldSecurityCenter {
         let mut init_err: Option<String> = None;
 
         if let Some(ref p) = audit_path {
-            if std::fs::symlink_metadata(p).is_ok() {
-                match open_no_follow_regular_file(p) {
+            match std::fs::symlink_metadata(p) {
+                Ok(_) => match open_no_follow_regular_file(p) {
                     Ok((mut f, _)) => {
                         let mut raw = String::new();
                         if f.read_to_string(&mut raw).is_ok() {
@@ -206,6 +206,11 @@ impl DeviceShieldSecurityCenter {
                         corrupted_state = true;
                         init_err = Some(e);
                     }
+                },
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    corrupted_state = true;
+                    init_err = Some(format!("AUDIT_LOG_STAT_ERROR_FAIL_CLOSED: {e}"));
                 }
             }
         }
@@ -219,8 +224,8 @@ impl DeviceShieldSecurityCenter {
             .as_ref()
             .and_then(|p| p.parent().map(|dir| dir.join("security_state.json")))
         {
-            if std::fs::symlink_metadata(&state_path).is_ok() {
-                match open_no_follow_regular_file(&state_path) {
+            match std::fs::symlink_metadata(&state_path) {
+                Ok(_) => match open_no_follow_regular_file(&state_path) {
                     Ok((mut f, _)) => {
                         let mut raw = String::new();
                         match f.read_to_string(&mut raw).ok().and_then(|_| {
@@ -257,6 +262,12 @@ impl DeviceShieldSecurityCenter {
                         allowlist = true;
                         init_err = Some(e);
                     }
+                },
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => {
+                    corrupted_state = true;
+                    allowlist = true;
+                    init_err = Some(format!("SECURITY_STATE_STAT_ERROR_FAIL_CLOSED: {e}"));
                 }
             }
         }
@@ -383,19 +394,22 @@ impl DeviceShieldSecurityCenter {
 
     pub fn is_step_up_vault_corrupted(&self) -> bool {
         let vp = self.step_up_vault_path();
-        if std::fs::symlink_metadata(&vp).is_err() {
-            return false;
-        }
-        match read_sealed_secret_file(&vp, STEP_UP_PIN_ENTROPY) {
-            Ok(bytes) => bytes.len() < 6,
+        match std::fs::symlink_metadata(&vp) {
+            Ok(_) => match read_sealed_secret_file(&vp, STEP_UP_PIN_ENTROPY) {
+                Ok(bytes) => bytes.len() < 6,
+                Err(_) => true,
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
             Err(_) => true,
         }
     }
 
     pub fn is_step_up_passcode_configured(&self) -> bool {
         let vp = self.step_up_vault_path();
-        if std::fs::symlink_metadata(&vp).is_ok() {
-            return true;
+        match std::fs::symlink_metadata(&vp) {
+            Ok(_) => return true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return true,
         }
         std::env::var("DAUVERSE_BOSS_STEP_UP_PIN")
             .map(|s| s.trim().len() >= 6)
@@ -517,8 +531,8 @@ impl DeviceShieldSecurityCenter {
         }
 
         let vp = self.step_up_vault_path();
-        let expected_secret: Vec<u8> = if std::fs::symlink_metadata(&vp).is_ok() {
-            match read_sealed_secret_file(&vp, STEP_UP_PIN_ENTROPY) {
+        let expected_secret: Vec<u8> = match std::fs::symlink_metadata(&vp) {
+            Ok(_) => match read_sealed_secret_file(&vp, STEP_UP_PIN_ENTROPY) {
                 Ok(bytes) if bytes.len() >= 6 => bytes,
                 _ => {
                     self.append_audit(
@@ -529,27 +543,39 @@ impl DeviceShieldSecurityCenter {
                     );
                     return Err("SECURITY_VAULT_CORRUPTED_FAIL_CLOSED".to_owned());
                 }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if let Ok(env_pin) = std::env::var("DAUVERSE_BOSS_STEP_UP_PIN") {
+                    let trimmed = env_pin.trim().as_bytes().to_vec();
+                    if trimmed.len() < 6 {
+                        self.append_audit(
+                            "BOSS",
+                            "VERIFY_STEP_UP_PIN",
+                            "DENIED",
+                            "No valid Step-Up PIN enrolled",
+                        );
+                        return Err("SECURITY_DENY_STEP_UP_PIN_NOT_ENROLLED".to_owned());
+                    }
+                    trimmed
+                } else {
+                    self.append_audit(
+                        "BOSS",
+                        "VERIFY_STEP_UP_PIN",
+                        "DENIED",
+                        "No Step-Up PIN enrolled in vault",
+                    );
+                    return Err("SECURITY_DENY_STEP_UP_PIN_NOT_ENROLLED".to_owned());
+                }
             }
-        } else if let Ok(env_pin) = std::env::var("DAUVERSE_BOSS_STEP_UP_PIN") {
-            let trimmed = env_pin.trim().as_bytes().to_vec();
-            if trimmed.len() < 6 {
+            Err(_) => {
                 self.append_audit(
                     "BOSS",
                     "VERIFY_STEP_UP_PIN",
-                    "DENIED",
-                    "No valid Step-Up PIN enrolled",
+                    "DENIED_VAULT_STAT_ERROR",
+                    "step_up_pin.vault metadata inaccessible; failing closed",
                 );
-                return Err("SECURITY_DENY_STEP_UP_PIN_NOT_ENROLLED".to_owned());
+                return Err("SECURITY_VAULT_CORRUPTED_FAIL_CLOSED".to_owned());
             }
-            trimmed
-        } else {
-            self.append_audit(
-                "BOSS",
-                "VERIFY_STEP_UP_PIN",
-                "DENIED",
-                "No Step-Up PIN enrolled in vault",
-            );
-            return Err("SECURITY_DENY_STEP_UP_PIN_NOT_ENROLLED".to_owned());
         };
 
         let cand = candidate.trim().as_bytes();
@@ -568,7 +594,16 @@ impl DeviceShieldSecurityCenter {
                     false
                 }
             };
-            let _ = self.persist_security_state();
+            if let Err(persist_err) = self.persist_security_state() {
+                *self.state_corrupted_fail_closed.lock().unwrap() = true;
+                self.append_audit(
+                    "BOSS",
+                    "VERIFY_STEP_UP_PIN",
+                    "FAILED_PERSIST_LOCKOUT",
+                    &format!("Failed persisting brute-force counter/lockout: {persist_err}"),
+                );
+                return Err(format!("SECURITY_STATE_PERSIST_FAILED_FAIL_CLOSED: {persist_err}"));
+            }
             self.append_audit(
                 "BOSS",
                 "VERIFY_STEP_UP_PIN",
@@ -588,7 +623,16 @@ impl DeviceShieldSecurityCenter {
                 st.failed_timestamps_ms.clear();
             }
         }
-        let _ = self.persist_security_state();
+        if let Err(persist_err) = self.persist_security_state() {
+            *self.state_corrupted_fail_closed.lock().unwrap() = true;
+            self.append_audit(
+                "BOSS",
+                "VERIFY_STEP_UP_PIN",
+                "FAILED_PERSIST_STATE",
+                &format!("Refusing PIN grant because security_state.json write failed: {persist_err}"),
+            );
+            return Err(format!("SECURITY_STATE_PERSIST_FAILED_FAIL_CLOSED: {persist_err}"));
+        }
         self.append_audit(
             "BOSS",
             "VERIFY_STEP_UP_PIN",
@@ -703,11 +747,25 @@ impl DeviceShieldSecurityCenter {
             revoked: false,
             permissions,
         };
-        self.trusted_devices
+        let previous = self
+            .trusted_devices
             .lock()
             .unwrap()
             .insert(device_id.to_owned(), entry.clone());
-        self.persist_security_state()?;
+        if let Err(e) = self.persist_security_state() {
+            let mut devs = self.trusted_devices.lock().unwrap();
+            match previous {
+                Some(prev) => {
+                    devs.insert(device_id.to_owned(), prev);
+                }
+                None => {
+                    devs.remove(device_id);
+                }
+            }
+            drop(devs);
+            *self.state_corrupted_fail_closed.lock().unwrap() = true;
+            return Err(format!("SECURITY_STATE_PERSIST_FAILED_FAIL_CLOSED: {e}"));
+        }
         self.append_audit(device_id, "PAIR_DEVICE", "ALLOWED", display_name);
         Ok(entry)
     }
@@ -728,7 +786,10 @@ impl DeviceShieldSecurityCenter {
                 sess.revoked = true;
             }
         }
-        self.persist_security_state()?;
+        if let Err(e) = self.persist_security_state() {
+            *self.state_corrupted_fail_closed.lock().unwrap() = true;
+            return Err(format!("SECURITY_STATE_PERSIST_FAILED_FAIL_CLOSED: {e}"));
+        }
         self.append_audit(device_id, "REVOKE_DEVICE_AND_SESSIONS", "OK", "Device and active sessions revoked");
         Ok(())
     }
@@ -879,6 +940,18 @@ impl DeviceShieldSecurityCenter {
         drop(sessions);
         self.append_audit("OWNER", "REVOKE_SESSION", "OK", session_id);
         Ok(())
+    }
+
+    pub fn revoke_all_active_sessions(&self) -> usize {
+        let mut revoked_count = 0usize;
+        for sess in self.sessions.lock().unwrap().values_mut() {
+            if !sess.revoked {
+                sess.revoked = true;
+                revoked_count += 1;
+            }
+        }
+        self.step_up_tokens.lock().unwrap().clear();
+        revoked_count
     }
 
     pub fn append_audit(&self, actor: &str, action: &str, outcome: &str, detail: &str) {
@@ -1209,6 +1282,35 @@ mod tests {
             .set_step_up_passcode("TryOverwrite#1")
             .unwrap_err()
             .starts_with("SECURITY_VAULT_CORRUPTED_FAIL_CLOSED"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn f05_f07_security_state_persistence_failure_fails_closed() {
+        let dir = std::env::temp_dir().join(format!("dv_sec_persist_fail_{}", uuid::Uuid::new_v4()));
+        let audit_path = dir.join("security_audit_chain.jsonl");
+        let sec = DeviceShieldSecurityCenter::with_audit_log_path(Some(audit_path));
+        sec.set_step_up_passcode("PersistPin#1").unwrap();
+        assert!(sec.verify_step_up_passcode_at("PersistPin#1", 1_000).is_ok());
+
+        // Replace security_state.json with a directory so atomic write fails deterministically
+        let state_path = dir.join("security_state.json");
+        std::fs::remove_file(&state_path).ok();
+        std::fs::create_dir_all(&state_path).unwrap();
+
+        let err_bad = sec
+            .verify_step_up_passcode_at("WrongPin#9", 2_000)
+            .unwrap_err();
+        assert!(
+            err_bad.contains("SECURITY_STATE_PERSIST_FAILED_FAIL_CLOSED"),
+            "got: {err_bad}"
+        );
+        let err_after = sec
+            .verify_step_up_passcode_at("PersistPin#1", 2_100)
+            .unwrap_err();
+        assert_eq!(err_after, "SECURITY_STATE_CORRUPTED_FAIL_CLOSED");
+        assert_eq!(sec.summary()["persistence_healthy"], false);
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -183,7 +183,7 @@ pub enum FS {
         path: String,
         id: i32,
         file_num: i32,
-        files: Vec<(String, u64)>,
+        files: Vec<(String, u64, u64, String)>,
         overwrite_detection: bool,
         total_size: u64,
         conn_id: i32,

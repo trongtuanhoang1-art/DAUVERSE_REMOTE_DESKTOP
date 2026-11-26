@@ -48,7 +48,7 @@ function Clear-ReadOnlyRecursive {
 
 try {
     $FullInstallDir = [System.IO.Path]::GetFullPath($InstallDir).TrimEnd('\', '/')
-    $InstallPrefix = $FullInstallDir + "\"
+    $InstallPrefix = $FullInstallDir + [string][System.IO.Path]::DirectorySeparatorChar
     Write-HelperLog "Starting helper for InstallDir='$FullInstallDir' HasFixedDriveE='$HasFixedDriveE' Is64BitProcess=$([Environment]::Is64BitProcess)"
 
     if ($Action -eq "StopOwnedProcesses") {
@@ -104,6 +104,17 @@ try {
                 }
                 $null = [System.IO.Directory]::CreateDirectory($DstFull)
 
+                $RootAttr = [System.IO.File]::GetAttributes($FullInstallDir)
+                if (($RootAttr -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "BACKUP_ABORT: InstallDir '$FullInstallDir' is a reparse point / junction."
+                }
+                foreach ($srcDir in [System.IO.Directory]::GetDirectories($FullInstallDir, "*", [System.IO.SearchOption]::AllDirectories)) {
+                    $dirAttr = [System.IO.File]::GetAttributes($srcDir)
+                    if (($dirAttr -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                        throw "BACKUP_ABORT: Directory junction / reparse point rejected in existing installation: $srcDir"
+                    }
+                }
+
                 $SrcFiles = [System.IO.Directory]::GetFiles($FullInstallDir, "*", [System.IO.SearchOption]::AllDirectories)
                 [System.Array]::Sort($SrcFiles, [System.StringComparer]::Ordinal)
 
@@ -118,6 +129,9 @@ try {
                         throw "BACKUP_ABORT: Reparse point / symlink rejected in existing installation: $srcFile"
                     }
                     $relPath = $srcFile.Substring($InstallPrefix.Length)
+                    if ($relPath.Contains(":")) {
+                        throw "BACKUP_ABORT: Alternate data stream or colon path rejected: $relPath"
+                    }
                     $dstFile = [System.IO.Path]::Combine($DstFull, $relPath)
                     $dstParent = [System.IO.Path]::GetDirectoryName($dstFile)
                     if ($dstParent -and (-not [System.IO.Directory]::Exists($dstParent))) {

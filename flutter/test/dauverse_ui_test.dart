@@ -15,6 +15,11 @@ void main() {
     DauverseNativeBridge.setForceUnboundForTest(true);
     DauverseNativeBridge.setTestHarnessMode(false);
 
+    expect(
+      () => DauverseNativeBridge.assertReleaseIsolationPolicy(simulatedReleaseFlag: true),
+      throwsA(isA<UnsupportedError>()),
+    );
+
     final pinRes = DauverseNativeBridge.instance.call('set_step_up_pin', {'pin': '123456'});
     expect(pinRes['ok'], isFalse);
     expect(pinRes['error']?.toString(), contains('NATIVE_FFI_UNBOUND_FAIL_CLOSED'));

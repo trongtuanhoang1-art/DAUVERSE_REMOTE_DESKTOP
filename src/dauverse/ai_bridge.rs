@@ -1,4 +1,7 @@
-use super::crypto_util::{constant_time_eq, hmac_sha256, redact_sensitive, write_atomic_bytes};
+use super::crypto_util::{
+    check_no_symlink_or_reparse_component, constant_time_eq, hmac_sha256,
+    open_no_follow_regular_file, redact_sensitive, write_atomic_bytes,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -12,7 +15,7 @@ use std::{
     time::Duration,
 };
 
-pub const AI_EVENT_SCHEMA_V2: u8 = 2;
+pub const AI_EVENT_SCHEMA_V3: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -71,6 +74,7 @@ pub enum SourceSupportStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EventProvenance {
     pub adapter_type: SourceSupportStatus,
     pub evidence_verified: bool,
@@ -79,6 +83,7 @@ pub struct EventProvenance {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AiEvent {
     pub event_id: String,
     pub timestamp: String,
@@ -98,8 +103,8 @@ pub struct AiEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SignedAiEventEnvelope {
-    #[serde(default)]
     pub schema_version: u8,
     pub event: AiEvent,
     pub issued_at_ms: i64,
@@ -136,6 +141,7 @@ pub struct AiSourceDescriptor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ReplayRecord {
     event_id: String,
     nonce: String,
@@ -154,30 +160,35 @@ const MAX_CLOCK_SKEW_MS: i64 = 300_000;
 const REPLAY_RETENTION_MS: i64 = MAX_CLOCK_SKEW_MS * 2 + 60_000;
 const DEFAULT_MAX_ACTIVE_REPLAY_ENTRIES: usize = 65_536;
 
-pub fn canonical_signing_bytes_checked(
+pub fn encode_canonical_f32_checked(
+    val: f32,
+    min_val: f32,
+    max_val: f32,
+    field: &str,
+) -> Result<String, String> {
+    if !val.is_finite() {
+        return Err(format!("EVENT_REJECT_NON_FINITE_{field}"));
+    }
+    let bits = val.to_bits();
+    if bits == 0x8000_0000 {
+        return Err(format!("EVENT_REJECT_NEGATIVE_ZERO_{field}"));
+    }
+    if !(min_val..=max_val).contains(&val) {
+        return Err(format!("EVENT_REJECT_OUT_OF_RANGE_{field}"));
+    }
+    Ok(format!("f32:{bits:08x}"))
+}
+
+fn build_canonical_v3_json_bytes(
     event: &AiEvent,
     schema_version: u8,
     issued_at_ms: i64,
     nonce: &str,
+    progress_tag: Option<String>,
+    confidence_tag: String,
 ) -> Result<Vec<u8>, String> {
-    if schema_version != AI_EVENT_SCHEMA_V2 {
-        return Err("EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION".to_owned());
-    }
-    if !event.confidence.is_finite() {
-        return Err("EVENT_REJECT_NON_FINITE_CONFIDENCE".to_owned());
-    }
-    let progress_str = match event.progress {
-        Some(p) => {
-            if !p.is_finite() {
-                return Err("EVENT_REJECT_NON_FINITE_PROGRESS".to_owned());
-            }
-            Some(format!("{p:.4}"))
-        }
-        None => None,
-    };
-    let confidence_str = format!("{:.4}", event.confidence);
     let canonical = serde_json::json!([
-        "DAUVERSE_AI_EVENT_V2",
+        "DAUVERSE_AI_EVENT_V3",
         schema_version,
         issued_at_ms,
         nonce,
@@ -191,10 +202,10 @@ pub fn canonical_signing_bytes_checked(
         &event.event_type,
         &event.status,
         &event.severity,
-        progress_str,
+        progress_tag,
         &event.summary,
         &event.artifact_reference,
-        confidence_str,
+        confidence_tag,
         [
             &event.provenance.adapter_type,
             event.provenance.evidence_verified,
@@ -205,9 +216,42 @@ pub fn canonical_signing_bytes_checked(
     serde_json::to_vec(&canonical).map_err(|e| format!("CANONICAL_SERIALIZE_ERROR: {e}"))
 }
 
+pub fn canonical_signing_bytes_checked(
+    event: &AiEvent,
+    schema_version: u8,
+    issued_at_ms: i64,
+    nonce: &str,
+) -> Result<Vec<u8>, String> {
+    if schema_version != AI_EVENT_SCHEMA_V3 {
+        return Err("EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION".to_owned());
+    }
+    let progress_tag = match event.progress {
+        Some(p) => Some(encode_canonical_f32_checked(p, 0.0, 100.0, "PROGRESS")?),
+        None => None,
+    };
+    let confidence_tag = encode_canonical_f32_checked(event.confidence, 0.0, 1.0, "CONFIDENCE")?;
+    build_canonical_v3_json_bytes(
+        event,
+        schema_version,
+        issued_at_ms,
+        nonce,
+        progress_tag,
+        confidence_tag,
+    )
+}
+
 pub fn canonical_signing_bytes(event: &AiEvent, issued_at_ms: i64, nonce: &str) -> Vec<u8> {
-    canonical_signing_bytes_checked(event, AI_EVENT_SCHEMA_V2, issued_at_ms, nonce)
-        .unwrap_or_default()
+    let progress_tag = event.progress.map(|p| format!("f32:{:08x}", p.to_bits()));
+    let confidence_tag = format!("f32:{:08x}", event.confidence.to_bits());
+    build_canonical_v3_json_bytes(
+        event,
+        AI_EVENT_SCHEMA_V3,
+        issued_at_ms,
+        nonce,
+        progress_tag,
+        confidence_tag,
+    )
+    .unwrap_or_default()
 }
 
 pub fn sign_event_envelope(
@@ -219,7 +263,7 @@ pub fn sign_event_envelope(
     let payload = canonical_signing_bytes(&event, issued_at_ms, &nonce);
     let sig = hex::encode(hmac_sha256(secret_key, &payload));
     SignedAiEventEnvelope {
-        schema_version: AI_EVENT_SCHEMA_V2,
+        schema_version: AI_EVENT_SCHEMA_V3,
         event,
         issued_at_ms,
         nonce,
@@ -337,10 +381,78 @@ pub fn normalize_event_truthfulness(mut ev: AiEvent) -> AiEvent {
     ev
 }
 
+fn load_replay_journal_strict(path: &Path) -> Result<ReplayGuardState, String> {
+    match std::fs::symlink_metadata(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = path.parent() {
+                check_no_symlink_or_reparse_component(parent)?;
+                if parent.exists() {
+                    std::fs::read_dir(parent).map_err(|dir_err| {
+                        format!(
+                            "REPLAY_JOURNAL_PARENT_UNREADABLE '{}': {dir_err}",
+                            parent.display()
+                        )
+                    })?;
+                }
+            }
+            return Ok(ReplayGuardState::default());
+        }
+        Err(e) => {
+            return Err(format!(
+                "REPLAY_JOURNAL_STAT_FAILED '{}': {e}",
+                path.display()
+            ));
+        }
+        Ok(_) => {}
+    }
+
+    let (mut file, expected_len) = open_no_follow_regular_file(path)?;
+    let mut raw_bytes = Vec::with_capacity(expected_len as usize);
+    file.read_to_end(&mut raw_bytes).map_err(|e| {
+        format!(
+            "REPLAY_JOURNAL_READ_FAILED '{}': {e}",
+            path.display()
+        )
+    })?;
+    let raw_str = std::str::from_utf8(&raw_bytes).map_err(|e| {
+        format!(
+            "REPLAY_JOURNAL_INVALID_UTF8 '{}': {e}",
+            path.display()
+        )
+    })?;
+    let records: Vec<ReplayRecord> = serde_json::from_str(raw_str).map_err(|e| {
+        format!(
+            "REPLAY_JOURNAL_PARSE_FAILED '{}': {e}",
+            path.display()
+        )
+    })?;
+
+    let mut guard = ReplayGuardState::default();
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    for rec in records {
+        if rec.event_id.trim().is_empty() || rec.nonce.trim().len() < 8 {
+            return Err("REPLAY_JOURNAL_INVALID_RECORD: empty event_id or weak nonce".to_owned());
+        }
+        if now_ms.saturating_sub(rec.seen_at_ms) <= REPLAY_RETENTION_MS
+            || (now_ms - rec.issued_at_ms).abs() <= MAX_CLOCK_SKEW_MS
+        {
+            if !guard.seen_event_ids.insert(rec.event_id.clone())
+                || !guard.seen_nonces.insert(rec.nonce.clone())
+            {
+                return Err("REPLAY_JOURNAL_DUPLICATE_ACTIVE_RECORD".to_owned());
+            }
+            guard.records.push_back(rec);
+        }
+    }
+    Ok(guard)
+}
+
 pub struct AiEventBridge {
     hmac_secret: Mutex<Vec<u8>>,
     replay_guard: Mutex<ReplayGuardState>,
     replay_journal_path: Option<PathBuf>,
+    journal_corrupted_fail_closed: AtomicBool,
+    journal_error_detail: Mutex<Option<String>>,
     max_active_replay_entries: usize,
     event_log: Mutex<VecDeque<AiEvent>>,
     live_tasks: Mutex<HashMap<String, AiLiveTaskState>>,
@@ -358,29 +470,40 @@ impl AiEventBridge {
         max_active_replay_entries: usize,
     ) -> Self {
         let mut guard = ReplayGuardState::default();
+        let mut corrupted = false;
+        let mut err_detail = None;
+
         if let Some(ref p) = replay_journal_path {
-            if let Ok(raw) = std::fs::read_to_string(p) {
-                if let Ok(records) = serde_json::from_str::<Vec<ReplayRecord>>(&raw) {
-                    let now_ms = chrono::Utc::now().timestamp_millis();
-                    for rec in records {
-                        if now_ms.saturating_sub(rec.seen_at_ms) <= REPLAY_RETENTION_MS {
-                            guard.seen_event_ids.insert(rec.event_id.clone());
-                            guard.seen_nonces.insert(rec.nonce.clone());
-                            guard.records.push_back(rec);
-                        }
-                    }
+            match load_replay_journal_strict(p) {
+                Ok(loaded) => {
+                    guard = loaded;
+                }
+                Err(e) => {
+                    corrupted = true;
+                    err_detail = Some(e);
                 }
             }
         }
+
         Self {
             hmac_secret: Mutex::new(hmac_secret),
             replay_guard: Mutex::new(guard),
             replay_journal_path,
+            journal_corrupted_fail_closed: AtomicBool::new(corrupted),
+            journal_error_detail: Mutex::new(err_detail),
             max_active_replay_entries: max_active_replay_entries.max(1),
             event_log: Mutex::new(VecDeque::with_capacity(512)),
             live_tasks: Mutex::new(HashMap::new()),
             rejected_spoof_or_replay: Mutex::new(0),
         }
+    }
+
+    pub fn is_replay_journal_healthy(&self) -> bool {
+        !self.journal_corrupted_fail_closed.load(Ordering::SeqCst)
+    }
+
+    pub fn replay_journal_error(&self) -> Option<String> {
+        self.journal_error_detail.lock().unwrap().clone()
     }
 
     pub fn supported_sources_catalog() -> Vec<AiSourceDescriptor> {
@@ -472,7 +595,19 @@ impl AiEventBridge {
         envelope: SignedAiEventEnvelope,
         now_ms: i64,
     ) -> Result<AiEvent, String> {
-        if envelope.schema_version != AI_EVENT_SCHEMA_V2 {
+        if self.journal_corrupted_fail_closed.load(Ordering::SeqCst) {
+            self.bump_rejected();
+            let detail = self
+                .journal_error_detail
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "corrupted or unreadable replay journal".to_owned());
+            return Err(format!(
+                "EVENT_REJECT_REPLAY_JOURNAL_CORRUPTED_FAIL_CLOSED: {detail}"
+            ));
+        }
+        if envelope.schema_version != AI_EVENT_SCHEMA_V3 {
             self.bump_rejected();
             return Err("EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION".to_owned());
         }
@@ -555,13 +690,23 @@ impl AiEventBridge {
 
             if let Some(ref path) = self.replay_journal_path {
                 let snapshot: Vec<&ReplayRecord> = guard.records.iter().collect();
-                let bytes = serde_json::to_vec(&snapshot)
-                    .map_err(|e| format!("EVENT_REJECT_REPLAY_SERIALIZE_FAILED: {e}"))?;
+                let bytes = match serde_json::to_vec(&snapshot) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        if let Some(rolled) = guard.records.pop_back() {
+                            guard.seen_event_ids.remove(&rolled.event_id);
+                            guard.seen_nonces.remove(&rolled.nonce);
+                        }
+                        self.bump_rejected();
+                        return Err(format!("EVENT_REJECT_REPLAY_SERIALIZE_FAILED: {e}"));
+                    }
+                };
                 if let Err(e) = write_atomic_bytes(path, &bytes, true) {
                     if let Some(rolled) = guard.records.pop_back() {
                         guard.seen_event_ids.remove(&rolled.event_id);
                         guard.seen_nonces.remove(&rolled.nonce);
                     }
+                    *self.journal_error_detail.lock().unwrap() = Some(e.clone());
                     self.bump_rejected();
                     return Err(format!("EVENT_REJECT_REPLAY_PERSIST_FAILED: {e}"));
                 }
@@ -574,7 +719,9 @@ impl AiEventBridge {
     }
 
     pub fn ingest_structured_jsonl_file_readonly(&self, path: &Path) -> Result<usize, String> {
-        let content = std::fs::read_to_string(path)
+        let (mut file, _len) = open_no_follow_regular_file(path)?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)
             .map_err(|e| format!("failed reading structured event log: {e}"))?;
         let mut count = 0usize;
         for line in content.lines() {
@@ -742,7 +889,7 @@ impl AiEventBridge {
         let mut raw = Vec::with_capacity(4096);
         let mut chunk = [0u8; 4096];
         let mut header_end: Option<usize> = None;
-        let mut content_len: usize = 0;
+        let mut content_len: Option<usize> = None;
 
         for _ in 0..32 {
             match stream.read(&mut chunk) {
@@ -755,18 +902,24 @@ impl AiEventBridge {
                     if header_end.is_none() {
                         if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
                             header_end = Some(pos);
-                            let hdr_str = String::from_utf8_lossy(&raw[..pos]);
+                            let hdr_str = std::str::from_utf8(&raw[..pos])
+                                .map_err(|_| "INVALID_UTF8_HTTP_HEADERS".to_owned())?;
                             for line in hdr_str.lines() {
                                 if let Some((k, v)) = line.split_once(':') {
                                     if k.trim().eq_ignore_ascii_case("content-length") {
-                                        content_len = v.trim().parse::<usize>().unwrap_or(0);
+                                        let parsed = v
+                                            .trim()
+                                            .parse::<usize>()
+                                            .map_err(|_| "INVALID_CONTENT_LENGTH".to_owned())?;
+                                        content_len = Some(parsed);
                                     }
                                 }
                             }
                         }
                     }
                     if let Some(pos) = header_end {
-                        if raw.len() >= pos + 4 + content_len {
+                        let expected_body = content_len.unwrap_or(0);
+                        if raw.len() >= pos + 4 + expected_body {
                             break;
                         }
                     }
@@ -781,11 +934,15 @@ impl AiEventBridge {
         let Some(pos) = header_end else {
             return Err("BAD_HTTP_HEADERS".to_owned());
         };
-        let header_part = String::from_utf8_lossy(&raw[..pos]).into_owned();
+        let header_part = std::str::from_utf8(&raw[..pos])
+            .map_err(|_| "INVALID_UTF8_HTTP_HEADERS".to_owned())?
+            .to_owned();
         let body_start = pos + 4;
-        let body_end = (body_start + content_len).min(raw.len());
-        let body_bytes = if content_len > 0 {
-            raw[body_start..body_end].to_vec()
+        let body_bytes = if let Some(expected_len) = content_len {
+            if raw.len() < body_start + expected_len {
+                return Err("TRUNCATED_HTTP_BODY".to_owned());
+            }
+            raw[body_start..body_start + expected_len].to_vec()
         } else {
             raw[body_start..].to_vec()
         };
@@ -814,12 +971,14 @@ impl AiEventBridge {
 
         if header_part.starts_with("GET /v1/health") {
             let (running, waiting, comfy) = bridge.active_counts();
+            let healthy = bridge.is_replay_journal_healthy();
             return Self::write_json_resp(
                 &mut stream,
-                200,
+                if healthy { 200 } else { 503 },
                 &serde_json::json!({
-                    "ok": true,
+                    "ok": healthy,
                     "service": "DAUVERSE_AI_EVENT_BRIDGE",
+                    "replay_journal_healthy": healthy,
                     "running": running,
                     "waiting_approval": waiting,
                     "comfyui_rendering": comfy,
@@ -832,10 +991,22 @@ impl AiEventBridge {
             return Self::write_json_resp(&mut stream, 404, r#"{"ok":false,"error":"NOT_FOUND"}"#);
         }
 
-        let body_str = String::from_utf8_lossy(&body_bytes);
+        let body_str = match std::str::from_utf8(&body_bytes) {
+            Ok(s) => s,
+            Err(e) => {
+                bridge.bump_rejected();
+                return Self::write_json_resp(
+                    &mut stream,
+                    400,
+                    &serde_json::json!({"ok": false, "error": format!("INVALID_UTF8_PAYLOAD: {e}")})
+                        .to_string(),
+                );
+            }
+        };
         let env: SignedAiEventEnvelope = match serde_json::from_str(body_str.trim()) {
             Ok(v) => v,
             Err(e) => {
+                bridge.bump_rejected();
                 return Self::write_json_resp(
                     &mut stream,
                     400,
@@ -861,6 +1032,10 @@ impl AiEventBridge {
             Err(err) => {
                 let code = if err.starts_with("EVENT_REJECT_REPLAY_CACHE_SATURATED") {
                     429
+                } else if err.starts_with("EVENT_REJECT_REPLAY_JOURNAL_CORRUPTED_FAIL_CLOSED")
+                    || err.starts_with("EVENT_REJECT_REPLAY_PERSIST_FAILED")
+                {
+                    503
                 } else {
                     401
                 };
@@ -879,6 +1054,7 @@ impl AiEventBridge {
             400 => "Bad Request",
             401 => "Unauthorized",
             429 => "Too Many Requests",
+            503 => "Service Unavailable",
             _ => "Not Found",
         };
         let resp = format!(
@@ -895,10 +1071,15 @@ impl AiEventBridge {
 mod tests {
     use super::*;
 
-    fn sample_event(event_id: &str, event_type: AiEventType, status: AiTaskStatus, verified: bool) -> AiEvent {
+    fn sample_event(
+        event_id: &str,
+        event_type: AiEventType,
+        status: AiTaskStatus,
+        verified: bool,
+    ) -> AiEvent {
         AiEvent {
             event_id: event_id.to_owned(),
-            timestamp: "2026-11-24T16:25:00Z".to_owned(),
+            timestamp: "2026-11-26T00:00:00Z".to_owned(),
             source: "codex_cli".to_owned(),
             device_id: "HOME-RTX3060".to_owned(),
             project_id: "DAUVERSE-FT004".to_owned(),
@@ -928,6 +1109,7 @@ mod tests {
 
         let ev = sample_event("evt-001", AiEventType::QaPassed, AiTaskStatus::Completed, true);
         let signed = sign_event_envelope(ev, &secret, now_ms, "nonce-0001".to_owned());
+        assert_eq!(signed.schema_version, AI_EVENT_SCHEMA_V3);
         let accepted = bridge.ingest_signed_envelope(signed.clone(), now_ms).unwrap();
         assert_eq!(accepted.status, AiTaskStatus::Completed);
         assert_eq!(
@@ -939,7 +1121,12 @@ mod tests {
         assert_eq!(replay_err, "EVENT_REJECT_REPLAY_DETECTED");
 
         let spoof_ev = sample_event("evt-002", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
-        let bad_env = sign_event_envelope(spoof_ev, b"wrong-attacker-key-00000000", now_ms, "nonce-0002".to_owned());
+        let bad_env = sign_event_envelope(
+            spoof_ev,
+            b"wrong-attacker-key-00000000",
+            now_ms,
+            "nonce-0002".to_owned(),
+        );
         let spoof_err = bridge.ingest_signed_envelope(bad_env, now_ms).unwrap_err();
         assert_eq!(spoof_err, "EVENT_REJECT_INVALID_HMAC_SPOOFED");
 
@@ -965,20 +1152,30 @@ mod tests {
         let base_ev = sample_event("f01-base", AiEventType::TaskProgress, AiTaskStatus::Unknown, false);
         let base_signed = sign_event_envelope(base_ev, &secret, now_ms, "nonce-f01-base".to_owned());
 
-        let mut legacy_v1 = base_signed.clone();
-        legacy_v1.schema_version = 1;
-        assert_eq!(
-            bridge.ingest_signed_envelope(legacy_v1, now_ms).unwrap_err(),
-            "EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION"
-        );
+        for legacy_ver in [0u8, 1u8, 2u8] {
+            let mut legacy = base_signed.clone();
+            legacy.schema_version = legacy_ver;
+            assert_eq!(
+                bridge.ingest_signed_envelope(legacy, now_ms).unwrap_err(),
+                "EVENT_REJECT_UNSUPPORTED_SCHEMA_VERSION"
+            );
+        }
 
         let mutators: Vec<(&str, Box<dyn Fn(&mut SignedAiEventEnvelope)>)> = vec![
             ("task_name", Box::new(|e| e.event.task_name = "Hijacked Task Name".to_owned())),
             ("severity", Box::new(|e| e.event.severity = EventSeverity::Critical)),
             ("progress", Box::new(|e| e.event.progress = Some(50.0))),
+            (
+                "progress_same_4dec_bucket_below_100",
+                Box::new(|e| e.event.progress = Some(f32::from_bits(100.0_f32.to_bits() - 1))),
+            ),
             ("summary", Box::new(|e| e.event.summary = "Tampered summary text".to_owned())),
             ("artifact_reference", Box::new(|e| e.event.artifact_reference = Some("evil.exe".to_owned()))),
             ("confidence", Box::new(|e| e.event.confidence = 0.25)),
+            (
+                "confidence_same_4dec_bucket_neighbor",
+                Box::new(|e| e.event.confidence = f32::from_bits(1.0_f32.to_bits() - 1)),
+            ),
             ("provenance.adapter_type", Box::new(|e| e.event.provenance.adapter_type = SourceSupportStatus::Unknown)),
             ("provenance.evidence_verified", Box::new(|e| e.event.provenance.evidence_verified = true)),
             ("provenance.exit_code", Box::new(|e| e.event.provenance.exit_code = Some(1))),
@@ -1000,7 +1197,54 @@ mod tests {
             );
         }
 
-        // Delimiter injection collision resistance ('|' and '"')
+        // Exact Codex Re-QA F01 counterexample: 100.0_f32 (0x42c80000) vs 100.000008_f32 (0x42c80001)
+        let ev_100 = sample_event("f01-100", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
+        let mut ev_over_100 = ev_100.clone();
+        ev_over_100.progress = Some(f32::from_bits(100.0_f32.to_bits() + 1));
+        assert_ne!(
+            canonical_signing_bytes(&ev_100, now_ms, "nonce-f01-100"),
+            canonical_signing_bytes(&ev_over_100, now_ms, "nonce-f01-100")
+        );
+        let mut swapped_over_100 = sign_event_envelope(ev_100, &secret, now_ms, "nonce-f01-100".to_owned());
+        swapped_over_100.event.progress = Some(f32::from_bits(100.0_f32.to_bits() + 1));
+        assert_eq!(
+            bridge.ingest_signed_envelope(swapped_over_100, now_ms).unwrap_err(),
+            "EVENT_REJECT_OUT_OF_RANGE_PROGRESS"
+        );
+
+        // Negative zero (-0.0_f32), NaN, Inf, and out-of-range floats are rejected even with valid key
+        let mut neg_zero = sample_event("f01-neg0", AiEventType::TaskProgress, AiTaskStatus::Running, true);
+        neg_zero.progress = Some(-0.0_f32);
+        let neg_zero_env = sign_event_envelope(neg_zero, &secret, now_ms, "nonce-neg0-001".to_owned());
+        assert_eq!(
+            bridge.ingest_signed_envelope(neg_zero_env, now_ms).unwrap_err(),
+            "EVENT_REJECT_NEGATIVE_ZERO_PROGRESS"
+        );
+
+        let mut bad_conf = sample_event("f01-conf", AiEventType::TaskProgress, AiTaskStatus::Running, true);
+        bad_conf.confidence = 1.0001_f32;
+        let bad_conf_env = sign_event_envelope(bad_conf, &secret, now_ms, "nonce-conf-001".to_owned());
+        assert_eq!(
+            bridge.ingest_signed_envelope(bad_conf_env, now_ms).unwrap_err(),
+            "EVENT_REJECT_OUT_OF_RANGE_CONFIDENCE"
+        );
+
+        // Unknown / injected JSON fields and missing schema_version must fail deserialization
+        let mut val_json = serde_json::to_value(&base_signed).unwrap();
+        val_json["injected_extra"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<SignedAiEventEnvelope>(val_json).is_err());
+
+        let mut missing_ver = serde_json::to_value(&base_signed).unwrap();
+        missing_ver.as_object_mut().unwrap().remove("schema_version");
+        assert!(serde_json::from_value::<SignedAiEventEnvelope>(missing_ver).is_err());
+
+        // Unicode (Vietnamese + Emoji + quotes + delimiters) round-trips deterministically
+        let mut uni_ev = sample_event("f01-unicode", AiEventType::QaPassed, AiTaskStatus::Completed, true);
+        uni_ev.summary = "Kiểm thử Tiếng Việt chuẩn 🚀 | \"quoted\" \\ backslash".to_owned();
+        let uni_env = sign_event_envelope(uni_ev, &secret, now_ms, "nonce-unicode-01".to_owned());
+        let uni_out = bridge.ingest_signed_envelope(uni_env, now_ms).unwrap();
+        assert!(uni_out.summary.contains("Kiểm thử Tiếng Việt chuẩn 🚀"));
+
         let mut ev_delim_a = sample_event("delim-1", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
         ev_delim_a.project_id = "proj|alpha".to_owned();
         ev_delim_a.task_id = "task\"1".to_owned();
@@ -1012,7 +1256,6 @@ mod tests {
             canonical_signing_bytes(&ev_delim_b, now_ms, "nonce-delim-01")
         );
 
-        // Untrusted source claiming OfficialHook must be rejected even with valid HMAC key
         let mut rogue_src = sample_event("f01-rogue-src", AiEventType::TaskCompleted, AiTaskStatus::Completed, true);
         rogue_src.source = "claude_desktop".to_owned();
         rogue_src.provenance.adapter_type = SourceSupportStatus::OfficialHook;
@@ -1024,11 +1267,10 @@ mod tests {
     }
 
     #[test]
-    fn f09_replay_protection_survives_above_2048_burst_restart_and_fails_closed_at_ceiling() {
+    fn f09_replay_protection_survives_above_2048_burst_restart_corrupt_journal_and_write_faults() {
         let secret = b"f09-replay-window-and-ceiling-secret-2026".to_vec();
         let now_ms = chrono::Utc::now().timestamp_millis();
 
-        // 1. Verify >2,048 events inside 5-minute window never evicts event #0
         let burst_bridge = AiEventBridge::new(secret.clone());
         let first_ev = sample_event("burst-0", AiEventType::CommandCompleted, AiTaskStatus::Completed, true);
         let first_env = sign_event_envelope(first_ev, &secret, now_ms, "nonce-burst-0000".to_owned());
@@ -1043,7 +1285,6 @@ mod tests {
             "EVENT_REJECT_REPLAY_DETECTED"
         );
 
-        // 2. Verify saturation fails closed instead of evicting unexpired keys, then recovers after expiry
         let journal_dir = std::env::temp_dir().join(format!("dv_replay_dir_{}", uuid::Uuid::new_v4()));
         let journal = journal_dir.join("bridge_replay_journal.json");
         let capped = AiEventBridge::with_persistence_and_limits(secret.clone(), Some(journal.clone()), 3);
@@ -1062,19 +1303,51 @@ mod tests {
             capped.ingest_signed_envelope(fourth_env, now_ms + 500).unwrap_err(),
             "EVENT_REJECT_REPLAY_CACHE_SATURATED"
         );
-        // Restarted bridge reloads durable replay journal and still rejects replay of cap-0
-        let restarted = AiEventBridge::with_persistence_and_limits(secret, Some(journal.clone()), 3);
+
+        let captured_first = first_capped_env.unwrap();
+        let restarted = AiEventBridge::with_persistence_and_limits(secret.clone(), Some(journal.clone()), 3);
         assert_eq!(
             restarted
-                .ingest_signed_envelope(first_capped_env.unwrap(), now_ms + 1_000)
+                .ingest_signed_envelope(captured_first.clone(), now_ms + 1_000)
                 .unwrap_err(),
             "EVENT_REJECT_REPLAY_DETECTED"
         );
+
+        // Corrupt existing journal on disk -> restarted bridge MUST fail closed and reject replay + new events!
+        std::fs::write(&journal, b"{corrupted-json").unwrap();
+        let corrupted_bridge = AiEventBridge::with_persistence_and_limits(secret.clone(), Some(journal.clone()), 16);
+        assert!(!corrupted_bridge.is_replay_journal_healthy());
+        assert!(corrupted_bridge
+            .ingest_signed_envelope(captured_first, now_ms + 2_000)
+            .unwrap_err()
+            .starts_with("EVENT_REJECT_REPLAY_JOURNAL_CORRUPTED_FAIL_CLOSED"));
+
+        // Invalid UTF-8 in existing journal -> fail closed!
+        std::fs::write(&journal, [0xFFu8, 0xFE, 0xFD]).unwrap();
+        let bad_utf8_bridge = AiEventBridge::with_persistence_and_limits(secret.clone(), Some(journal.clone()), 16);
+        assert!(!bad_utf8_bridge.is_replay_journal_healthy());
+
+        // Write failure during ingest (journal path replaced by directory) -> fail closed and rollback in-memory record!
+        let write_fault_dir = std::env::temp_dir().join(format!("dv_replay_wf_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&write_fault_dir).unwrap();
+        let wf_journal = write_fault_dir.join("bridge_replay_journal.json");
+        let wf_bridge = AiEventBridge::with_persistence_and_limits(secret.clone(), Some(wf_journal.clone()), 16);
+        assert!(wf_bridge.is_replay_journal_healthy());
+        std::fs::create_dir_all(&wf_journal).unwrap();
+        let wf_ev = sample_event("wf-1", AiEventType::CommandCompleted, AiTaskStatus::Completed, true);
+        let wf_env = sign_event_envelope(wf_ev, &secret, now_ms, "nonce-wf-0001".to_owned());
+        assert!(wf_bridge
+            .ingest_signed_envelope(wf_env, now_ms)
+            .unwrap_err()
+            .starts_with("EVENT_REJECT_REPLAY_PERSIST_FAILED"));
+        assert!(wf_bridge.live_tasks().is_empty());
+
         std::fs::remove_dir_all(&journal_dir).ok();
+        std::fs::remove_dir_all(&write_fault_dir).ok();
     }
 
     #[test]
-    fn loopback_http_gateway_accepts_signed_and_rejects_forged() {
+    fn loopback_http_gateway_accepts_signed_and_rejects_forged_and_invalid_utf8() {
         let secret = b"loopback-gateway-secret-key-32bytes!".to_vec();
         let bridge = Arc::new(AiEventBridge::new(secret.clone()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -1095,6 +1368,20 @@ mod tests {
         conn.read_to_string(&mut resp).unwrap();
         assert!(resp.contains("200 OK"));
         assert_eq!(bridge.live_tasks().len(), 1);
+
+        // Invalid UTF-8 HTTP body must return 400 Bad Request, never lossy U+FFFD substitution
+        let mut bad_conn = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let bad_bytes = [0x7Bu8, 0x22, 0xFF, 0xFE, 0x22, 0x7D];
+        let bad_hdr = format!(
+            "POST /v1/events HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            bad_bytes.len()
+        );
+        bad_conn.write_all(bad_hdr.as_bytes()).unwrap();
+        bad_conn.write_all(&bad_bytes).unwrap();
+        let mut bad_resp = String::new();
+        bad_conn.read_to_string(&mut bad_resp).unwrap();
+        assert!(bad_resp.contains("400 Bad Request"));
+        assert!(bad_resp.contains("INVALID_UTF8_PAYLOAD"));
 
         stop.store(true, Ordering::Relaxed);
         handle.join().unwrap();

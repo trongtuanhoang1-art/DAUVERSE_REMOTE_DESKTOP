@@ -127,6 +127,8 @@ pub struct BenchmarkReport {
     pub target_reference_profile: String,
     pub frame_1080p_dirty_scan_ms: f64,
     pub loopback_tcp_rtt_ms: f64,
+    pub hmac_iterations: u32,
+    pub hmac_total_elapsed_us: f64,
     pub hmac_event_sign_us: f64,
     pub estimated_1080p_scan_fps_headroom: f64,
     pub notes: String,
@@ -440,11 +442,13 @@ impl PerformanceEngine {
             .join()
             .map_err(|_| "loopback server thread panicked".to_owned())??;
 
+        const HMAC_BENCH_ITERATIONS: u32 = 200;
         let sign_start = Instant::now();
-        for i in 0..200u32 {
+        for i in 0..HMAC_BENCH_ITERATIONS {
             let _ = super::crypto_util::hmac_sha256(b"bench-key", &i.to_le_bytes());
         }
-        let sign_us = (sign_start.elapsed().as_secs_f64() * 1_000_000.0) / 200.0;
+        let (total_sign_us, sign_us) =
+            Self::compute_per_iteration_us(sign_start.elapsed().as_secs_f64(), HMAC_BENCH_ITERATIONS);
 
         let headroom = if scan_ms > 0.001 {
             1000.0 / scan_ms
@@ -459,12 +463,27 @@ impl PerformanceEngine {
             cpu_model: "Measured Host CPU".to_owned(),
             logical_cores: num_cpus::get(),
             target_reference_profile: "Intel Core i5-12400F + NVIDIA RTX 3060 12GB + 16GB RAM + Windows 11 Pro".to_owned(),
-            frame_1080p_dirty_scan_ms: (scan_ms * 1000.0).round() / 1000.0,
-            loopback_tcp_rtt_ms: (avg_rtt_ms * 1000.0).round() / 1000.0,
-            hmac_event_sign_us: (sign_us * 100.0).round() / 1000.0,
-            estimated_1080p_scan_fps_headroom: (headroom * 10.0).round() / 1000.0 * 100.0,
+            frame_1080p_dirty_scan_ms: Self::round_3dp(scan_ms),
+            loopback_tcp_rtt_ms: Self::round_3dp(avg_rtt_ms),
+            hmac_iterations: HMAC_BENCH_ITERATIONS,
+            hmac_total_elapsed_us: total_sign_us,
+            hmac_event_sign_us: sign_us,
+            estimated_1080p_scan_fps_headroom: (headroom * 10.0).round() / 10.0,
             notes: "Measures local CPU dirty-tile memory scan, HMAC signing, and 127.0.0.1 socket overhead ONLY. End-to-end Remote Desktop LAN/WAN + RTX 3060 NVENC latency requires 2-PC Windows measurement.".to_owned(),
         })
+    }
+
+    pub fn round_3dp(value: f64) -> f64 {
+        (value * 1000.0).round() / 1000.0
+    }
+
+    pub fn compute_per_iteration_us(total_elapsed_secs: f64, iterations: u32) -> (f64, f64) {
+        if iterations == 0 || !total_elapsed_secs.is_finite() || total_elapsed_secs < 0.0 {
+            return (0.0, 0.0);
+        }
+        let raw_total_us = total_elapsed_secs * 1_000_000.0;
+        let raw_per_iter_us = raw_total_us / f64::from(iterations);
+        (Self::round_3dp(raw_total_us), Self::round_3dp(raw_per_iter_us))
     }
 }
 
@@ -518,10 +537,28 @@ mod tests {
     }
 
     #[test]
-    fn real_pipeline_benchmark_executes() {
+    fn n01_benchmark_hmac_sign_us_preserves_exact_microsecond_scale_and_rounding() {
+        assert_eq!(PerformanceEngine::round_3dp(12.34), 12.34);
+        assert_ne!(PerformanceEngine::round_3dp(12.34), 1.234);
+        assert_eq!(PerformanceEngine::round_3dp(12.3456), 12.346);
+        assert_eq!(PerformanceEngine::round_3dp(0.0004), 0.0);
+        assert_eq!(PerformanceEngine::round_3dp(0.0005), 0.001);
+
+        let (total_us, per_iter_us) = PerformanceEngine::compute_per_iteration_us(0.002_468, 200);
+        assert_eq!(total_us, 2468.0);
+        assert_eq!(per_iter_us, 12.34);
+
         let report = PerformanceEngine::run_pipeline_benchmark().unwrap();
+        assert_eq!(report.hmac_iterations, 200);
         assert!(report.frame_1080p_dirty_scan_ms >= 0.0);
         assert!(report.loopback_tcp_rtt_ms >= 0.0);
+        assert!(report.hmac_total_elapsed_us > 0.0);
         assert!(report.hmac_event_sign_us > 0.0);
+        let reconstructed_total = report.hmac_event_sign_us * f64::from(report.hmac_iterations);
+        assert!(
+            (reconstructed_total - report.hmac_total_elapsed_us).abs() <= 0.15,
+            "reconstructed_total={reconstructed_total} vs total={}",
+            report.hmac_total_elapsed_us
+        );
     }
 }

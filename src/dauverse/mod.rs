@@ -108,32 +108,31 @@ impl DauverseRuntime {
 
         let bridge_secret = match std::env::var("DAUVERSE_EVENT_HMAC_KEY") {
             Ok(s) if s.len() >= 16 => s.into_bytes(),
-            _ => {
-                if std::fs::symlink_metadata(&vault_path).is_ok() {
-                    match crypto_util::read_sealed_secret_file(&vault_path, VAULT_ENTROPY) {
-                        Ok(sec) if sec.len() >= 16 => sec,
-                        Err(e) => {
-                            let msg = format!("BRIDGE_VAULT_CORRUPTED_FAIL_CLOSED: {e}");
-                            security.append_audit(
-                                "SYSTEM",
-                                "BRIDGE_VAULT_INTEGRITY",
-                                "FAILED_CLOSED",
-                                &msg,
-                            );
-                            if init_err.is_none() {
-                                init_err = Some(msg);
-                            }
-                            crypto_util::generate_nonce_hex().into_bytes()
+            _ => match std::fs::symlink_metadata(&vault_path) {
+                Ok(_) => match crypto_util::read_sealed_secret_file(&vault_path, VAULT_ENTROPY) {
+                    Ok(sec) if sec.len() >= 16 => sec,
+                    Err(e) => {
+                        let msg = format!("BRIDGE_VAULT_CORRUPTED_FAIL_CLOSED: {e}");
+                        security.append_audit(
+                            "SYSTEM",
+                            "BRIDGE_VAULT_INTEGRITY",
+                            "FAILED_CLOSED",
+                            &msg,
+                        );
+                        if init_err.is_none() {
+                            init_err = Some(msg);
                         }
-                        Ok(_) => {
-                            let msg = "BRIDGE_VAULT_CORRUPTED_FAIL_CLOSED: truncated key".to_owned();
-                            if init_err.is_none() {
-                                init_err = Some(msg);
-                            }
-                            crypto_util::generate_nonce_hex().into_bytes()
-                        }
+                        crypto_util::generate_nonce_hex().into_bytes()
                     }
-                } else {
+                    Ok(_) => {
+                        let msg = "BRIDGE_VAULT_CORRUPTED_FAIL_CLOSED: truncated key".to_owned();
+                        if init_err.is_none() {
+                            init_err = Some(msg);
+                        }
+                        crypto_util::generate_nonce_hex().into_bytes()
+                    }
+                },
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     let generated = crypto_util::generate_nonce_hex().into_bytes();
                     if let Err(e) = crypto_util::write_sealed_secret_file(
                         &vault_path,
@@ -146,7 +145,20 @@ impl DauverseRuntime {
                     }
                     generated
                 }
-            }
+                Err(e) => {
+                    let msg = format!("BRIDGE_VAULT_STAT_ERROR_FAIL_CLOSED: {e}");
+                    security.append_audit(
+                        "SYSTEM",
+                        "BRIDGE_VAULT_INTEGRITY",
+                        "FAILED_CLOSED",
+                        &msg,
+                    );
+                    if init_err.is_none() {
+                        init_err = Some(msg);
+                    }
+                    crypto_util::generate_nonce_hex().into_bytes()
+                }
+            },
         };
 
         let ai_bridge = Arc::new(AiEventBridge::with_persistence_and_limits(
@@ -154,14 +166,36 @@ impl DauverseRuntime {
             Some(replay_journal_path),
             65_536,
         ));
+        if let Some(rj_err) = ai_bridge.replay_journal_error() {
+            security.append_audit(
+                "SYSTEM",
+                "REPLAY_JOURNAL_INTEGRITY",
+                "FAILED_CLOSED",
+                &rj_err,
+            );
+            if init_err.is_none() {
+                init_err = Some(rj_err);
+            }
+        }
         let notifications = Arc::new(NotificationCenter::new(Some(offline_journal)));
+        if let Some(nj_err) = notifications.journal_error() {
+            security.append_audit(
+                "SYSTEM",
+                "NOTIFICATION_JOURNAL_INTEGRITY",
+                "FAILED_CLOSED",
+                &nj_err,
+            );
+            if init_err.is_none() {
+                init_err = Some(nj_err);
+            }
+        }
         let performance = PerformanceEngine::new();
         let clipboard_guard = ClipboardGuard::new();
         let transfer_queue = TransferQueueManager::new(transfer_root);
         let session_tools = SessionToolsManager::new();
 
-        if std::fs::symlink_metadata(&settings_path).is_ok() {
-            match crypto_util::open_no_follow_regular_file(&settings_path) {
+        match std::fs::symlink_metadata(&settings_path) {
+            Ok(_) => match crypto_util::open_no_follow_regular_file(&settings_path) {
                 Ok((mut f, _)) => {
                     let mut raw = String::new();
                     match f.read_to_string(&mut raw).ok().and_then(|_| {
@@ -185,8 +219,16 @@ impl DauverseRuntime {
                 }
                 Err(e) => {
                     if init_err.is_none() {
-                        init_err = Some(format!("SETTINGS_STATE_OPEN_FAILED: {e}"));
+                        init_err = Some(format!("SETTINGS_STATE_OPEN_FAILED_FAIL_CLOSED: {e}"));
                     }
+                }
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                let msg = format!("SETTINGS_STATE_STAT_ERROR_FAIL_CLOSED: {e}");
+                security.append_audit("SYSTEM", "LOAD_SETTINGS_STATE", "FAILED_CLOSED", &msg);
+                if init_err.is_none() {
+                    init_err = Some(msg);
                 }
             }
         }
@@ -264,7 +306,7 @@ impl DauverseRuntime {
 
     pub fn persist_user_settings(&self) -> Result<(), String> {
         if let Some(existing_err) = self.storage_error.lock().unwrap().clone() {
-            if existing_err.contains("CORRUPTED_FAIL_CLOSED") {
+            if existing_err.contains("FAIL_CLOSED") {
                 return Err(existing_err);
             }
         }
@@ -308,7 +350,28 @@ impl DauverseRuntime {
         let perf = self.performance.update_runtime_sample(net_sample);
 
         let local_id = hbb_common::config::Config::get_id();
-        let storage_err = self.storage_error.lock().unwrap().clone();
+        let sec_summary = self.security.summary();
+        let sec_persist_ok = sec_summary
+            .get("persistence_healthy")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let storage_err = self
+            .storage_error
+            .lock()
+            .unwrap()
+            .clone()
+            .or_else(|| self.ai_bridge.replay_journal_error())
+            .or_else(|| self.notifications.journal_error())
+            .or_else(|| {
+                sec_summary
+                    .get("last_persistence_error")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned)
+            });
+        let storage_healthy = storage_err.is_none()
+            && self.ai_bridge.is_replay_journal_healthy()
+            && self.notifications.journal_healthy()
+            && sec_persist_ok;
 
         serde_json::json!({
             "product": "DAUVERSE REMOTE DESKTOP",
@@ -316,7 +379,7 @@ impl DauverseRuntime {
             "engine_base": update_center::UPSTREAM_ENGINE_VERSION,
             "local_peer_id": local_id,
             "data_dir": self.data_dir.to_string_lossy(),
-            "storage_healthy": storage_err.is_none(),
+            "storage_healthy": storage_healthy,
             "storage_error": storage_err,
             "bridge_endpoint": if self.bridge_listen_port > 0 {
                 format!("http://127.0.0.1:{}/v1/events", self.bridge_listen_port)
@@ -335,6 +398,8 @@ impl DauverseRuntime {
                 "live_tasks": live_tasks,
                 "recent_events": self.ai_bridge.recent_events(),
                 "rejected_security_count": self.ai_bridge.rejected_security_count(),
+                "replay_journal_healthy": self.ai_bridge.is_replay_journal_healthy(),
+                "replay_journal_error": self.ai_bridge.replay_journal_error(),
                 "sources_catalog": AiEventBridge::supported_sources_catalog(),
             },
             "notifications": {
@@ -342,6 +407,8 @@ impl DauverseRuntime {
                 "active_toasts": self.notifications.active_toasts(),
                 "recent_items": self.notifications.query_history(&notifications::NotificationFilter::default()),
                 "preferences": self.notifications.preferences(),
+                "journal_healthy": self.notifications.journal_healthy(),
+                "journal_error": self.notifications.journal_error(),
             },
             "clipboard": self.clipboard_guard.stats(),
             "transfer_queue": {
@@ -358,7 +425,7 @@ impl DauverseRuntime {
             "headless": self.headless.get_state(),
             "service": self.service_ctrl.status(),
             "security": {
-                "summary": self.security.summary(),
+                "summary": sec_summary,
                 "recent_audit": self.security.recent_audit_entries(30),
             },
             "release": update_center::current_release_status(),

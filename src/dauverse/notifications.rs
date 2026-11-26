@@ -1,11 +1,11 @@
 use super::{
     ai_bridge::{AiEvent, AiEventType, AiTaskStatus, EventSeverity},
-    crypto_util::{redact_sensitive, sha256_hex, write_atomic_bytes},
+    crypto_util::{open_no_follow_regular_file, redact_sensitive, sha256_hex, write_atomic_bytes},
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
-    fs,
+    io::Read,
     path::PathBuf,
     sync::Mutex,
 };
@@ -120,6 +120,8 @@ pub struct NotificationCenter {
     dedup_cache: Mutex<VecDeque<DedupRecord>>,
     is_online: Mutex<bool>,
     offline_journal_path: Mutex<Option<PathBuf>>,
+    journal_corrupted: Mutex<bool>,
+    journal_error: Mutex<Option<String>>,
 }
 
 impl NotificationCenter {
@@ -132,9 +134,19 @@ impl NotificationCenter {
             dedup_cache: Mutex::new(VecDeque::with_capacity(128)),
             is_online: Mutex::new(true),
             offline_journal_path: Mutex::new(offline_journal_path),
+            journal_corrupted: Mutex::new(false),
+            journal_error: Mutex::new(None),
         };
         center.load_persisted_offline_journal();
         center
+    }
+
+    pub fn journal_healthy(&self) -> bool {
+        !*self.journal_corrupted.lock().unwrap() && self.journal_error.lock().unwrap().is_none()
+    }
+
+    pub fn journal_error(&self) -> Option<String> {
+        self.journal_error.lock().unwrap().clone()
     }
 
     pub fn preferences(&self) -> NotificationPreferences {
@@ -293,7 +305,7 @@ impl NotificationCenter {
             }
             buf.push_back(item.clone());
             drop(buf);
-            self.persist_offline_journal();
+            let _ = self.persist_offline_journal();
             return Some(item);
         }
 
@@ -325,7 +337,7 @@ impl NotificationCenter {
             }
             toasts.push_back(item);
         }
-        self.persist_offline_journal();
+        let _ = self.persist_offline_journal();
     }
 
     fn flush_offline_buffer(&self) -> usize {
@@ -338,7 +350,7 @@ impl NotificationCenter {
         for item in drained {
             self.deliver_item(item, &prefs);
         }
-        self.persist_offline_journal();
+        let _ = self.persist_offline_journal();
         count
     }
 
@@ -364,7 +376,7 @@ impl NotificationCenter {
             .unwrap()
             .retain(|t| t.notification_id != notification_id);
         if found {
-            self.persist_offline_journal();
+            let _ = self.persist_offline_journal();
         }
         found
     }
@@ -374,7 +386,7 @@ impl NotificationCenter {
             item.is_read = true;
         }
         self.active_toasts.lock().unwrap().clear();
-        self.persist_offline_journal();
+        let _ = self.persist_offline_journal();
     }
 
     pub fn dismiss_toast(&self, notification_id: &str) {
@@ -503,22 +515,43 @@ impl NotificationCenter {
         }
     }
 
-    fn persist_offline_journal(&self) {
+    pub fn persist_offline_journal(&self) -> Result<(), String> {
         let Some(path) = self.offline_journal_path.lock().unwrap().clone() else {
-            return;
+            return Ok(());
         };
+        if *self.journal_corrupted.lock().unwrap() {
+            let msg = self
+                .journal_error
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "NOTIF_JOURNAL_CORRUPTED_FAIL_CLOSED".to_owned());
+            return Err(msg);
+        }
         let state = PersistedNotificationJournal {
             history: self.history.lock().unwrap().iter().cloned().collect(),
             offline_buffer: self.offline_buffer.lock().unwrap().iter().cloned().collect(),
         };
-        match serde_json::to_vec(&state) {
-            Ok(bytes) => {
-                if let Err(e) = write_atomic_bytes(&path, &bytes, true) {
-                    hbb_common::log::warn!("DAUVERSE failed persisting notification journal: {}", e);
-                }
+        let bytes = serde_json::to_vec(&state).map_err(|e| {
+            let msg = format!("NOTIF_JOURNAL_SERIALIZE_ERROR: {e}");
+            *self.journal_error.lock().unwrap() = Some(msg.clone());
+            msg
+        })?;
+        match write_atomic_bytes(&path, &bytes, true) {
+            Ok(()) => {
+                *self.journal_error.lock().unwrap() = None;
+                Ok(())
             }
             Err(e) => {
-                hbb_common::log::warn!("DAUVERSE failed serializing notification journal: {}", e);
+                let msg = format!("NOTIF_JOURNAL_WRITE_ERROR: {e}");
+                *self.journal_error.lock().unwrap() = Some(msg.clone());
+                hbb_common::throttled_log!(
+                    std::time::Duration::from_secs(30),
+                    warn,
+                    "DAUVERSE failed persisting notification journal: {}",
+                    msg
+                );
+                Err(msg)
             }
         }
     }
@@ -527,9 +560,32 @@ impl NotificationCenter {
         let Some(path) = self.offline_journal_path.lock().unwrap().clone() else {
             return;
         };
-        let Ok(raw) = fs::read_to_string(&path) else {
-            return;
+        match std::fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(e) => {
+                *self.journal_corrupted.lock().unwrap() = true;
+                *self.journal_error.lock().unwrap() =
+                    Some(format!("NOTIF_JOURNAL_STAT_ERROR_FAIL_CLOSED: {e}"));
+                return;
+            }
+        }
+        let (mut file, _) = match open_no_follow_regular_file(&path) {
+            Ok(v) => v,
+            Err(e) => {
+                *self.journal_corrupted.lock().unwrap() = true;
+                *self.journal_error.lock().unwrap() =
+                    Some(format!("NOTIF_JOURNAL_OPEN_ERROR_FAIL_CLOSED: {e}"));
+                return;
+            }
         };
+        let mut raw = String::new();
+        if let Err(e) = file.read_to_string(&mut raw) {
+            *self.journal_corrupted.lock().unwrap() = true;
+            *self.journal_error.lock().unwrap() =
+                Some(format!("NOTIF_JOURNAL_UTF8_READ_ERROR_FAIL_CLOSED: {e}"));
+            return;
+        }
         if let Ok(state) = serde_json::from_str::<PersistedNotificationJournal>(&raw) {
             {
                 let mut hist = self.history.lock().unwrap();
@@ -548,11 +604,16 @@ impl NotificationCenter {
             for item in items {
                 buf.push_back(item);
             }
+        } else {
+            *self.journal_corrupted.lock().unwrap() = true;
+            *self.journal_error.lock().unwrap() =
+                Some("NOTIF_JOURNAL_CORRUPTED_JSON_FAIL_CLOSED".to_owned());
         }
     }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PersistedNotificationJournal {
     #[serde(default)]
     history: Vec<NotificationItem>,
@@ -566,9 +627,10 @@ mod tests {
     use crate::dauverse::ai_bridge::{EventProvenance, SourceSupportStatus};
 
     #[test]
-    fn dedup_offline_replay_redaction_and_no_auto_approve() {
+    fn dedup_offline_replay_redaction_and_corrupted_journal_fail_closed() {
         let journal = std::env::temp_dir().join(format!("dv_notif_{}.json", uuid::Uuid::new_v4()));
         let center = NotificationCenter::new(Some(journal.clone()));
+        assert!(center.journal_healthy());
 
         let ev = AiEvent {
             event_id: "e1".to_owned(),
@@ -612,6 +674,12 @@ mod tests {
             .attempt_ai_approval_via_notification(&n1.notification_id)
             .is_err());
 
-        fs::remove_file(&journal).ok();
+        // Corrupted offline_notifications.json is detected on restart and refuses silent overwrite
+        std::fs::write(&journal, b"{corrupt-notif-journal").unwrap();
+        let corrupt_center = NotificationCenter::new(Some(journal.clone()));
+        assert!(!corrupt_center.journal_healthy());
+        assert!(corrupt_center.persist_offline_journal().is_err());
+
+        std::fs::remove_file(&journal).ok();
     }
 }

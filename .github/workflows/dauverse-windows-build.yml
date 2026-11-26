@@ -79,9 +79,15 @@ jobs:
           if ($ActualCodexSha -ne $ExpectedCodexSha) {
             throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedCodexSha, got $ActualCodexSha"
           }
+          $ExpectedCodexReQaSha = "c23d36e7d83b2fb1402238d8a8501b9de899fcd94b2774155b6a602fd77fb954"
+          $ActualCodexReQaSha = (Get-FileHash -LiteralPath "QA/DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualCodexReQaSha -ne $ExpectedCodexReQaSha) {
+            throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedCodexReQaSha, got $ActualCodexReQaSha"
+          }
           foreach ($reqFile in @(
             "FINDINGS_REMEDIATION_MATRIX.md",
             "QA/CODEX_REQA_WINDOWS_RC2_HANDOFF.md",
+            "DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md",
             "FEATURE_ACCEPTANCE_MATRIX.md",
             "HUONG_DAN_BOSS.md",
             "LICENSE",
@@ -179,15 +185,49 @@ jobs:
             sed -i 's/ffi.NativeFunction<ffi.Bool Function(DartPort/ffi.NativeFunction<ffi.Uint8 Function(DartPort/g' ./flutter/lib/generated_bridge.dart
           fi
 
-      - name: Build Setup EXE, Portable EXE, Provenance, and Initial SHA-256 Manifest
+      - name: Install Exact Pinned NSIS v3.11 (F15 Reproducibility Pin) and Build Binaries
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p _win_out/LOGS
           pwsh -NoProfile -NonInteractive -Command '
             $ErrorActionPreference = "Stop"
-            if (-not (Get-Command "makensis.exe" -ErrorAction SilentlyContinue) -and -not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe") -and -not (Test-Path "C:\Program Files\NSIS\makensis.exe")) {
-              choco install nsis --version=3.11 -y --no-progress
+            $NeedNsis311 = $true
+            $Candidates = @("C:\Program Files (x86)\NSIS\makensis.exe", "C:\Program Files\NSIS\makensis.exe")
+            $Cmd = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+            if ($Cmd) { $Candidates = @($Cmd.Source) + $Candidates }
+            foreach ($cand in $Candidates) {
+              if (Test-Path -LiteralPath $cand) {
+                $ver = (& $cand /VERSION 2>&1 | Out-String).Trim()
+                if ($ver -eq "v3.11") {
+                  $NeedNsis311 = $false
+                  Write-Host "Verified exact pinned NSIS version: $ver ($cand)"
+                  break
+                }
+              }
+            }
+            if ($NeedNsis311) {
+              choco install nsis --version=3.11 -y --force --allow-downgrade --no-progress
+              if ($LASTEXITCODE -ne 0) {
+                throw "Chocolatey failed installing pinned NSIS v3.11 (exit $LASTEXITCODE)"
+              }
+            }
+            $ResolvedNsis = $null
+            $CmdAfter = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+            $VerifyList = @("C:\Program Files (x86)\NSIS\makensis.exe", "C:\Program Files\NSIS\makensis.exe")
+            if ($CmdAfter) { $VerifyList = @($CmdAfter.Source) + $VerifyList }
+            foreach ($cand in $VerifyList) {
+              if (Test-Path -LiteralPath $cand) {
+                $verAfter = (& $cand /VERSION 2>&1 | Out-String).Trim()
+                if ($verAfter -eq "v3.11") {
+                  $ResolvedNsis = $cand
+                  Write-Host "Post-check confirmed exact NSIS v3.11: $cand"
+                  break
+                }
+              }
+            }
+            if (-not $ResolvedNsis) {
+              throw "F15_NSIS_PIN_FAILED: makensis.exe /VERSION did not resolve to exact v3.11 after setup"
             }
           '
           if [ "${{ inputs.run_tests }}" = "true" ]; then
