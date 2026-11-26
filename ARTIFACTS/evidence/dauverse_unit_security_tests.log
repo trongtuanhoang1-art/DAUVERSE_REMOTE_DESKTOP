@@ -12,6 +12,25 @@ warning: `package.homepage` is redundant with `package.repository`
    = note: `cargo::redundant_homepage` is set to `warn` by default
 help: consider removing `package.homepage`
 warning: `enigo` (manifest) generated 1 warning
+   Compiling glib-sys v0.18.1
+   Compiling gobject-sys v0.18.0
+   Compiling glib-sys v0.10.1
+   Compiling gio-sys v0.18.1
+   Compiling gobject-sys v0.10.0
+   Compiling gstreamer-sys v0.9.1
+   Compiling gdk-sys v0.18.0
+   Compiling x11 v2.21.0
+   Compiling gdk-pixbuf-sys v0.18.0
+   Compiling cairo-sys-rs v0.18.2
+   Compiling pango-sys v0.18.0
+   Compiling gstreamer-base-sys v0.9.1
+   Compiling atk-sys v0.18.0
+   Compiling openssl-sys v0.9.104
+   Compiling glib v0.18.5
+   Compiling openssl v0.10.68
+   Compiling gtk-sys v0.18.0
+   Compiling libz-sys v1.1.18
+   Compiling hbb_common v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/hbb_common)
 warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
    --> libs/hbb_common/src/lib.rs:192:41
     |
@@ -33,6 +52,26 @@ help: replace the use of the deprecated method
     |
 
 warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_common` to apply 1 suggestion)
+   Compiling gio v0.18.4
+   Compiling native-tls v0.2.12
+   Compiling libpulse-sys v1.21.0
+   Compiling libgit2-sys v0.14.2+1.5.1
+   Compiling pango v0.18.3
+   Compiling gdk-pixbuf v0.18.5
+   Compiling cairo-rs v0.18.5
+   Compiling gstreamer v0.16.7
+   Compiling gtk v0.18.1
+   Compiling gdk v0.18.0
+   Compiling glib v0.10.3
+   Compiling atk v0.18.0
+   Compiling gstreamer-base v0.16.5
+   Compiling libdbus-sys v0.2.5
+   Compiling tungstenite v0.29.0 (https://github.com/rustdesk-org/tungstenite-rs?rev=efce47e5364f00a63302cf07ab1fb13ded478914#efce47e5)
+   Compiling gstreamer-app-sys v0.9.1
+   Compiling gstreamer-video-sys v0.9.1
+   Compiling git2 v0.16.1
+   Compiling tokio-native-tls v0.3.1
+   Compiling libxdo-sys v0.11.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/libxdo-sys-stub)
 warning: type `useconds_t` should have an upper camel case name
   --> libs/libxdo-sys-stub/src/lib.rs:31:10
    |
@@ -42,7 +81,32 @@ warning: type `useconds_t` should have an upper camel case name
    = note: `#[warn(non_camel_case_types)]` (part of `#[warn(nonstandard_style)]`) on by default
 
 warning: `libxdo-sys` (lib) generated 1 warning
+   Compiling shadow-rs v0.21.0
+   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
+   Compiling x11-dl v2.21.0
+   Compiling x11 v2.19.0 (https://github.com/bjornsnoen/x11-rs#c2e9bfaa)
+   Compiling tokio-tungstenite v0.29.0 (https://github.com/rustdesk-org/tokio-tungstenite?rev=c241b11b03de4881faf1ecd2fe6e867c92f3013b#c241b11b)
+   Compiling gstreamer-app v0.16.5
+   Compiling gstreamer-video v0.16.7
+   Compiling tiny-xlib v0.2.4
+   Compiling libpulse-simple-sys v1.21.1
+   Compiling gdkx11-sys v0.18.0
+   Compiling keepawake v0.4.3 (https://github.com/rustdesk-org/keepawake-rs#64d56858)
 warning: `hbb_common` (lib) generated 2 warnings (2 duplicates)
+   Compiling dbus v0.9.7
+   Compiling libxdo v0.6.0
+   Compiling libpulse-binding v2.28.1
+   Compiling libappindicator-sys v0.9.0
+   Compiling rdev v0.5.0-2 (https://github.com/rustdesk-org/rdev#0904f23c)
+   Compiling enigo v0.0.14 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/enigo)
+   Compiling muda v0.17.1
+   Compiling rustdesk v1.5.3 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP)
+   Compiling scrap v0.5.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/scrap)
+   Compiling magnum-opus v0.4.0 (https://github.com/rustdesk-org/magnum-opus#588c6e1f)
+   Compiling libappindicator v0.9.0
+   Compiling tfc v0.7.0 (https://github.com/rustdesk-org/The-Fat-Controller?branch=history%2Frebase_upstream_20240722#78bb80a8)
+   Compiling gdkwayland-sys v0.18.0
+   Compiling tao v0.25.0 (https://github.com/rustdesk-org/tao?branch=dev#288c219c)
 warning: unused import: `tokio`
   --> libs/scrap/src/wayland/pipewire.rs:27:60
    |
@@ -94,6 +158,13 @@ help: use `'_` for type paths
     |                                                   +++
 
 warning: `scrap` (lib) generated 5 warnings (run `cargo fix --lib -p scrap` to apply 2 suggestions)
+   Compiling tray-icon v0.21.3 (https://github.com/tauri-apps/tray-icon#0a5835b0)
+   Compiling winit v0.30.9
+   Compiling libpulse-simple-binding v2.28.1
+   Compiling softbuffer v0.4.5
+   Compiling clipboard v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/clipboard)
+   Compiling rust-pulsectl v0.2.12 (https://github.com/rustdesk-org/pulsectl#d2ec086b)
+   Compiling dbus-crossroads v0.5.2
 warning: unused import: `allow_err`
  --> src/server/wayland.rs:2:18
   |
@@ -924,7 +995,7 @@ warning: module `pt_PT` should have a snake case name
    |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
 
 warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.85s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 57s
      Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
 
 running 33 tests
@@ -962,5 +1033,5 @@ test dauverse::transfer_guard::tests::rejects_traversal_unc_reserved_and_symlink
 test dauverse::update_center::tests::f12_blocks_downgrade_tampered_hash_and_ignores_spoofed_caller_signature_enum ... ok
 test dauverse::security::tests::f05_f07_step_up_pin_blocks_unauthenticated_overwrite_enforces_lockout_expiry_and_corrupted_vault_fail_closed ... ok
 
-test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 216 filtered out; finished in 11.05s
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 216 filtered out; finished in 11.22s
 

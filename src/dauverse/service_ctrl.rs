@@ -1138,6 +1138,7 @@ impl ServiceController {
                 enums::{HKEY_CURRENT_USER, KEY_SET_VALUE},
                 RegKey,
             };
+            let before_query_ok = before_query_err.is_none();
             let mut os_action_err: Option<String> = first_error.or(before_query_err);
 
             if before_run_present || os_action_err.is_some() {
@@ -1166,7 +1167,7 @@ impl ServiceController {
             }
 
             // Strictly preserve F03 ownership protection: NEVER stop SCM 'RustDesk' unless owned == Some(true)
-            if before_query_err.is_none()
+            if before_query_ok
                 && before_owned == Some(true)
                 && before_svc_state != ServiceRunState::Stopped
             {

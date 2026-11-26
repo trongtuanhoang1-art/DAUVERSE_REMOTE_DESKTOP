@@ -1,6 +1,6 @@
-# DAUVERSE REMOTE DESKTOP V1 — FINDINGS REMEDIATION MATRIX (RC4.1 FAST-TRACK CLOSURE)
+# DAUVERSE REMOTE DESKTOP V1 — FINDINGS REMEDIATION MATRIX (RC4.2 BUILD RECOVERY)
 
-- **Task ID:** `DREMOTE-V1-RC4.1-FAST-TRACK-013` (`PHASE 1 CARBON + PHASE 2 INDEPENDENT PRO REVIEW`)
+- **Task ID:** `DREMOTE-V1-RC4.2-BUILD-RECOVERY-015` (`PHASE 1 CARBON HOTFIX + PHASE 2 TARGETED PRO QA + PHASE 3 CONTROLLED WINDOWS CI`)
 - **Input Independent QA Reports (Preserved Byte-for-Byte):**
   1. `QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md` — SHA-256: `f07b61edbd82a376cc5e3f854d72d0cc3331735094bc0631e37fbc9ebc60a913`
   2. `QA/DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md` — SHA-256: `c23d36e7d83b2fb1402238d8a8501b9de899fcd94b2774155b6a602fd77fb954`
@@ -10,7 +10,8 @@
   - RC1: `309948002371aba1407532c9ba8d9d216a02e771`
   - RC2: `0e1e3e87185159a481360b2c2b28f3dee541328f` (GitHub Actions Run `45720572543`)
   - RC3: `821f1dabbbe865930d1bd0676760956659533c15` (`FAIL_SOURCE_GATE`)
-  - RC4 (Pinned Baseline): `980373472ae17b869f273b7544336b133ca3ce86` (Claude Independent QA `012`: `B01`–`B05`, `Q01`–`Q03`, `F01` verified `CLOSED-SOURCE`; single remaining blocker `RC4-N01` `P2`)
+  - RC4: `980373472ae17b869f273b7544336b133ca3ce86` (Claude Independent QA `012`: `B01`–`B05`, `Q01`–`Q03`, `F01` verified `CLOSED-SOURCE`)
+  - RC4.1 (Pinned Baseline): `800443eacba6cf77bec7068cea569c5f8a72ba5d` (`RC4-N01` remediated; Windows CI Run `45854069899` stopped at `librustdesk.dll` with 1 borrow-checker error `E0382` at `src/dauverse/service_ctrl.rs:1169:16`, remediated in RC4.2)
   - Submodule `libs/hbb_common`: `450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb` (untouched)
 - **Severities Preserved Unchanged:** Historical `6 P1` (`F01`–`F06`), `9 P2` (`F07`–`F14`, `F16`) + `N01` (`P2`), `1 P3` (`F15`); RC3 Blockers `FT010-B01`..`B05` (`CLOSED-SOURCE` in RC4); RC4 Blocker `RC4-N01` (`P2`) + non-blocking `N02`–`N07`.
 - **Governance & Status Legend:**

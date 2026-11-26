@@ -33,7 +33,6 @@ help: replace the use of the deprecated method
     |
 
 warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_common` to apply 1 suggestion)
-   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
 warning: type `useconds_t` should have an upper camel case name
   --> libs/libxdo-sys-stub/src/lib.rs:31:10
    |
@@ -44,9 +43,6 @@ warning: type `useconds_t` should have an upper camel case name
 
 warning: `libxdo-sys` (lib) generated 1 warning
 warning: `hbb_common` (lib) generated 2 warnings (2 duplicates)
-   Compiling scrap v0.5.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/scrap)
-   Compiling clipboard v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/clipboard)
-   Compiling enigo v0.0.14 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/enigo)
 warning: unused import: `tokio`
   --> libs/scrap/src/wayland/pipewire.rs:27:60
    |
@@ -98,7 +94,6 @@ help: use `'_` for type paths
     |                                                   +++
 
 warning: `scrap` (lib) generated 5 warnings (run `cargo fix --lib -p scrap` to apply 2 suggestions)
-   Compiling rustdesk v1.5.3 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP)
 warning: unused import: `allow_err`
  --> src/server/wayland.rs:2:18
   |
@@ -929,12 +924,12 @@ warning: module `pt_PT` should have a snake case name
    |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
 
 warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 22s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.36s
      Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
 
 running 2 tests
 test dauverse::service_ctrl::tests::ft010_b03_live_engine_connection_revoke_cuts_capabilities_disconnects_and_fails_on_timeout ... ok
 test server::connection::test::ft010_b03_real_engine_connection_capability_and_port_forward_cutoff_on_revoke ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 247 filtered out; finished in 0.47s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 247 filtered out; finished in 0.38s
 
