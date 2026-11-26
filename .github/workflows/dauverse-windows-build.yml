@@ -84,10 +84,16 @@ jobs:
           if ($ActualCodexReQaSha -ne $ExpectedCodexReQaSha) {
             throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedCodexReQaSha, got $ActualCodexReQaSha"
           }
+          $ExpectedCodexRc3Sha = "d7bf8f93fde76a95cbfcc3c089018f607c9b7743c679a1b3f8c8d38ce98e61ad"
+          $ActualCodexRc3Sha = (Get-FileHash -LiteralPath "QA/DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualCodexRc3Sha -ne $ExpectedCodexRc3Sha) {
+            throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedCodexRc3Sha, got $ActualCodexRc3Sha"
+          }
           foreach ($reqFile in @(
             "FINDINGS_REMEDIATION_MATRIX.md",
             "QA/CODEX_REQA_WINDOWS_RC2_HANDOFF.md",
             "DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md",
+            "DAUVERSE_REMOTE_V1_RC4_SOURCE_REVIEW_HANDOFF.md",
             "FEATURE_ACCEPTANCE_MATRIX.md",
             "HUONG_DAN_BOSS.md",
             "LICENSE",
@@ -229,11 +235,14 @@ jobs:
             if (-not $ResolvedNsis) {
               throw "F15_NSIS_PIN_FAILED: makensis.exe /VERSION did not resolve to exact v3.11 after setup"
             }
+            Set-Content -LiteralPath "_win_out/LOGS/RESOLVED_MAKENSIS_PATH.txt" -Value $ResolvedNsis -NoNewline -Encoding UTF8
           '
+          RESOLVED_NSIS_WIN="$(cat _win_out/LOGS/RESOLVED_MAKENSIS_PATH.txt)"
+          export DAUVERSE_MAKENSIS_PATH="$RESOLVED_NSIS_WIN"
           if [ "${{ inputs.run_tests }}" = "true" ]; then
-            pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
+            pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -MakensisPath "$RESOLVED_NSIS_WIN" -UseRepoTargetDir -SkipVcpkgInstall 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
           else
-            pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
+            pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -MakensisPath "$RESOLVED_NSIS_WIN" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
           fi
 
       - name: Verify Coexistence, Startup, 3-Process DPAPI/HMAC/PIN Matrix, Rollback & Uninstaller

@@ -84,10 +84,44 @@ function Assert-Throws {
     }
 }
 
+function New-ReleaseManifestLines {
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseDirectory,
+        [ValidateSet("Initial", "Final")][string]$ManifestRole = "Final"
+    )
+    $BaseFull = [System.IO.Path]::GetFullPath($BaseDirectory).TrimEnd('\', '/')
+    $BasePrefix = $BaseFull + [string][System.IO.Path]::DirectorySeparatorChar
+    $ExcludedNorms = if ($ManifestRole -eq "Initial") {
+        @("sha256_manifest.txt", "initial_build_sha256_manifest.txt")
+    } else {
+        @("sha256_manifest.txt")
+    }
+    $OutLines = @()
+    $DiskFiles = [System.IO.Directory]::GetFiles($BaseFull, "*", [System.IO.SearchOption]::AllDirectories) | Sort-Object
+    foreach ($diskFile in $DiskFiles) {
+        $diskRel = $diskFile.Substring($BasePrefix.Length)
+        $diskNorm = $diskRel.Replace("/", "\").ToLowerInvariant()
+        if ($ExcludedNorms -contains $diskNorm) {
+            continue
+        }
+        $relPosixOrWin = $diskRel.Replace("\", "/")
+        if ($relPosixOrWin -notmatch "/") {
+            $relOut = $diskRel
+        } else {
+            $relOut = $relPosixOrWin
+        }
+        $h = (Get-FileHash -LiteralPath $diskFile -Algorithm SHA256).Hash.ToLowerInvariant()
+        $OutLines += "$h  $relOut"
+    }
+    return $OutLines
+}
+
 function Assert-ManifestFileValid {
     param(
         [Parameter(Mandatory = $true)][string]$ManifestFilePath,
-        [Parameter(Mandatory = $true)][string]$BaseDirectory
+        [Parameter(Mandatory = $true)][string]$BaseDirectory,
+        [ValidateSet("Auto", "Initial", "Final")][string]$ManifestRole = "Auto",
+        [switch]$VerifyListedEntriesOnly = $false
     )
     Assert-Condition (Test-Path -LiteralPath $ManifestFilePath) "Manifest file missing: $ManifestFilePath"
     Assert-Condition (Test-Path -LiteralPath $BaseDirectory) "Base directory missing: $BaseDirectory"
@@ -107,6 +141,13 @@ function Assert-ManifestFileValid {
     if ($ManifestFull.StartsWith($BasePrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         $ManifestSelfNorm = $ManifestFull.Substring($BasePrefix.Length).Replace("/", "\").ToLowerInvariant()
     }
+    $EffectiveRole = if ($ManifestRole -ne "Auto") {
+        $ManifestRole
+    } elseif ($ManifestSelfNorm -eq "initial_build_sha256_manifest.txt") {
+        "Initial"
+    } else {
+        "Final"
+    }
 
     $Lines = @(Get-Content -LiteralPath $ManifestFilePath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     Assert-Condition ($Lines.Count -gt 0) "Manifest file is empty: $ManifestFilePath"
@@ -124,6 +165,11 @@ function Assert-ManifestFileValid {
             Assert-Condition ((-not [string]::IsNullOrWhiteSpace($seg)) -and ($seg -ne ".") -and ($seg -ne "..") -and (-not $seg.EndsWith(".")) -and (-not $seg.EndsWith(" "))) "Invalid segment '$seg' in '$relPath'"
         }
         $norm = ($segs -join "\").ToLowerInvariant()
+        if ($EffectiveRole -eq "Initial") {
+            Assert-Condition ($norm -ne "initial_build_sha256_manifest.txt" -and $norm -ne "sha256_manifest.txt") "Initial manifest must not self-list manifest files ('$relPath')"
+        } elseif (-not [string]::IsNullOrEmpty($ManifestSelfNorm)) {
+            Assert-Condition ($norm -ne $ManifestSelfNorm) "Manifest must not self-list '$relPath'"
+        }
         Assert-Condition (-not $Seen.ContainsKey($norm)) "Duplicate manifest entry '$relPath' in $ManifestFilePath"
         $Seen[$norm] = $true
 
@@ -136,24 +182,38 @@ function Assert-ManifestFileValid {
         Assert-Condition ($actHash -eq $expHash) "SHA-256 mismatch for '$relPath' (expected $expHash, got $actHash)"
     }
 
-    $DiskFiles = [System.IO.Directory]::GetFiles($BaseFull, "*", [System.IO.SearchOption]::AllDirectories)
-    $CountedDiskFiles = 0
-    foreach ($diskFile in $DiskFiles) {
-        $diskItem = Get-Item -LiteralPath $diskFile -Force -ErrorAction Stop
-        Assert-Condition ((($diskItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) "Unlisted reparse point / symlink rejected in release dir: $diskFile"
-        $diskRel = $diskFile.Substring($BasePrefix.Length)
-        $diskNorm = $diskRel.Replace("/", "\").ToLowerInvariant()
-        if ($diskNorm -eq $ManifestSelfNorm -or $diskNorm -eq "sha256_manifest.txt" -or $diskNorm -eq "initial_build_sha256_manifest.txt") {
-            continue
+    if (-not $VerifyListedEntriesOnly) {
+        $ExcludedDiskNorms = if ($EffectiveRole -eq "Initial") {
+            @("initial_build_sha256_manifest.txt", "sha256_manifest.txt")
+        } elseif (-not [string]::IsNullOrEmpty($ManifestSelfNorm)) {
+            @($ManifestSelfNorm)
+        } else {
+            @("sha256_manifest.txt")
         }
-        Assert-Condition ($Seen.ContainsKey($diskNorm)) "Unlisted extra file '$diskRel' present in '$BaseFull' outside '$ManifestFilePath'"
-        $CountedDiskFiles++
+
+        $DiskFiles = [System.IO.Directory]::GetFiles($BaseFull, "*", [System.IO.SearchOption]::AllDirectories)
+        $CountedDiskFiles = 0
+        foreach ($diskFile in $DiskFiles) {
+            $diskItem = Get-Item -LiteralPath $diskFile -Force -ErrorAction Stop
+            Assert-Condition ((($diskItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0)) "Unlisted reparse point / symlink rejected in release dir: $diskFile"
+            $diskRel = $diskFile.Substring($BasePrefix.Length)
+            $diskNorm = $diskRel.Replace("/", "\").ToLowerInvariant()
+            if ($ExcludedDiskNorms -contains $diskNorm) {
+                continue
+            }
+            Assert-Condition ($Seen.ContainsKey($diskNorm)) "Unlisted extra file '$diskRel' present in '$BaseFull' outside '$ManifestFilePath'"
+            $CountedDiskFiles++
+        }
+        if ($EffectiveRole -eq "Final" -and (Test-Path -LiteralPath (Join-Path $BaseFull "INITIAL_BUILD_SHA256_MANIFEST.txt"))) {
+            Assert-Condition ($Seen.ContainsKey("initial_build_sha256_manifest.txt")) "Final manifest must include and hash-verify INITIAL_BUILD_SHA256_MANIFEST.txt"
+        }
+        Assert-Condition ($Seen.Count -eq $CountedDiskFiles) "Manifest entry count ($($Seen.Count)) does not match disk file count ($CountedDiskFiles) in '$BaseFull'"
     }
-    Assert-Condition ($Seen.Count -eq $CountedDiskFiles) "Manifest entry count ($($Seen.Count)) does not match disk file count ($CountedDiskFiles) in '$BaseFull'"
 
     return $Lines.Count
 }
 
+# Structural sanity validator for WINDOWS_NATIVE_BUILD.log (corroborates stage order & compiler output; independent execution authenticity requires CI provider run logs per FT010-Q01)
 function Assert-OriginalBuildLogValid {
     param([Parameter(Mandatory = $true)][string]$LogPath)
     Assert-Condition (Test-Path -LiteralPath $LogPath) "Original WINDOWS_NATIVE_BUILD.log is missing at $LogPath (placeholder substitution is forbidden)."
@@ -168,16 +228,24 @@ function Assert-OriginalBuildLogValid {
         "CargoTarget   :",
         ">>> [flutter pub get]",
         ">>> [Build dylib_virtual_display]",
+        "Finished ``release`` profile",
         ">>> [Build librustdesk.dll",
+        "Finished ``release`` profile",
         ">>> [flutter build windows --release]",
         ">>> [Generate single-file portable executable]",
         ">>> [Compile NSIS Setup Installer]",
+        "Output: """,
         "=== NATIVE COMPILATION & PACKAGING SUCCEEDED ==="
     )
     $prevIdx = -1
     foreach ($marker in $RequiredOrderedMarkers) {
-        $idx = $raw.IndexOf($marker, [System.StringComparison]::Ordinal)
-        Assert-Condition ($idx -gt $prevIdx) "WINDOWS_NATIVE_BUILD.log missing or out-of-order native build stage marker '$marker' (padded synthetic logs are forbidden)."
+        $searchStart = $prevIdx + 1
+        $idx = if ($searchStart -lt $raw.Length) {
+            $raw.IndexOf($marker, $searchStart, [System.StringComparison]::Ordinal)
+        } else {
+            -1
+        }
+        Assert-Condition ($idx -gt $prevIdx) "WINDOWS_NATIVE_BUILD.log missing or out-of-order compiler/bundler output marker '$marker' (complete-marker synthetic logs without toolchain output are forbidden)."
         $prevIdx = $idx
     }
 }
@@ -259,21 +327,37 @@ try {
     foreach ($f in @($SetupExe, $PortableExe, $SigningTxt, $InitialManifest, $ManifestTxt, $BuildLogOut, $BuildProvJson, $DriverProvJson)) {
         Assert-Condition (Test-Path -LiteralPath $f) "Missing required build output before verification: $f"
     }
-    $InitialManifestEntries = Assert-ManifestFileValid -ManifestFilePath $InitialManifest -BaseDirectory $ReleaseDir
-    $IncomingManifestEntries = Assert-ManifestFileValid -ManifestFilePath $ManifestTxt -BaseDirectory $ReleaseDir
+    $InitialManifestEntries = Assert-ManifestFileValid -ManifestFilePath $InitialManifest -BaseDirectory $ReleaseDir -ManifestRole "Initial"
+    $IncomingManifestEntries = Assert-ManifestFileValid -ManifestFilePath $ManifestTxt -BaseDirectory $ReleaseDir -ManifestRole "Final"
     Assert-OriginalBuildLogValid -LogPath $BuildLogOut
 
-    Write-Host "=== [0/7] Negative Harness Self-Tests (Codex F02 Sentinels -- 12 Cases) ==="
+    Write-Host "=== [0/7] Negative & Positive Harness Self-Tests (Codex F02 / FT010-B01 / FT010-Q01 Sentinels) ==="
     $NegTmp = Join-Path $env:TEMP ("dauverse_harness_neg_" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $NegTmp | Out-Null
     try {
         $NegResults = @()
         $CaseMissing = Join-Path $NegTmp "c_missing"; New-Item -ItemType Directory -Force -Path $CaseMissing | Out-Null
-        Set-Content -LiteralPath (Join-Path $CaseMissing "sample.bin") -Value "hello-rc3" -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $CaseMissing "sample.bin") -Value "hello-rc4" -Encoding UTF8
         $GoodHash = (Get-FileHash -LiteralPath (Join-Path $CaseMissing "sample.bin") -Algorithm SHA256).Hash.ToLowerInvariant()
         $BadHash  = "0" * 64
         Set-Content -LiteralPath (Join-Path $CaseMissing "SHA256_MANIFEST.txt") -Value @("$GoodHash  sample.bin", "$GoodHash  absent.exe") -Encoding UTF8
-        $NegResults += Assert-Throws "missing_manifest_file" { Assert-ManifestFileValid -ManifestFilePath (Join-Path $CaseMissing "SHA256_MANIFEST.txt") -BaseDirectory $CaseMissing }
+        $NegResults += Assert-Throws "missing_manifest_file" { Assert-ManifestFileValid -ManifestFilePath (Join-Path $CaseMissing "SHA256_MANIFEST.txt") -BaseDirectory $CaseMissing -ManifestRole "Final" }
+
+        # FT010-B01 Positive + Negative Final Layout Self-Test (exact production New-ReleaseManifestLines -> Assert-ManifestFileValid)
+        $CaseFinalLayout = Join-Path $NegTmp "c_final_layout"; New-Item -ItemType Directory -Force -Path $CaseFinalLayout | Out-Null
+        Copy-Item -LiteralPath (Join-Path $CaseMissing "sample.bin") -Destination (Join-Path $CaseFinalLayout "sample.bin")
+        $InitLinesTest = New-ReleaseManifestLines -BaseDirectory $CaseFinalLayout -ManifestRole "Initial"
+        Set-Content -LiteralPath (Join-Path $CaseFinalLayout "INITIAL_BUILD_SHA256_MANIFEST.txt") -Value $InitLinesTest -Encoding UTF8
+        Assert-Condition ((Assert-ManifestFileValid -ManifestFilePath (Join-Path $CaseFinalLayout "INITIAL_BUILD_SHA256_MANIFEST.txt") -BaseDirectory $CaseFinalLayout -ManifestRole "Initial") -eq 1) "FT010-B01 initial manifest positive check failed"
+        Set-Content -LiteralPath (Join-Path $CaseFinalLayout "WINDOWS_RC_VERIFICATION_REPORT.json") -Value '{"ok":true}' -Encoding UTF8
+        $FinalLinesTest = New-ReleaseManifestLines -BaseDirectory $CaseFinalLayout -ManifestRole "Final"
+        Set-Content -LiteralPath (Join-Path $CaseFinalLayout "SHA256_MANIFEST.txt") -Value $FinalLinesTest -Encoding UTF8
+        Assert-Condition ((Assert-ManifestFileValid -ManifestFilePath (Join-Path $CaseFinalLayout "SHA256_MANIFEST.txt") -BaseDirectory $CaseFinalLayout -ManifestRole "Final") -eq 3) "FT010-B01 final manifest positive check failed"
+
+        # FT010-B01 Negative: Final manifest omitting INITIAL_BUILD_SHA256_MANIFEST.txt MUST fail closed
+        $OmittedFinalLines = @($FinalLinesTest | Where-Object { $_ -notmatch "INITIAL_BUILD_SHA256_MANIFEST\.txt" })
+        Set-Content -LiteralPath (Join-Path $CaseFinalLayout "SHA256_MANIFEST.txt") -Value $OmittedFinalLines -Encoding UTF8
+        $NegResults += Assert-Throws "final_manifest_missing_initial_manifest_rejected" { Assert-ManifestFileValid -ManifestFilePath (Join-Path $CaseFinalLayout "SHA256_MANIFEST.txt") -BaseDirectory $CaseFinalLayout -ManifestRole "Final" }
 
         $CaseBadHash = Join-Path $NegTmp "c_badhash"; New-Item -ItemType Directory -Force -Path $CaseBadHash | Out-Null
         Copy-Item -LiteralPath (Join-Path $CaseMissing "sample.bin") -Destination (Join-Path $CaseBadHash "sample.bin")
@@ -303,6 +387,22 @@ try {
         $PaddedSyntheticLog = ("PADDING_LINE_ONLY`r`n" * 90) + "=== NATIVE COMPILATION & PACKAGING SUCCEEDED ===`r`n"
         Set-Content -LiteralPath (Join-Path $NegTmp "padded_synthetic.log") -Value $PaddedSyntheticLog -Encoding UTF8
         $NegResults += Assert-Throws "padded_synthetic_build_log_rejected" { Assert-OriginalBuildLogValid -LogPath (Join-Path $NegTmp "padded_synthetic.log") }
+
+        # FT010-Q01 Negative: Complete-marker fabricated build log without compiler/NSIS outputs MUST fail closed
+        $AllHeadersOnlyLog = (@(
+            "RepoRoot      : C:\fake",
+            "CargoTarget   : C:\fake\target",
+            ">>> [flutter pub get]",
+            ">>> [Build dylib_virtual_display]",
+            ">>> [Build librustdesk.dll]",
+            ">>> [flutter build windows --release]",
+            ">>> [Generate single-file portable executable]",
+            ">>> [Compile NSIS Setup Installer]",
+            ("PADDING_WITHOUT_COMPILER_OUTPUT_0123456789`r`n" * 35),
+            "=== NATIVE COMPILATION & PACKAGING SUCCEEDED ==="
+        ) -join "`r`n")
+        Set-Content -LiteralPath (Join-Path $NegTmp "all_headers_synthetic.log") -Value $AllHeadersOnlyLog -Encoding UTF8
+        $NegResults += Assert-Throws "complete_marker_fabricated_build_log_rejected" { Assert-OriginalBuildLogValid -LogPath (Join-Path $NegTmp "all_headers_synthetic.log") }
 
         $CaseSkip = Join-Path $NegTmp "c_skip"; New-Item -ItemType Directory -Force -Path $CaseSkip | Out-Null
         Copy-Item -LiteralPath (Join-Path $CaseMissing "sample.bin") -Destination (Join-Path $CaseSkip "sample.bin")
@@ -1163,11 +1263,11 @@ elif phase == "phase4_corrupt_replay":
     Assert-Condition ($AddedCerts.Count -eq 0) "Unexpected residual Root Certificates after uninstall: $($AddedCerts | Out-String)"
     Assert-Condition ($PreHkcuRun -eq $PostHkcuRun) "HKCU Run registry values changed unexpectedly after uninstall!"
 
-    Write-Host "=== [7/7] Emitting Scoped RC3 Verification Reports & Final Bidirectional SHA256_MANIFEST.txt ==="
+    Write-Host "=== [7/7] Emitting Scoped RC4 Verification Reports & Final Bidirectional SHA256_MANIFEST.txt ==="
     $ReportObj = [ordered]@{
-        schema_version = 3
-        task_id = "DREMOTE-V1-REMEDIATION-007"
-        release_candidate = "RC3"
+        schema_version = 4
+        task_id = "DREMOTE-V1-RC4-FOCUSED-CLOSURE-011"
+        release_candidate = "RC4"
         verified_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         git_commit_sha = $GitSha
         submodule_hbb_common_sha = $SubmoduleSha
@@ -1192,7 +1292,7 @@ elif phase == "phase4_corrupt_replay":
             initial_build_manifest_entries_verified = $InitialManifestEntries
         }
         single_host_windows_gates = [ordered]@{
-            negative_harness_selftest_12_cases = "PASS"
+            negative_harness_selftest_cases = "$($NegResults.Count)/$($NegResults.Count) PASS"
             initial_manifest_and_original_build_log_verified = "PASS"
             external_rustdesk_coexistence_preserved_on_install_rollback_uninstall = "PASS"
             wdktestcert_rustdesk_idd_blocked = "PASS"
@@ -1211,11 +1311,12 @@ elif phase == "phase4_corrupt_replay":
                 phase3 = $Phase3Res
                 phase4 = $Phase4Res
             }
-            distinct_binary_transactional_rollback_and_tamper_unlisted_refusal = "PASS"
+            simulated_binary_overlay_rollback_helper_and_tamper_unlisted_refusal = "PASS_SIMULATED_BINARY_OVERLAY_PARTIAL_NATIVE"
             pre_post_host_services_certs_runkyes_clean = "PASS"
         }
         remaining_blocked_gates_requiring_two_host_or_physical_lab = @(
             "BLOCKED: Two-machine Windows 11 live Remote Desktop session (P2P / Relay / Reconnect / WASAPI Audio / Explorer File Copy)",
+            "PARTIAL-NATIVE (F11): Distinct Release A -> Release B native installer upgrade and rollback pilot (single-build harness uses SIMULATED_BINARY_OVERLAY)",
             "BLOCKED: Physical monitorless RTX 3060 NVENC + authorized usbmmidd_v2 driver activation & reboot persistence",
             "BLOCKED: Hunonic SK02 hardware smart plug (DisabledSmartPlugAdapter retained by governance -- no public vendor API)"
         )
@@ -1223,9 +1324,9 @@ elif phase == "phase4_corrupt_replay":
     $ReportObj | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportJsonOut -Encoding UTF8
 
     $MdLines = @(
-        "# WINDOWS RC3 VERIFICATION REPORT (SCOPED SINGLE-HOST RUNNER EVIDENCE)",
+        "# WINDOWS RC4 VERIFICATION REPORT (SCOPED SINGLE-HOST RUNNER EVIDENCE)",
         "",
-        "- **Task ID:** ``DREMOTE-V1-REMEDIATION-007`` (``RC3``)",
+        "- **Task ID:** ``DREMOTE-V1-RC4-FOCUSED-CLOSURE-011`` (``RC4``)",
         "- **Git Commit SHA:** ``$GitSha`` (``libs/hbb_common``: ``$SubmoduleSha``)",
         "- **Verified UTC:** ``$($ReportObj.verified_at_utc)``",
         "- **Runner OS:** ``$($ReportObj.runner_os)`` (Session ``$SessionId``)",
@@ -1233,17 +1334,18 @@ elif phase == "phase4_corrupt_replay":
         "- **Production Status:** ``LOCKED`` (Developer CI verification -- awaiting Independent Codex Re-QA)",
         "",
         "## 1. Single-Host Native Windows Gates Executed (``PASS``)",
-        "1. **Negative Harness Self-Tests (``F02``):** ``PASS`` (12/12 negative sentinels--missing file, bad SHA-256, duplicate entry, unlisted extra file, GUI early exits ``0/1/2``, missing DLL, missing/tiny/padded-synthetic build log, skipped-test marker--verified to fail closed).",
-        "2. **Bidirectional Immutable Build Manifest & Multi-Marker Log (``F02``, ``F15``):** ``PASS`` (``INITIAL_BUILD_SHA256_MANIFEST.txt`` verified bidirectionally before testing; real ``WINDOWS_NATIVE_BUILD.log`` ordered stage markers verified).",
+        "1. **Negative Harness Self-Tests (``F02``, ``FT010-B01``, ``FT010-Q01``):** ``PASS`` ($($NegResults.Count)/$($NegResults.Count) negative sentinels--missing file, missing initial manifest in final layout, bad SHA-256, duplicate entry, unlisted extra file, GUI early exits ``0/1/2``, missing DLL, missing/tiny/padded/complete-marker synthetic build logs, skipped-test marker--verified to fail closed).",
+        "2. **Bidirectional Immutable Build Manifest & Multi-Marker Log (``F02``, ``F15``):** ``PASS`` (``INITIAL_BUILD_SHA256_MANIFEST.txt`` verified bidirectionally before testing; real ``WINDOWS_NATIVE_BUILD.log`` ordered stage and compiler/NSIS markers verified).",
         "3. **External RustDesk Coexistence & Ownership (``F03``):** ``PASS`` (Simulated external ``RustDesk`` service and config outside ``$ExpectedInstallDir`` survived ``SETUP.exe /S``, ``rollback_windows_release.ps1``, and ``Uninstall.exe /S`` untouched; real running RustDesk service coexistence remains ``BLOCKED`` pending lab guest).",
         "4. **Driver Authenticity & License Closure (``F04``, ``A02``):** ``PASS`` (``usbmmidd.cat`` ``Status=$UsbCatStatus``, signer ``$UsbCatSubject``, catalog check ``$CatalogValidationStatus``, ``usbmmidd_v2\License.txt`` preserved verbatim; zero ``WDKTestCert`` / ``RustDeskIddDriver``).",
         "5. **Startup & Win32 GUI Liveness (``F02``):** ``PASS`` (``DAUVERSE_REMOTE.exe --version`` == ``1.5.3``, ``rustdesk.exe --version`` == ``1.5.3``, both installed and portable Win32 GUI processes survived 5s with ``librustdesk.dll`` + ``flutter_windows.dll`` loaded; interactive GUI rendering remains pilot scope).",
-        "6. **4-Process Windows DPAPI & Security Negative Matrix (``F01``, ``F04``, ``F05``, ``F07``, ``F09``, ``F10``, ``F12``, ``F13``, ``F14``, ``F16``, ``N01``):** ``PASS`` (DPAPI encrypt->exit->reopen decrypt; HMAC v3 lossless f32 tags + neighbor collision rejection + corrupt replay journal fail-closed + per-file sender SHA-256 & compensating-length rejection).",
-        "7. **Bidirectional Manifest-Only Rollback (``F11``):** ``PASS`` (Tampered and unlisted-extra backups refused without mutating ``$ExpectedInstallDir``; valid manifested backup restored exact Release A PE binary SHA-256 cleanly).",
+        "6. **4-Process Windows DPAPI & Security Negative Matrix (``F01``, ``F04``, ``F05``, ``F07``, ``F09``, ``F10``, ``F12``, ``F13``, ``F14``, ``F16``, ``N01``):** ``PASS`` (DPAPI encrypt->exit->reopen decrypt; HMAC v3 lossless f32 tags + neighbor collision rejection + corrupt replay journal fail-closed + per-file sender SHA-256 & full-identity isolation).",
+        "7. **Bidirectional Manifest-Only Rollback -- Simulated Overlay Helper Check (``F11``):** ``PASS (SIMULATED_BINARY_OVERLAY)`` (Tampered and unlisted-extra backups refused without mutating ``$ExpectedInstallDir``; valid manifested backup restored Release A ``librustdesk.dll`` SHA-256 cleanly; distinct two-release A->B->A native acceptance remains pilot scope).",
         "8. **Host Cleanliness Diff:** ``PASS`` (Zero residual Windows Services, Root Certificates, or ``HKCU Run`` entries).",
         "",
-        "## 2. Gates Explicitly Retained as ``BLOCKED`` (Not Claimed as ``PASS``)",
+        "## 2. Gates Explicitly Retained as ``BLOCKED`` / ``PARTIAL-NATIVE`` (Not Claimed as Full ``PASS``)",
         "- **Two-Machine Live Remote Session:** ``BLOCKED`` in single-runner CI (requires two authorized Windows endpoints).",
+        "- **Distinct Release A -> Release B Native Upgrade/Rollback Pilot (``F11``):** ``PARTIAL-NATIVE`` (single-build harness uses ``SIMULATED_BINARY_OVERLAY``; requires two distinct built releases).",
         "- **Physical Monitorless GPU & Authorized Driver Install:** ``BLOCKED`` by governance (no host driver installation without Boss approval).",
         "- **Hunonic SK02 Hardware Control:** ``BLOCKED`` (``DisabledSmartPlugAdapter`` retained; no public vendor API)."
     )
@@ -1256,16 +1358,11 @@ elif phase == "phase4_corrupt_replay":
     Copy-Item -LiteralPath $TempVerifyLog -Destination $VerifyLogOut -Force
     Remove-Item -LiteralPath $TempVerifyLog -Force -ErrorAction SilentlyContinue
 
-    $FinalManifestLines = @()
-    Get-ChildItem -LiteralPath $ReleaseDir -File | Sort-Object Name | ForEach-Object {
-        if ($_.Name -ne "SHA256_MANIFEST.txt") {
-            $h = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            $FinalManifestLines += "$h  $($_.Name)"
-        }
-    }
+    $null = Assert-ManifestFileValid -ManifestFilePath $InitialManifest -BaseDirectory $ReleaseDir -ManifestRole "Initial" -VerifyListedEntriesOnly
+    $FinalManifestLines = New-ReleaseManifestLines -BaseDirectory $ReleaseDir -ManifestRole "Final"
     Set-Content -LiteralPath $ManifestTxt -Value $FinalManifestLines -Encoding UTF8
-    $FinalVerifiedCount = Assert-ManifestFileValid -ManifestFilePath $ManifestTxt -BaseDirectory $ReleaseDir
-    Write-Host "=== ALL SINGLE-HOST WINDOWS RC3 GATES PASSED ($FinalVerifiedCount manifest entries verified) ==="
+    $FinalVerifiedCount = Assert-ManifestFileValid -ManifestFilePath $ManifestTxt -BaseDirectory $ReleaseDir -ManifestRole "Final"
+    Write-Host "=== ALL SINGLE-HOST WINDOWS RC4 GATES PASSED ($FinalVerifiedCount manifest entries verified) ==="
     Get-Content -LiteralPath $ManifestTxt
 } finally {
     $PSNativeCommandUseErrorActionPreference = $false

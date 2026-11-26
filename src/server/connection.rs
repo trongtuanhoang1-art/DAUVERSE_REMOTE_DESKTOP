@@ -471,6 +471,7 @@ pub struct Connection {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     terminal_user_token: Option<TerminalUserToken>,
     terminal_generic_service: Option<Box<GenericService>>,
+    dauverse_revoked: Arc<AtomicBool>,
 }
 
 impl ConnInner {
@@ -530,6 +531,12 @@ fn drm_can_serve_login_screen() -> bool {
 }
 
 impl Connection {
+    #[inline]
+    fn is_dauverse_revoked(&self) -> bool {
+        self.dauverse_revoked.load(Ordering::SeqCst)
+            || crate::dauverse::service_ctrl::is_conservative_access_denied()
+    }
+
     pub async fn start(
         addr: SocketAddr,
         stream: super::Stream,
@@ -557,6 +564,12 @@ impl Connection {
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
         // holding tx_from_cm_holder to avoid cpu burning of rx_from_cm.recv when all sender closed
         let tx_from_cm = tx_from_cm_holder.clone();
+        let _dauverse_live_conn_guard =
+            crate::dauverse::service_ctrl::register_live_engine_connection(
+                id,
+                tx_from_cm_holder.clone(),
+            );
+        let dauverse_revoked = _dauverse_live_conn_guard.revoked_flag();
         let (tx_to_cm, rx_to_cm) = mpsc::unbounded_channel::<ipc::Data>();
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
@@ -570,6 +583,8 @@ impl Connection {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let tx_cloned = tx.clone();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let dauverse_revoked_input = dauverse_revoked.clone();
         let mut conn = Self {
             inner: ConnInner {
                 id,
@@ -670,6 +685,7 @@ impl Connection {
             terminal_generic_service: None,
             conn_audit_primary_auth: ConnAuditPrimaryAuth::None,
             conn_audit_two_factor: ConnAuditTwoFactor::None,
+            dauverse_revoked,
         };
         let addr = hbb_common::try_into_v4(addr);
         if !conn.on_open(addr).await {
@@ -718,7 +734,9 @@ impl Connection {
         conn.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        std::thread::spawn(move || Self::handle_input(_rx_input, tx_cloned));
+        std::thread::spawn(move || {
+            Self::handle_input(_rx_input, tx_cloned, dauverse_revoked_input)
+        });
         let mut second_timer = crate::rustdesk_interval(time::interval(Duration::from_secs(1)));
 
         #[cfg(feature = "unix-file-copy-paste")]
@@ -1285,7 +1303,11 @@ impl Connection {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
+    fn handle_input(
+        receiver: std_mpsc::Receiver<MessageInput>,
+        tx: Sender,
+        dauverse_revoked: Arc<AtomicBool>,
+    ) {
         let mut block_input_mode = false;
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         {
@@ -1296,58 +1318,69 @@ impl Connection {
         reset_input_ondisconn();
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
-                Ok(v) => match v {
-                    MessageInput::Mouse(mouse_input) => {
-                        handle_mouse(
-                            &mouse_input.msg,
-                            mouse_input.conn_id,
-                            mouse_input.username,
-                            mouse_input.argb,
-                            mouse_input.simulate,
-                            mouse_input.show_cursor,
-                        );
-                    }
-                    MessageInput::Key((mut msg, press)) => {
-                        // Set the press state to false, use `down` only in `handle_key()`.
-                        msg.press = false;
-                        if press {
-                            msg.down = true;
-                        }
-                        CLICK_TIME.store(get_time(), Ordering::SeqCst);
-                        handle_key(&msg);
-                        if press {
-                            msg.down = false;
-                            handle_key(&msg);
-                        }
-                    }
-                    MessageInput::Pointer((msg, id)) => {
-                        handle_pointer(&msg, id);
-                    }
-                    MessageInput::BlockOn => {
-                        let (ok, msg) = crate::platform::block_input(true);
-                        if ok {
-                            block_input_mode = true;
-                        } else {
-                            Self::send_block_input_error(
-                                &tx,
-                                back_notification::BlockInputState::BlkOnFailed,
-                                msg,
-                            );
-                        }
-                    }
-                    MessageInput::BlockOff => {
-                        let (ok, msg) = crate::platform::block_input(false);
-                        if ok {
+                Ok(v) => {
+                    if dauverse_revoked.load(Ordering::SeqCst)
+                        || crate::dauverse::service_ctrl::is_conservative_access_denied()
+                    {
+                        if block_input_mode {
+                            let _ = crate::platform::block_input(false);
                             block_input_mode = false;
-                        } else {
-                            Self::send_block_input_error(
-                                &tx,
-                                back_notification::BlockInputState::BlkOffFailed,
-                                msg,
+                        }
+                        continue;
+                    }
+                    match v {
+                        MessageInput::Mouse(mouse_input) => {
+                            handle_mouse(
+                                &mouse_input.msg,
+                                mouse_input.conn_id,
+                                mouse_input.username,
+                                mouse_input.argb,
+                                mouse_input.simulate,
+                                mouse_input.show_cursor,
                             );
                         }
+                        MessageInput::Key((mut msg, press)) => {
+                            // Set the press state to false, use `down` only in `handle_key()`.
+                            msg.press = false;
+                            if press {
+                                msg.down = true;
+                            }
+                            CLICK_TIME.store(get_time(), Ordering::SeqCst);
+                            handle_key(&msg);
+                            if press {
+                                msg.down = false;
+                                handle_key(&msg);
+                            }
+                        }
+                        MessageInput::Pointer((msg, id)) => {
+                            handle_pointer(&msg, id);
+                        }
+                        MessageInput::BlockOn => {
+                            let (ok, msg) = crate::platform::block_input(true);
+                            if ok {
+                                block_input_mode = true;
+                            } else {
+                                Self::send_block_input_error(
+                                    &tx,
+                                    back_notification::BlockInputState::BlkOnFailed,
+                                    msg,
+                                );
+                            }
+                        }
+                        MessageInput::BlockOff => {
+                            let (ok, msg) = crate::platform::block_input(false);
+                            if ok {
+                                block_input_mode = false;
+                            } else {
+                                Self::send_block_input_error(
+                                    &tx,
+                                    back_notification::BlockInputState::BlkOffFailed,
+                                    msg,
+                                );
+                            }
+                        }
                     }
-                },
+                }
                 Err(err) => {
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
@@ -1376,10 +1409,16 @@ impl Connection {
     ) -> ResultType<()> {
         let mut last_recv_time = Instant::now();
         if let Some(mut forward) = self.port_forward_socket.take() {
+            if self.is_dauverse_revoked() {
+                bail!("Port forward revoked by host owner");
+            }
             log::info!("Running port forwarding loop");
             self.stream.set_raw();
             let mut hbbs_rx = crate::hbbs_http::sync::signal_receiver();
             loop {
+                if self.is_dauverse_revoked() {
+                    bail!("Port forward revoked by host owner");
+                }
                 tokio::select! {
                     Some(data) = rx_from_cm.recv() => {
                         match data {
@@ -2401,11 +2440,11 @@ impl Connection {
     }
 
     fn peer_keyboard_enabled(&self) -> bool {
-        self.keyboard && !self.disable_keyboard
+        !self.is_dauverse_revoked() && self.keyboard && !self.disable_keyboard
     }
 
     fn clipboard_enabled(&self) -> bool {
-        self.clipboard && !self.disable_clipboard
+        !self.is_dauverse_revoked() && self.clipboard && !self.disable_clipboard
     }
 
     #[inline]
@@ -2416,12 +2455,12 @@ impl Connection {
     }
 
     fn audio_enabled(&self) -> bool {
-        self.audio && !self.disable_audio
+        !self.is_dauverse_revoked() && self.audio && !self.disable_audio
     }
 
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     fn file_transfer_enabled(&self) -> bool {
-        self.file && self.enable_file_transfer
+        !self.is_dauverse_revoked() && self.file && self.enable_file_transfer
     }
 
     #[cfg(feature = "unix-file-copy-paste")]
@@ -2953,6 +2992,21 @@ impl Connection {
                 raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
                 return false;
             }
+        }
+        if self.is_dauverse_revoked() {
+            self.authorized = false;
+            self.keyboard = false;
+            self.clipboard = false;
+            self.audio = false;
+            self.file = false;
+            self.restart = false;
+            self.recording = false;
+            self.block_input = false;
+            self.send_close_reason_no_retry("Access revoked by host owner")
+                .await;
+            self.on_close("Emergency revoke", true).await;
+            raii::AuthedConnID::check_remove_session(self.inner.id(), self.session_key());
+            return false;
         }
         if self.authorized {
             if matches!(msg.union.as_ref(), Some(message::Union::LoginRequest(_))) {
@@ -8046,5 +8100,183 @@ mod test {
         // is all three fields, and either of those is someone else's screen to lock.
         assert!(!replaced_by(&conn(3, remote, key(8, "peer")), 2, &mine));
         assert!(!replaced_by(&conn(3, remote, key(7, "other")), 2, &mine));
+    }
+
+    #[tokio::test]
+    async fn ft010_b03_real_engine_connection_capability_and_port_forward_cutoff_on_revoke() {
+        let _test_guard =
+            crate::dauverse::service_ctrl::GlobalTestSerialToken::acquire_async().await;
+        let listener = hbb_common::tcp::new_listener("127.0.0.1:0", false)
+            .await
+            .unwrap();
+        let listen_addr = listener.local_addr().unwrap();
+        let client_fut = TcpStream::connect(listen_addr);
+        let accept_fut = listener.accept();
+        let (client_res, accept_res) = tokio::join!(client_fut, accept_fut);
+        let _peer_client = client_res.unwrap();
+        let (server_tcp, peer_addr) = accept_res.unwrap();
+        let local_addr = server_tcp.local_addr().unwrap();
+        let stream = super::Stream::from(server_tcp, local_addr);
+
+        let pf_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pf_addr = pf_listener.local_addr().unwrap();
+        let (pf_client_res, pf_accept_res) =
+            tokio::join!(TcpStream::connect(pf_addr), pf_listener.accept());
+        let pf_client = pf_client_res.unwrap();
+        let (_pf_target_peer, _) = pf_accept_res.unwrap();
+
+        let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
+        let tx_from_cm = tx_from_cm_holder.clone();
+        let live_guard = crate::dauverse::service_ctrl::register_live_engine_connection(
+            909,
+            tx_from_cm_holder.clone(),
+        );
+        let dauverse_revoked = live_guard.revoked_flag();
+        crate::dauverse::service_ctrl::set_conservative_access_denied(false);
+
+        let (tx_to_cm, rx_to_cm) = mpsc::unbounded_channel::<ipc::Data>();
+        let (tx, _rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
+        let (tx_video, _rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
+        let (tx_input, _rx_input) = std_mpsc::channel();
+        let (tx_from_authed, _rx_from_authed) = mpsc::unbounded_channel::<ipc::Data>();
+        let (tx_post_seq, _rx_post_seq) = mpsc::unbounded_channel();
+
+        let mut conn = Connection {
+            inner: ConnInner {
+                id: 909,
+                tx: Some(tx),
+                tx_video: Some(tx_video),
+            },
+            require_2fa: None,
+            awaiting_2fa: false,
+            trusted_device: None,
+            display_idx: 0,
+            stream,
+            server: std::sync::Weak::new(),
+            hash: Hash::default(),
+            read_jobs: Vec::new(),
+            timer: crate::rustdesk_interval(time::interval(SEC30)),
+            file_timer: crate::rustdesk_interval(time::interval(SEC30)),
+            file_transfer: None,
+            view_camera: false,
+            terminal: false,
+            port_forward_socket: Some(Framed::new(pf_client, BytesCodec::new())),
+            port_forward_mux: None,
+            port_forward_address: pf_addr.to_string(),
+            tx_to_cm,
+            authorized: true,
+            unauthorized_id: admit_unauthorized(909, peer_addr.ip()),
+            keyboard: true,
+            clipboard: true,
+            audio: true,
+            file: true,
+            restart: true,
+            recording: true,
+            block_input: true,
+            privacy_mode: false,
+            #[cfg(windows)]
+            privacy_preparation: None,
+            control_permissions: None,
+            last_test_delay: None,
+            network_delay: 0,
+            lock_after_session_end: false,
+            show_remote_cursor: false,
+            follow_remote_cursor: false,
+            follow_remote_window: false,
+            multi_ui_session: false,
+            ip: peer_addr.ip().to_string(),
+            disable_audio: false,
+            #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+            enable_file_transfer: true,
+            disable_clipboard: false,
+            disable_keyboard: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            show_my_cursor: false,
+            tx_input,
+            video_ack_required: false,
+            server_audit_conn: String::new(),
+            server_audit_file: String::new(),
+            controlled_context: None,
+            lr: Default::default(),
+            login_scope: None,
+            peer_argb: 0,
+            session_last_recv_time: None,
+            chat_unanswered: false,
+            file_transferred: false,
+            #[cfg(windows)]
+            portable: Default::default(),
+            from_switch: false,
+            audio_sender: None,
+            voice_call_request_timestamp: None,
+            voice_calling: false,
+            options_in_login: None,
+            #[cfg(not(any(target_os = "ios")))]
+            pressed_modifiers: Default::default(),
+            closed: false,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            start_cm_ipc_para: Some(StartCmIpcPara {
+                rx_to_cm,
+                tx_from_cm,
+            }),
+            auto_disconnect_timer: None,
+            authed_conn_id: None,
+            file_remove_log_control: FileRemoveLogControl::new(909),
+            last_supported_encoding: None,
+            services_subed: false,
+            delayed_read_dir: None,
+            #[cfg(target_os = "macos")]
+            retina: Retina::default(),
+            tx_from_authed,
+            printer_data: Vec::new(),
+            tx_post_seq,
+            cm_read_job_ids: HashSet::new(),
+            terminal_service_id: String::new(),
+            terminal_persistent: false,
+            scope_violation_messages: HashSet::new(),
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            terminal_user_token: None,
+            terminal_generic_service: None,
+            conn_audit_primary_auth: ConnAuditPrimaryAuth::None,
+            conn_audit_two_factor: ConnAuditTwoFactor::None,
+            dauverse_revoked,
+        };
+
+        // Pre-revoke: real engine capabilities are active on this authorized Connection
+        assert!(conn.peer_keyboard_enabled());
+        assert!(conn.clipboard_enabled());
+        assert!(conn.audio_enabled());
+        #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+        assert!(conn.file_transfer_enabled());
+
+        // Trigger revoke concurrently while try_port_forward_loop is active
+        let revoke_task = tokio::task::spawn_blocking(|| {
+            crate::dauverse::service_ctrl::revoke_all_local_engine_connections(
+                Duration::from_secs(2),
+            )
+        });
+
+        let pf_res = conn.try_port_forward_loop(&mut rx_from_cm).await;
+        assert!(
+            pf_res.is_err(),
+            "active port-forward tunnel must abort immediately on revoke"
+        );
+
+        // Capability boundaries immediately deny keyboard/clipboard/audio/file/on_message
+        assert!(!conn.peer_keyboard_enabled());
+        assert!(!conn.clipboard_enabled());
+        assert!(!conn.audio_enabled());
+        #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
+        assert!(!conn.file_transfer_enabled());
+
+        assert!(!conn.on_message(msg(|m| m.set_key_event(KeyEvent::new()))).await);
+        assert!(!conn.authorized);
+        assert!(!conn.on_message(msg(|m| m.set_clipboard(Clipboard::new()))).await);
+        assert!(!conn.on_message(msg(|m| m.set_file_action(FileAction::new()))).await);
+
+        // Dropping live_guard acknowledges connection loop exit to revoke_all_local_engine_connections
+        drop(live_guard);
+        let revoked_count = revoke_task.await.unwrap().unwrap();
+        assert!(revoked_count >= 1);
+        crate::dauverse::service_ctrl::set_conservative_access_denied(false);
     }
 }

@@ -656,6 +656,83 @@ def _worker_phase(phase: str, data_dir: Path, secret: str) -> dict:
         fin_sym = invoke_rust_ffi(lib, "transfer_finalize_receive", {"engine_job_id": 805})
         assert fin_sym["ok"] is False, f"F14 symlink escape was not rejected: {fin_sym}"
 
+        # FT010-B05 Live C-ABI E2E: Shared conn_id=0 rejection + concurrent same engine_job_id (1) across Peer A (corrupt) and Peer B (valid)
+        conn0_reject = invoke_rust_ffi(
+            lib,
+            "transfer_track_receive",
+            {
+                "engine_job_id": 1,
+                "conn_id": 0,
+                "dest_dir": str(rx_root),
+                "files": ["a.bin"],
+                "total_bytes": 4,
+            },
+        )
+        assert conn0_reject["ok"] is False and "INTEGRITY_INVALID_IDENTITY" in conn0_reject.get("error", ""), (
+            f"FT010-B05 conn_id=0 was not rejected: {conn0_reject}"
+        )
+
+        peer_a_dir = data_dir / "rx_peer_a_conn10"
+        peer_b_dir = data_dir / "rx_peer_b_conn11"
+        peer_a_dir.mkdir(parents=True, exist_ok=True)
+        peer_b_dir.mkdir(parents=True, exist_ok=True)
+        (peer_a_dir / "shared.bin").write_bytes(b"CORRUPT_10")
+        (peer_b_dir / "shared.bin").write_bytes(b"VALID_B_11")
+
+        track_a = invoke_rust_ffi(
+            lib,
+            "transfer_track_receive",
+            {
+                "engine_job_id": 1,
+                "conn_id": 10,
+                "dest_dir": str(peer_a_dir),
+                "file_specs": [
+                    {
+                        "relative_path": "shared.bin",
+                        "expected_bytes": 10,
+                        "expected_sha256": hashlib.sha256(b"EXPECTED_A").hexdigest(),
+                    }
+                ],
+                "total_bytes": 10,
+            },
+        )
+        assert track_a["ok"] is True, f"FT010-B05 track_a failed: {track_a}"
+
+        track_b = invoke_rust_ffi(
+            lib,
+            "transfer_track_receive",
+            {
+                "engine_job_id": 1,
+                "conn_id": 11,
+                "dest_dir": str(peer_b_dir),
+                "file_specs": [
+                    {
+                        "relative_path": "shared.bin",
+                        "expected_bytes": 10,
+                        "expected_sha256": hashlib.sha256(b"VALID_B_11").hexdigest(),
+                    }
+                ],
+                "total_bytes": 10,
+            },
+        )
+        assert track_b["ok"] is True, f"FT010-B05 track_b failed: {track_b}"
+
+        fin_peer_a = invoke_rust_ffi(
+            lib, "transfer_finalize_receive", {"engine_job_id": 1, "conn_id": 10}
+        )
+        assert fin_peer_a["ok"] is False and "INTEGRITY_SHA256_MISMATCH" in fin_peer_a.get("error", ""), (
+            f"FT010-B05 corrupt peer A passed after peer B reused engine_job_id 1: {fin_peer_a}"
+        )
+
+        fin_peer_b = invoke_rust_ffi(
+            lib, "transfer_finalize_receive", {"engine_job_id": 1, "conn_id": 11}
+        )
+        assert (
+            fin_peer_b["ok"] is True
+            and fin_peer_b["data"]["integrity_state"] == "SENDER_SHA256_VERIFIED"
+            and fin_peer_b["data"]["dest_root_dir"] == str(peer_b_dir)
+        ), f"FT010-B05 valid peer B failed: {fin_peer_b}"
+
         for _ in range(5):
             assert invoke_rust_ffi(
                 lib, "verify_step_up_pin", {"pin": "Wrong#0000", "scope": "POWER_CONTROL"}

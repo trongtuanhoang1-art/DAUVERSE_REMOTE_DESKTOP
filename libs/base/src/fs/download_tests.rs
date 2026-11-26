@@ -349,6 +349,19 @@ async fn f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch() {
     );
     assert_eq!(std::fs::read(&outside).unwrap(), b"rec");
 
+    // FT010-B02: Fresh overwrite download with preexisting hard-linked .download MUST also fail without truncating outside victim!
+    let mut fresh_overwrite_job = dir.job();
+    let mut confirm_overwrite = FileTransferSendConfirmRequest::new();
+    confirm_overwrite.id = 1;
+    confirm_overwrite.file_num = 0;
+    confirm_overwrite.set_skip(false);
+    fresh_overwrite_job.confirm(&confirm_overwrite).await;
+    assert!(
+        fresh_overwrite_job.write(block()).await.is_err(),
+        "fresh overwrite download must reject preexisting hard-linked .download staging file"
+    );
+    assert_eq!(std::fs::read(&outside).unwrap(), b"rec");
+
     let dir_sha = DownloadDir::new();
     let wrong_sha = "0000000000000000000000000000000000000000000000000000000000000000";
     let mut sha_job = dir_sha.job_with_files(vec![FileEntry {

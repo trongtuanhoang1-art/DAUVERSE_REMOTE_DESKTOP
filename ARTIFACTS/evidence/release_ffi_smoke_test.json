@@ -73,8 +73,8 @@
       ],
       "waiting_approval": 0
     },
-    "bridge_endpoint": "http://127.0.0.1:44369/v1/events",
-    "bridge_port": 44369,
+    "bridge_endpoint": "http://127.0.0.1:35763/v1/events",
+    "bridge_port": 35763,
     "clipboard": {
       "blocked_loops_count": 0,
       "policy": {
@@ -92,20 +92,20 @@
       },
       "synced_items_count": 0
     },
-    "data_dir": "/tmp/dauverse_e2e_rc3_26jjad69",
+    "data_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51",
     "engine_base": "1.5.3",
     "hardware": {
       "ai_processes": [],
-      "captured_at_utc": "2026-11-26T04:47:34.795982944+00:00",
+      "captured_at_utc": "2026-11-26T12:28:21.310824335+00:00",
       "cpu_brand": "Intel(R) Xeon(R) CPU @ 2.30GHz",
       "cpu_temp_c": null,
-      "cpu_usage_pct": 41.5,
+      "cpu_usage_pct": 41.099998474121094,
       "disk_activity_read_bytes": 0,
-      "disk_activity_write_bytes": 86016,
-      "disk_free_gb": 2327.29,
+      "disk_activity_write_bytes": 94208,
+      "disk_free_gb": 2327.09,
       "disk_total_gb": 2501.34,
       "disk_usage_pct": 0.699999988079071,
-      "disk_used_gb": 174.05,
+      "disk_used_gb": 174.25,
       "gpu_model": null,
       "gpu_power_watts": null,
       "gpu_temp_c": null,
@@ -113,10 +113,10 @@
       "net_download_bps": 0,
       "net_upload_bps": 0,
       "ram_total_gb": 7.77,
-      "ram_usage_pct": 8.5,
-      "ram_used_gb": 0.66,
+      "ram_usage_pct": 10.800000190734863,
+      "ram_used_gb": 0.84,
       "remote_service_healthy": false,
-      "system_uptime_secs": 14746,
+      "system_uptime_secs": 26718,
       "telemetry_scope": "LOCAL_HOST_SENSORS",
       "vram_total_mb": null,
       "vram_usage_pct": null,
@@ -178,10 +178,10 @@
           ],
           "body": "Ho\u00e0n t\u1ea5t ki\u1ec3m th\u1eed Ti\u1ebfng Vi\u1ec7t \ud83d\ude80",
           "category": "CODEX_QA_COMPLETED",
-          "created_at_utc": "2026-11-26T04:47:33.619216371+00:00",
+          "created_at_utc": "2026-11-26T12:28:20.241550002+00:00",
           "device_id": "HOME-RTX3060",
           "is_read": false,
-          "notification_id": "b171d9e0-40b7-4c32-9f98-ecd7aba39881",
+          "notification_id": "fd054876-7ccd-45fa-bc44-0cac9fac2f3e",
           "priority_alert": false,
           "project_name": "DAUVERSE-REMOTE-V1",
           "severity": "SUCCESS",
@@ -204,10 +204,10 @@
           ],
           "body": "QA job 'PS Wrapper V3 Check' exited with code 0",
           "category": "QA_PASS",
-          "created_at_utc": "2026-11-26T04:47:33.301359021+00:00",
+          "created_at_utc": "2026-11-26T12:28:20.018099138+00:00",
           "device_id": "devbox",
           "is_read": false,
-          "notification_id": "4b697854-6673-4dc1-ae5b-7588400bed7c",
+          "notification_id": "3914c693-9c90-4214-89d6-14e3f7fca889",
           "priority_alert": false,
           "project_name": "DAUVERSE-REMOTE-V1",
           "severity": "SUCCESS",
@@ -230,10 +230,10 @@
           ],
           "body": "All RC3 findings verified in live FFI",
           "category": "CODEX_COMMAND_COMPLETED",
-          "created_at_utc": "2026-11-26T04:47:31.687558670+00:00",
+          "created_at_utc": "2026-11-26T12:28:18.655449007+00:00",
           "device_id": "devbox",
           "is_read": false,
-          "notification_id": "123c20f1-929d-4fa7-9968-c3fc13d1d354",
+          "notification_id": "85608b40-7976-4eb4-8e5c-45b91fe32268",
           "priority_alert": false,
           "project_name": "DAUVERSE_REMOTE_DESKTOP",
           "severity": "SUCCESS",
@@ -256,10 +256,10 @@
           ],
           "body": "Claude Code completed turn (Stop) in DAUVERSE_REMOTE_DESKTOP",
           "category": "CLAUDE_COMMAND_COMPLETED",
-          "created_at_utc": "2026-11-26T04:47:31.522526824+00:00",
+          "created_at_utc": "2026-11-26T12:28:18.509069284+00:00",
           "device_id": "devbox",
           "is_read": false,
-          "notification_id": "d8f95547-6162-4f0b-93d0-20cdc53df7d7",
+          "notification_id": "cbfd5160-5ed1-4935-8333-26d1a903600f",
           "priority_alert": false,
           "project_name": "DAUVERSE_REMOTE_DESKTOP",
           "severity": "SUCCESS",
@@ -291,7 +291,7 @@
       "codec": "H265",
       "configured_target_fps": 60,
       "connection_route": "DISCONNECTED (No Active Remote Session)",
-      "cpu_usage_pct": 41.5,
+      "cpu_usage_pct": 41.099998474121094,
       "encoder": "NVENC_HQ_P4",
       "estimated_bitrate_cap_kbps": 28000,
       "gpu_usage_pct": 0.0,
@@ -321,171 +321,171 @@
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Step-Up PIN brute-force lockout active",
-          "entry_hash": "9d5145f7b9cb5a34b1b3c8ece6b8761191ffc234506aacacb58343b81600656a",
+          "entry_hash": "fa14fb47603d9675307c4231508c1bcf595feb5e4fe0ae5acc0d901f4dddaabd",
           "outcome": "LOCKED_OUT",
-          "prev_hash": "578baf31a73b121db07dd5476f824fc69ee8f1597f5101f45fdd9db8d9348969",
+          "prev_hash": "dbd962a540b91cd9c1c8c8f9cc0f07d6d0df3a37fe27f173f3dbab4b4124ddb5",
           "seq": 17,
-          "timestamp_utc": "2026-11-26T04:47:34.787488367+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.303569853+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Invalid Step-Up PIN candidate",
-          "entry_hash": "578baf31a73b121db07dd5476f824fc69ee8f1597f5101f45fdd9db8d9348969",
+          "entry_hash": "dbd962a540b91cd9c1c8c8f9cc0f07d6d0df3a37fe27f173f3dbab4b4124ddb5",
           "outcome": "LOCKED_OUT",
-          "prev_hash": "afc97ab689f9694f33a91007fe721c6d3fb46b1f6424e99ca2a09b7abb2de4f3",
+          "prev_hash": "77093b764c28ddd54c6be14519f18827d7c0460b37fd6ea8d298b555badf82b0",
           "seq": 16,
-          "timestamp_utc": "2026-11-26T04:47:34.782577506+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.299302102+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Invalid Step-Up PIN candidate",
-          "entry_hash": "afc97ab689f9694f33a91007fe721c6d3fb46b1f6424e99ca2a09b7abb2de4f3",
+          "entry_hash": "77093b764c28ddd54c6be14519f18827d7c0460b37fd6ea8d298b555badf82b0",
           "outcome": "DENIED",
-          "prev_hash": "e75bc602056cbc91ff9e140eee9a347fd174046bb82e63ea97389c667f98702f",
+          "prev_hash": "dd7ee515663aa36e12284b5123a1fde13f6b14b44de7d34a601bb138b66d777f",
           "seq": 15,
-          "timestamp_utc": "2026-11-26T04:47:34.747111898+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.267058553+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Invalid Step-Up PIN candidate",
-          "entry_hash": "e75bc602056cbc91ff9e140eee9a347fd174046bb82e63ea97389c667f98702f",
+          "entry_hash": "dd7ee515663aa36e12284b5123a1fde13f6b14b44de7d34a601bb138b66d777f",
           "outcome": "DENIED",
-          "prev_hash": "255a1270de88f313ae98468b4e02f49588411c45c2b43eb18c4956f0f8a5666a",
+          "prev_hash": "b0a30135bef1b187d3c40cfe7f9e8ac1ec2a39929fb34cce2cf3a23bef00cc09",
           "seq": 14,
-          "timestamp_utc": "2026-11-26T04:47:34.710922662+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.238387321+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Invalid Step-Up PIN candidate",
-          "entry_hash": "255a1270de88f313ae98468b4e02f49588411c45c2b43eb18c4956f0f8a5666a",
+          "entry_hash": "b0a30135bef1b187d3c40cfe7f9e8ac1ec2a39929fb34cce2cf3a23bef00cc09",
           "outcome": "DENIED",
-          "prev_hash": "07f9f68df0323abcd694b161c2b53f47ff95921f0d1e9fc0f25b4c7bc48842f2",
+          "prev_hash": "eb85f12739b10e2ecc69c2db03324e24910a056286db38bdc2f3648fbf5fc44b",
           "seq": 13,
-          "timestamp_utc": "2026-11-26T04:47:34.674267585+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.206541995+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Invalid Step-Up PIN candidate",
-          "entry_hash": "07f9f68df0323abcd694b161c2b53f47ff95921f0d1e9fc0f25b4c7bc48842f2",
+          "entry_hash": "eb85f12739b10e2ecc69c2db03324e24910a056286db38bdc2f3648fbf5fc44b",
           "outcome": "DENIED",
-          "prev_hash": "cadd0a064c7b9264157a6fea30fe5766f4a4280a1bd41ceb59365330de42912e",
+          "prev_hash": "800fff8d4dc1fb937a8eee877550a75a544fd1a844de5c1e451ae8f38a9f5582",
           "seq": 12,
-          "timestamp_utc": "2026-11-26T04:47:34.636791492+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.177833608+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Verified Step-Up PIN against sealed vault",
-          "entry_hash": "cadd0a064c7b9264157a6fea30fe5766f4a4280a1bd41ceb59365330de42912e",
+          "entry_hash": "800fff8d4dc1fb937a8eee877550a75a544fd1a844de5c1e451ae8f38a9f5582",
           "outcome": "ALLOWED",
-          "prev_hash": "c715e0125b0c8ef59fe7c88f5b31199b7c5fb961dcd2e09abebfe20355a6e7d0",
+          "prev_hash": "fddc54d16b7f5fdbcce8e1596cb6ae2c539bd19a0dd7e9101ce737ee344383a4",
           "seq": 11,
-          "timestamp_utc": "2026-11-26T04:47:34.599587351+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.144407380+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Verified Step-Up PIN against sealed vault",
-          "entry_hash": "c715e0125b0c8ef59fe7c88f5b31199b7c5fb961dcd2e09abebfe20355a6e7d0",
+          "entry_hash": "fddc54d16b7f5fdbcce8e1596cb6ae2c539bd19a0dd7e9101ce737ee344383a4",
           "outcome": "ALLOWED",
-          "prev_hash": "b3429be024be446a6c3d0a366b54dc14964f2b33c331222d613667b0523f86d7",
+          "prev_hash": "d8335c56aa11f54082e9eea1aefa27a7ef7280301bc4edebea95af4758f3e9af",
           "seq": 10,
-          "timestamp_utc": "2026-11-26T04:47:34.532516180+00:00"
+          "timestamp_utc": "2026-11-26T12:28:21.086258098+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Verified Step-Up PIN against sealed vault",
-          "entry_hash": "b3429be024be446a6c3d0a366b54dc14964f2b33c331222d613667b0523f86d7",
+          "entry_hash": "d8335c56aa11f54082e9eea1aefa27a7ef7280301bc4edebea95af4758f3e9af",
           "outcome": "ALLOWED",
-          "prev_hash": "1e60b89eac4997d13db591efd4cd7111b20e68f29f23d16132a48dbd49e24be7",
+          "prev_hash": "0cdc8b46595ce01856c0c604aabcf5680ee0f7d97e68e822b032d26cafa15ba8",
           "seq": 9,
-          "timestamp_utc": "2026-11-26T04:47:34.084069590+00:00"
+          "timestamp_utc": "2026-11-26T12:28:20.655226545+00:00"
         },
         {
           "action": "CHANGE_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Authenticated Step-Up PIN rotation sealed in vault and active tokens invalidated",
-          "entry_hash": "1e60b89eac4997d13db591efd4cd7111b20e68f29f23d16132a48dbd49e24be7",
+          "entry_hash": "0cdc8b46595ce01856c0c604aabcf5680ee0f7d97e68e822b032d26cafa15ba8",
           "outcome": "OK",
-          "prev_hash": "25e6fdf88e3bd7ca40b16afaac726ec8d59191623a7911e62c0c3b2e9b31dcca",
+          "prev_hash": "39c9fcd663ee443b10a24ff0aed4384ed523840c13f9300e2c8e297e53d232c6",
           "seq": 8,
-          "timestamp_utc": "2026-11-26T04:47:34.021287333+00:00"
+          "timestamp_utc": "2026-11-26T12:28:20.599930903+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Verified Step-Up PIN against sealed vault",
-          "entry_hash": "25e6fdf88e3bd7ca40b16afaac726ec8d59191623a7911e62c0c3b2e9b31dcca",
+          "entry_hash": "39c9fcd663ee443b10a24ff0aed4384ed523840c13f9300e2c8e297e53d232c6",
           "outcome": "ALLOWED",
-          "prev_hash": "eb0b5923c6a6bbd21a77133201ff06bf81e776f2225bbce421bdd03a8505fec7",
+          "prev_hash": "6c3f0d4dc93c68638bac082549845b23c936b21220774bf642f77675c7768dec",
           "seq": 7,
-          "timestamp_utc": "2026-11-26T04:47:33.985518352+00:00"
+          "timestamp_utc": "2026-11-26T12:28:20.570929599+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Invalid Step-Up PIN candidate",
-          "entry_hash": "eb0b5923c6a6bbd21a77133201ff06bf81e776f2225bbce421bdd03a8505fec7",
+          "entry_hash": "6c3f0d4dc93c68638bac082549845b23c936b21220774bf642f77675c7768dec",
           "outcome": "DENIED",
-          "prev_hash": "5302183a95b7ca528eaa4c7cc011470a2836163223ed6e7a946e0f6000f597ff",
+          "prev_hash": "cd16c75b574c14f961695288aad1b4b2b346ec369b18fbdffb74955dc5ef077b",
           "seq": 6,
-          "timestamp_utc": "2026-11-26T04:47:33.922612394+00:00"
+          "timestamp_utc": "2026-11-26T12:28:20.516722439+00:00"
         },
         {
           "action": "ENROLL_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Step-Up PIN already enrolled; current_pin required to replace",
-          "entry_hash": "5302183a95b7ca528eaa4c7cc011470a2836163223ed6e7a946e0f6000f597ff",
+          "entry_hash": "cd16c75b574c14f961695288aad1b4b2b346ec369b18fbdffb74955dc5ef077b",
           "outcome": "DENIED_ALREADY_ENROLLED",
-          "prev_hash": "b06a9171a45747f47e613f4944ba5545f36536cb2dc190dddd644ebef7cdeaaa",
+          "prev_hash": "cc41ad62f0de470937d010e2b61658cc59ff535de8b18512ad5d22f29b1f59dc",
           "seq": 5,
-          "timestamp_utc": "2026-11-26T04:47:33.859906321+00:00"
+          "timestamp_utc": "2026-11-26T12:28:20.461614863+00:00"
         },
         {
           "action": "VERIFY_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Verified Step-Up PIN against sealed vault",
-          "entry_hash": "b06a9171a45747f47e613f4944ba5545f36536cb2dc190dddd644ebef7cdeaaa",
+          "entry_hash": "cc41ad62f0de470937d010e2b61658cc59ff535de8b18512ad5d22f29b1f59dc",
           "outcome": "ALLOWED",
-          "prev_hash": "5b82639799775be0b5ad381995a8d2f4165357bf9534ca1de22f8674018249cc",
+          "prev_hash": "5b05257052438adc7276f316cf77927e2f327c5200ec9c845ebd4c19e6de56c2",
           "seq": 4,
-          "timestamp_utc": "2026-11-26T04:47:33.829754916+00:00"
+          "timestamp_utc": "2026-11-26T12:28:20.433849439+00:00"
         },
         {
           "action": "UPDATE_CLIPBOARD_POLICY",
           "actor": "BOSS",
           "detail": "enabled=true direction=Bidirectional",
-          "entry_hash": "5b82639799775be0b5ad381995a8d2f4165357bf9534ca1de22f8674018249cc",
+          "entry_hash": "5b05257052438adc7276f316cf77927e2f327c5200ec9c845ebd4c19e6de56c2",
           "outcome": "OK",
-          "prev_hash": "be5f5d14a30cdbbbce655da32a802b2736fa17eac6e9b920458b236339fbdcc7",
+          "prev_hash": "64cb4ecf54c410d04d001bedf8a7340a7c552d8f56f9dd62c01c68699da23e0d",
           "seq": 3,
-          "timestamp_utc": "2026-11-26T04:47:31.365680638+00:00"
+          "timestamp_utc": "2026-11-26T12:28:18.370207683+00:00"
         },
         {
           "action": "ENROLL_STEP_UP_PIN",
           "actor": "BOSS",
           "detail": "Initial Step-Up PIN enrolled in encrypted vault",
-          "entry_hash": "be5f5d14a30cdbbbce655da32a802b2736fa17eac6e9b920458b236339fbdcc7",
+          "entry_hash": "64cb4ecf54c410d04d001bedf8a7340a7c552d8f56f9dd62c01c68699da23e0d",
           "outcome": "OK",
-          "prev_hash": "715b5de2863eb7cef34cca5dd24a0e3d49d494824cca09a080b07f5b874b657f",
+          "prev_hash": "8ab78b60ddac9b00321561b8e721f57dd1469812cc2d609cb3df1376bf61d066",
           "seq": 2,
-          "timestamp_utc": "2026-11-26T04:47:31.323524867+00:00"
+          "timestamp_utc": "2026-11-26T12:28:18.321016633+00:00"
         },
         {
           "action": "SECURITY_CENTER_INIT",
           "actor": "SYSTEM",
           "detail": "Initialized Device Shield (vault=UNIX_SEALED_0600_ENCRYPT_THEN_MAC, allowlist=true, telemetry=false)",
-          "entry_hash": "715b5de2863eb7cef34cca5dd24a0e3d49d494824cca09a080b07f5b874b657f",
+          "entry_hash": "8ab78b60ddac9b00321561b8e721f57dd1469812cc2d609cb3df1376bf61d066",
           "outcome": "OK",
           "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
           "seq": 1,
-          "timestamp_utc": "2026-11-26T04:47:31.260182106+00:00"
+          "timestamp_utc": "2026-11-26T12:28:18.262400964+00:00"
         }
       ],
       "summary": {
@@ -507,14 +507,18 @@
       }
     },
     "service": {
+      "active_engine_connections_count": 0,
       "active_remote_banner_visible": true,
       "auto_start_with_windows": false,
       "boss_service_install_approved": false,
+      "config_persistence_healthy": true,
+      "conservative_access_deny_latched": false,
       "defender_av_untouched": true,
       "desired_auto_start": false,
       "desired_unattended_enabled": false,
       "external_service_collision_detected": false,
-      "last_health_check_utc": "2026-11-26T04:47:34.821468724+00:00",
+      "last_health_check_utc": "2026-11-26T12:28:21.308133684+00:00",
+      "last_persistence_error": null,
       "no_hidden_persistence": true,
       "observed_service_binary_path": null,
       "pre_login_session_helper_enabled": false,
@@ -530,7 +534,7 @@
     "smart_power": {
       "host_state": "ONLINE",
       "recent_events": [
-        "2026-11-26T04:47:34.603585045+00:00 | WOL_DRY_RUN_VALIDATED mac=AA:BB:CC:DD:EE:FF target=127.0.0.1:9 packet_bytes=102"
+        "2026-11-26T12:28:21.148389333+00:00 | WOL_DRY_RUN_VALIDATED mac=AA:BB:CC:DD:EE:FF target=127.0.0.1:9 packet_bytes=102"
       ],
       "smart_plug": {
         "adapter_name": "DisabledSmartPlugAdapter (Hunonic SK02 Surveyed)",
@@ -545,15 +549,21 @@
     "storage_healthy": true,
     "transfer_queue": {
       "active_count": 0,
-      "authorized_root": "/tmp/dauverse_e2e_rc3_26jjad69/received_files",
+      "authorized_root": "/tmp/dauverse_e2e_rc3_9k8lgd51/received_files",
       "bandwidth_limit_kbps": 4096,
       "jobs": [
         {
           "auto_open_disabled": true,
           "computed_sha256": "63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201",
-          "created_at_utc": "2026-11-26T04:47:34.604293813+00:00",
-          "dest_root_dir": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined",
+          "created_at_utc": "2026-11-26T12:28:21.148891596+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined",
           "direction": "DOWNLOAD_TO_LOCAL",
+          "engine_identity": {
+            "conn_id": 1,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 801,
+            "session_scope": "ffi-conn-1"
+          },
           "error_message": null,
           "eta_seconds": 0,
           "expected_file_specs": [
@@ -577,25 +587,32 @@
             "a.bin": "63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201",
             "b.bin": "ea844d76d333957356cfe3aecc4be33cd28297c162327c358a1de3d3c828f46e"
           },
+          "generation": 1,
           "integrity_state": "SENDER_SHA256_VERIFIED",
-          "job_id": "engine-fs-801",
-          "peer_id": "conn-1",
+          "job_id": "engine-ffi-conn-1-dl-c1-j801-g1",
+          "peer_id": "ffi-conn-1:conn-1",
           "relative_path": "a.bin",
-          "resolved_target_path": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined/a.bin",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined/a.bin",
           "resume_offset": 0,
           "speed_bytes_per_sec": 0,
           "status": "COMPLETED",
           "total_bytes": 10,
           "transferred_bytes": 10,
-          "updated_at_utc": "2026-11-26T04:47:34.604466256+00:00",
+          "updated_at_utc": "2026-11-26T12:28:21.149044971+00:00",
           "verified_sha256": "8f8608740b82068e99447f9d0d0e84fd6fb518f57940a96f675aab125ebf54ee"
         },
         {
           "auto_open_disabled": true,
           "computed_sha256": "63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201",
-          "created_at_utc": "2026-11-26T04:47:34.604613852+00:00",
-          "dest_root_dir": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined",
+          "created_at_utc": "2026-11-26T12:28:21.149135588+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined",
           "direction": "DOWNLOAD_TO_LOCAL",
+          "engine_identity": {
+            "conn_id": 1,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 802,
+            "session_scope": "ffi-conn-1"
+          },
           "error_message": "INTEGRITY_MISSING_SENDER_SHA256: file 'a.bin' has no valid 64-char sender SHA-256",
           "eta_seconds": null,
           "expected_file_specs": [
@@ -612,25 +629,32 @@
           "file_sha256_map": {
             "a.bin": "63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201"
           },
+          "generation": 2,
           "integrity_state": "FAILED_UNVERIFIED_MISSING_SENDER_DIGEST",
-          "job_id": "engine-fs-802",
-          "peer_id": "conn-1",
+          "job_id": "engine-ffi-conn-1-dl-c1-j802-g2",
+          "peer_id": "ffi-conn-1:conn-1",
           "relative_path": "a.bin",
-          "resolved_target_path": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined/a.bin",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined/a.bin",
           "resume_offset": 0,
           "speed_bytes_per_sec": 0,
           "status": "FAILED",
           "total_bytes": 4,
           "transferred_bytes": 4,
-          "updated_at_utc": "2026-11-26T04:47:34.604700199+00:00",
+          "updated_at_utc": "2026-11-26T12:28:21.149205116+00:00",
           "verified_sha256": null
         },
         {
           "auto_open_disabled": true,
           "computed_sha256": "4a8d8134f29b0b7b60c126f5532bc9f5d9bb73037373cf6fb872d81f1dcefdfd",
-          "created_at_utc": "2026-11-26T04:47:34.604901534+00:00",
-          "dest_root_dir": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined",
+          "created_at_utc": "2026-11-26T12:28:21.149372745+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined",
           "direction": "DOWNLOAD_TO_LOCAL",
+          "engine_identity": {
+            "conn_id": 1,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 803,
+            "session_scope": "ffi-conn-1"
+          },
           "error_message": "INTEGRITY_SHA256_MISMATCH: file 'a.bin' expected 63c1dd951ffedf6f7fd968ad4efa39b8ed584f162f46e715114ee184f8de9201, got 4a8d8134f29b0b7b60c126f5532bc9f5d9bb73037373cf6fb872d81f1dcefdfd",
           "eta_seconds": null,
           "expected_file_specs": [
@@ -647,25 +671,32 @@
           "file_sha256_map": {
             "a.bin": "4a8d8134f29b0b7b60c126f5532bc9f5d9bb73037373cf6fb872d81f1dcefdfd"
           },
+          "generation": 3,
           "integrity_state": "FAILED_SHA256_MISMATCH",
-          "job_id": "engine-fs-803",
-          "peer_id": "conn-1",
+          "job_id": "engine-ffi-conn-1-dl-c1-j803-g3",
+          "peer_id": "ffi-conn-1:conn-1",
           "relative_path": "a.bin",
-          "resolved_target_path": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined/a.bin",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined/a.bin",
           "resume_offset": 0,
           "speed_bytes_per_sec": 0,
           "status": "FAILED",
           "total_bytes": 4,
           "transferred_bytes": 4,
-          "updated_at_utc": "2026-11-26T04:47:34.605038262+00:00",
+          "updated_at_utc": "2026-11-26T12:28:21.149450042+00:00",
           "verified_sha256": null
         },
         {
           "auto_open_disabled": true,
           "computed_sha256": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918",
-          "created_at_utc": "2026-11-26T04:47:34.605349245+00:00",
-          "dest_root_dir": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined",
+          "created_at_utc": "2026-11-26T12:28:21.149718166+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined",
           "direction": "DOWNLOAD_TO_LOCAL",
+          "engine_identity": {
+            "conn_id": 1,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 804,
+            "session_scope": "ffi-conn-1"
+          },
           "error_message": "INTEGRITY_FILE_BYTE_SIZE_MISMATCH: file 'c1.bin' expected 4 bytes, got 2 bytes",
           "eta_seconds": null,
           "expected_file_specs": [
@@ -688,26 +719,33 @@
           "file_sha256_map": {
             "c1.bin": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918"
           },
+          "generation": 4,
           "integrity_state": "FAILED_MISSING_OR_TRUNCATED_FILE",
-          "job_id": "engine-fs-804",
-          "peer_id": "conn-1",
+          "job_id": "engine-ffi-conn-1-dl-c1-j804-g4",
+          "peer_id": "ffi-conn-1:conn-1",
           "relative_path": "c1.bin",
-          "resolved_target_path": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined/c1.bin",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined/c1.bin",
           "resume_offset": 0,
           "speed_bytes_per_sec": 0,
           "status": "FAILED",
           "total_bytes": 10,
           "transferred_bytes": 2,
-          "updated_at_utc": "2026-11-26T04:47:34.605454367+00:00",
+          "updated_at_utc": "2026-11-26T12:28:21.149852670+00:00",
           "verified_sha256": null
         },
         {
           "auto_open_disabled": true,
           "computed_sha256": null,
-          "created_at_utc": "2026-11-26T04:47:34.605668028+00:00",
-          "dest_root_dir": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined",
+          "created_at_utc": "2026-11-26T12:28:21.150064649+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined",
           "direction": "DOWNLOAD_TO_LOCAL",
-          "error_message": "SECURITY_REJECT_SYMLINK: refusing symlink component '/tmp/dauverse_e2e_rc3_26jjad69/rx_confined/symlink_escape.txt'",
+          "engine_identity": {
+            "conn_id": 1,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 805,
+            "session_scope": "ffi-conn-1"
+          },
+          "error_message": "SECURITY_REJECT_SYMLINK: refusing symlink component '/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined/symlink_escape.txt'",
           "eta_seconds": null,
           "expected_file_specs": [
             {
@@ -721,18 +759,103 @@
           ],
           "expected_sha256": "0ceda85f1d800bf2470c5042e790b1f4c1f0007ff9059c00e0c86948f7116d04",
           "file_sha256_map": {},
+          "generation": 5,
           "integrity_state": "FAILED_SYMLINK_OR_MISSING_FILE",
-          "job_id": "engine-fs-805",
-          "peer_id": "conn-1",
+          "job_id": "engine-ffi-conn-1-dl-c1-j805-g5",
+          "peer_id": "ffi-conn-1:conn-1",
           "relative_path": "symlink_escape.txt",
-          "resolved_target_path": "/tmp/dauverse_e2e_rc3_26jjad69/rx_confined/symlink_escape.txt",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_confined/symlink_escape.txt",
           "resume_offset": 0,
           "speed_bytes_per_sec": 0,
           "status": "FAILED",
           "total_bytes": 10,
           "transferred_bytes": 0,
-          "updated_at_utc": "2026-11-26T04:47:34.605734827+00:00",
+          "updated_at_utc": "2026-11-26T12:28:21.150127480+00:00",
           "verified_sha256": null
+        },
+        {
+          "auto_open_disabled": true,
+          "computed_sha256": "64dc41e2932d1092aa2fa0ef6e8a4f026a9da9277b3ca773b596adcaec2cb64e",
+          "created_at_utc": "2026-11-26T12:28:21.150441844+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_peer_a_conn10",
+          "direction": "DOWNLOAD_TO_LOCAL",
+          "engine_identity": {
+            "conn_id": 10,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 1,
+            "session_scope": "ffi-conn-10"
+          },
+          "error_message": "INTEGRITY_SHA256_MISMATCH: file 'shared.bin' expected 796384992f6ebfdbaec78ff92c8cd7d51a81eac69f550ccbbd4ea7fa0ac65fb3, got 64dc41e2932d1092aa2fa0ef6e8a4f026a9da9277b3ca773b596adcaec2cb64e",
+          "eta_seconds": null,
+          "expected_file_specs": [
+            {
+              "expected_bytes": 10,
+              "expected_sha256": "796384992f6ebfdbaec78ff92c8cd7d51a81eac69f550ccbbd4ea7fa0ac65fb3",
+              "relative_path": "shared.bin"
+            }
+          ],
+          "expected_relative_files": [
+            "shared.bin"
+          ],
+          "expected_sha256": "796384992f6ebfdbaec78ff92c8cd7d51a81eac69f550ccbbd4ea7fa0ac65fb3",
+          "file_sha256_map": {
+            "shared.bin": "64dc41e2932d1092aa2fa0ef6e8a4f026a9da9277b3ca773b596adcaec2cb64e"
+          },
+          "generation": 6,
+          "integrity_state": "FAILED_SHA256_MISMATCH",
+          "job_id": "engine-ffi-conn-10-dl-c10-j1-g6",
+          "peer_id": "ffi-conn-10:conn-10",
+          "relative_path": "shared.bin",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_peer_a_conn10/shared.bin",
+          "resume_offset": 0,
+          "speed_bytes_per_sec": 0,
+          "status": "FAILED",
+          "total_bytes": 10,
+          "transferred_bytes": 10,
+          "updated_at_utc": "2026-11-26T12:28:21.150553582+00:00",
+          "verified_sha256": null
+        },
+        {
+          "auto_open_disabled": true,
+          "computed_sha256": "b11849b66a08a56194976174c06c58e8a8e57687f408e196b2a0e60ad2895b90",
+          "created_at_utc": "2026-11-26T12:28:21.150480845+00:00",
+          "dest_root_dir": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_peer_b_conn11",
+          "direction": "DOWNLOAD_TO_LOCAL",
+          "engine_identity": {
+            "conn_id": 11,
+            "direction": "DOWNLOAD_TO_LOCAL",
+            "engine_job_id": 1,
+            "session_scope": "ffi-conn-11"
+          },
+          "error_message": null,
+          "eta_seconds": 0,
+          "expected_file_specs": [
+            {
+              "expected_bytes": 10,
+              "expected_sha256": "b11849b66a08a56194976174c06c58e8a8e57687f408e196b2a0e60ad2895b90",
+              "relative_path": "shared.bin"
+            }
+          ],
+          "expected_relative_files": [
+            "shared.bin"
+          ],
+          "expected_sha256": "b11849b66a08a56194976174c06c58e8a8e57687f408e196b2a0e60ad2895b90",
+          "file_sha256_map": {
+            "shared.bin": "b11849b66a08a56194976174c06c58e8a8e57687f408e196b2a0e60ad2895b90"
+          },
+          "generation": 7,
+          "integrity_state": "SENDER_SHA256_VERIFIED",
+          "job_id": "engine-ffi-conn-11-dl-c11-j1-g7",
+          "peer_id": "ffi-conn-11:conn-11",
+          "relative_path": "shared.bin",
+          "resolved_target_path": "/tmp/dauverse_e2e_rc3_9k8lgd51/rx_peer_b_conn11/shared.bin",
+          "resume_offset": 0,
+          "speed_bytes_per_sec": 0,
+          "status": "COMPLETED",
+          "total_bytes": 10,
+          "transferred_bytes": 10,
+          "updated_at_utc": "2026-11-26T12:28:21.150620179+00:00",
+          "verified_sha256": "b11849b66a08a56194976174c06c58e8a8e57687f408e196b2a0e60ad2895b90"
         }
       ]
     },

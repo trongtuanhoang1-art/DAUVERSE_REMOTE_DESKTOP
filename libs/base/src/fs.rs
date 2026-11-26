@@ -11,7 +11,7 @@ use std::{
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{
-    fs::{File, OpenOptions},
+    fs::File,
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufStream as TokioBufStream},
 };
 
@@ -462,6 +462,8 @@ pub struct TransferJob {
     download: Option<download::DownloadState>,
     #[serde(skip)]
     read_stream_integrity: Option<(usize, Sha256, u64)>,
+    #[serde(skip)]
+    resume_failed_err: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -682,12 +684,143 @@ pub(crate) fn constant_time_eq_ascii_hex(a: &str, b: &str) -> bool {
     diff == 0
 }
 
-pub(crate) fn verify_staging_file_sha256(
+pub(super) fn query_std_handle_link_count(file: &std::fs::File) -> ResultType<u64> {
+    #[cfg(unix)]
+    {
+        Ok(std::os::unix::fs::MetadataExt::nlink(&file.metadata()?))
+    }
+    #[cfg(windows)]
+    {
+        use std::mem::MaybeUninit;
+        use winapi::{
+            shared::minwindef::FALSE,
+            um::fileapi::{GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION},
+        };
+        let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::uninit();
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) }
+            == FALSE
+        {
+            bail!(
+                "GetFileInformationByHandle failed: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+        Ok(u64::from(unsafe { info.assume_init() }.nNumberOfLinks))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = file;
+        Ok(1)
+    }
+}
+
+pub(super) fn verify_std_handle_single_link_regular_confined(
+    file: &std::fs::File,
+    #[allow(unused_variables)] pre_captured_canon_root: Option<&Path>,
+) -> ResultType<()> {
+    let meta = file.metadata()?;
+    if meta.file_type().is_symlink() || !meta.file_type().is_file() {
+        bail!("refusing non-regular or symlink file handle");
+    }
+    #[cfg(windows)]
+    {
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+            bail!("refusing reparse file handle");
+        }
+        verify_windows_raw_handle_confined(file.as_raw_handle(), pre_captured_canon_root)?;
+    }
+    let links = query_std_handle_link_count(file)?;
+    if links != 1 {
+        bail!("refusing hard-linked file handle (links={links})");
+    }
+    Ok(())
+}
+
+pub(super) fn open_readonly_no_follow_single_link(
+    path: &Path,
+    pre_captured_canon_root: Option<&Path>,
+) -> ResultType<std::fs::File> {
+    if is_existing_symlink_or_reparse(path) {
+        bail!(
+            "refusing symlink or reparse path '{}'",
+            path.display()
+        );
+    }
+    #[cfg(unix)]
+    let f = {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(hbb_common::libc::O_NOFOLLOW)
+            .open(path)?
+    };
+    #[cfg(windows)]
+    let f = {
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(path)?
+    };
+    #[cfg(not(any(unix, windows)))]
+    let f = std::fs::File::open(path)?;
+
+    verify_std_handle_single_link_regular_confined(&f, pre_captured_canon_root)?;
+    Ok(f)
+}
+
+pub(super) fn ensure_destination_safe_for_overwrite(
+    target: &Path,
+    pre_captured_canon_root: Option<&Path>,
+) -> ResultType<()> {
+    match std::fs::symlink_metadata(target) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+        Ok(meta) => {
+            if meta.file_type().is_symlink() || !meta.file_type().is_file() {
+                bail!(
+                    "refusing overwrite onto symlink or non-regular path '{}'",
+                    target.display()
+                );
+            }
+            #[cfg(windows)]
+            {
+                const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+                if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                    bail!(
+                        "refusing overwrite onto reparse target '{}'",
+                        target.display()
+                    );
+                }
+            }
+            let _verified = open_readonly_no_follow_single_link(target, pre_captured_canon_root)?;
+            Ok(())
+        }
+    }
+}
+
+pub(crate) fn verify_staging_file_sha256_confined(
     staging_path: &Path,
     expected_size: u64,
     expected_sha256: &str,
+    pre_captured_canon_root: Option<&Path>,
 ) -> ResultType<()> {
-    let (actual_sha, actual_size) = compute_file_sha256_and_size(staging_path)?;
+    let mut f = open_readonly_no_follow_single_link(staging_path, pre_captured_canon_root)?;
+    if expected_sha256.trim().is_empty() {
+        return Ok(());
+    }
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 65536];
+    let mut actual_size: u64 = 0;
+    loop {
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        actual_size = actual_size.saturating_add(n as u64);
+    }
     if actual_size != expected_size {
         bail!(
             "transfer staging size mismatch for '{}': expected {} bytes, got {} bytes",
@@ -695,6 +828,12 @@ pub(crate) fn verify_staging_file_sha256(
             expected_size,
             actual_size
         );
+    }
+    let digest = hasher.finalize();
+    let mut actual_sha = String::with_capacity(64);
+    for byte in digest.iter() {
+        use std::fmt::Write as _;
+        let _ = write!(&mut actual_sha, "{byte:02x}");
     }
     if !constant_time_eq_ascii_hex(&actual_sha, expected_sha256) {
         bail!(
@@ -705,6 +844,14 @@ pub(crate) fn verify_staging_file_sha256(
         );
     }
     Ok(())
+}
+
+pub(crate) fn verify_staging_file_sha256(
+    staging_path: &Path,
+    expected_size: u64,
+    expected_sha256: &str,
+) -> ResultType<()> {
+    verify_staging_file_sha256_confined(staging_path, expected_size, expected_sha256, None)
 }
 
 #[cfg(windows)]
@@ -800,49 +947,83 @@ pub(super) fn verify_windows_raw_handle_confined(
     Ok(())
 }
 
-fn create_download_file_no_follow(
-    path: &str,
-    #[allow(unused_variables)] pre_captured_canon_root: Option<&Path>,
-) -> ResultType<std::fs::File> {
-    let p = Path::new(path);
-    if is_existing_symlink_or_reparse(p) {
-        bail!("refusing to open symlink or reparse point '{}'", path);
+pub(super) fn prepare_clean_exclusive_staging_slot(
+    path: &Path,
+    pre_captured_canon_root: Option<&Path>,
+) -> ResultType<()> {
+    match std::fs::symlink_metadata(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+        Ok(meta) => {
+            if meta.file_type().is_symlink() || !meta.file_type().is_file() {
+                bail!(
+                    "refusing symlink or non-regular preexisting staging path '{}'",
+                    path.display()
+                );
+            }
+            #[cfg(windows)]
+            {
+                const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+                if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+                    bail!(
+                        "refusing reparse preexisting staging path '{}'",
+                        path.display()
+                    );
+                }
+            }
+            // Read-only single-link check BEFORE unlinking: if hard-linked (links > 1), reject immediately without touching bytes!
+            {
+                let _ro = open_readonly_no_follow_single_link(path, pre_captured_canon_root)?;
+            }
+            std::fs::remove_file(path)?;
+            Ok(())
+        }
     }
+}
+
+pub(super) fn create_exclusive_staging_file_no_follow(
+    path: &Path,
+    pre_captured_canon_root: Option<&Path>,
+) -> ResultType<std::fs::File> {
+    prepare_clean_exclusive_staging_slot(path, pre_captured_canon_root)?;
     #[cfg(unix)]
-    let f = {
+    let opened = {
         use std::os::unix::fs::OpenOptionsExt;
         std::fs::OpenOptions::new()
             .write(true)
-            .create(true)
-            .truncate(true)
+            .create_new(true)
             .custom_flags(hbb_common::libc::O_NOFOLLOW)
-            .open(p)?
+            .open(path)?
     };
     #[cfg(windows)]
-    let f = {
+    let opened = {
         const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-        let opened = std::fs::OpenOptions::new()
+        std::fs::OpenOptions::new()
             .write(true)
-            .create(true)
+            .create_new(true)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-            .open(p)?;
-        let meta = opened.metadata()?;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
-        if (meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT) != 0 || !meta.file_type().is_file() {
-            bail!("refusing reparse or non-regular file handle '{}'", path);
-        }
-        verify_windows_raw_handle_confined(opened.as_raw_handle(), pre_captured_canon_root)?;
-        opened.set_len(0)?;
-        opened
+            .open(path)?
     };
     #[cfg(not(any(unix, windows)))]
-    let f = std::fs::File::create(p)?;
+    let opened = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
 
-    let meta = f.metadata()?;
-    if meta.file_type().is_symlink() || !meta.file_type().is_file() {
-        bail!("refusing non-regular file handle '{}'", path);
-    }
-    Ok(f)
+    verify_std_handle_single_link_regular_confined(&opened, pre_captured_canon_root)?;
+    Ok(opened)
+}
+
+pub(super) fn write_exclusive_digest_file_no_follow(
+    path: &Path,
+    bytes: &[u8],
+    pre_captured_canon_root: Option<&Path>,
+) -> ResultType<()> {
+    use std::io::Write as _;
+    let mut f = create_exclusive_staging_file_no_follow(path, pre_captured_canon_root)?;
+    f.write_all(bytes)?;
+    f.sync_all()?;
+    Ok(())
 }
 
 impl TransferJob {
@@ -1032,62 +1213,73 @@ impl TransferJob {
         Ok(())
     }
 
-    pub fn modify_time(&self) {
+    pub fn try_finalize_write_files(&self) -> ResultType<()> {
         #[cfg(any(target_os = "android", all(test, unix)))]
         if self.is_document() {
-            return;
+            return Ok(());
         }
         if self.is_download() {
-            if let Err(err) = self.finish_download() {
-                hbb_common::log::error!("Failed to finish download {}: {}", self.id, err);
-            }
-            return;
+            return self.finish_download();
         }
         if self.r#type == JobType::Printer {
-            return;
+            return Ok(());
         }
         if let DataSource::FilePath(p) = &self.data_source {
             let file_num = self.file_num as usize;
             if file_num < self.files.len() {
                 let entry = &self.files[file_num];
-                let Some(path) = self.resolve_entry_path(p, &entry.name) else {
-                    return;
+                let path = join_validated_path(p, &entry.name)?;
+                #[cfg(windows)]
+                let pre_canon_root: Option<PathBuf> = {
+                    let auth_root = if entry.name.is_empty() {
+                        p.parent()
+                    } else {
+                        Some(p.as_path())
+                    };
+                    auth_root
+                        .filter(|r| !r.as_os_str().is_empty())
+                        .map(capture_confined_transfer_root)
+                        .transpose()?
                 };
-                if is_existing_symlink_or_reparse(&path) {
-                    hbb_common::log::error!(
-                        "Refusing transfer rename onto symlink/reparse target: {}",
-                        path.display()
-                    );
-                    return;
+                #[cfg(not(windows))]
+                let pre_canon_root: Option<PathBuf> = None;
+
+                ensure_destination_safe_for_overwrite(&path, pre_canon_root.as_deref())?;
+                let download_path = PathBuf::from(format!("{}.download", get_string(&path)));
+                if !download_path.exists() {
+                    return Ok(());
                 }
-                let download_path = format!("{}.download", get_string(&path));
-                if !Path::new(&download_path).exists() {
-                    return;
+                verify_staging_file_sha256_confined(
+                    &download_path,
+                    entry.size,
+                    entry.sha256.trim(),
+                    pre_canon_root.as_deref(),
+                )?;
+                let digest_path = PathBuf::from(format!("{}.digest", get_string(&path)));
+                match std::fs::remove_file(&digest_path) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
                 }
-                if !entry.sha256.trim().is_empty() {
-                    if let Err(err) = verify_staging_file_sha256(
-                        Path::new(&download_path),
-                        entry.size,
-                        entry.sha256.trim(),
-                    ) {
-                        hbb_common::throttled_log!(
-                            std::time::Duration::from_secs(30),
-                            error,
-                            "Refusing transfer rename due to SHA-256/size mismatch: {}",
-                            err
-                        );
-                        return;
-                    }
-                }
-                let digest_path = format!("{}.digest", get_string(&path));
-                std::fs::remove_file(digest_path).ok();
-                std::fs::rename(download_path, &path).ok();
-                filetime::set_file_mtime(
+                std::fs::rename(&download_path, &path)?;
+                let _ = filetime::set_file_mtime(
                     &path,
                     filetime::FileTime::from_unix_time(entry.modified_time as _, 0),
-                )
-                .ok();
+                );
             }
+        }
+        Ok(())
+    }
+
+    pub fn modify_time(&self) {
+        if let Err(err) = self.try_finalize_write_files() {
+            hbb_common::throttled_log!(
+                std::time::Duration::from_secs(30),
+                error,
+                "Transfer finalization failed for job {}: {}",
+                self.id,
+                err
+            );
         }
     }
 
@@ -1109,10 +1301,14 @@ impl TransferJob {
                 let Some(path) = self.resolve_entry_path(p, &entry.name) else {
                     return;
                 };
-                let download_path = format!("{}.download", get_string(&path));
-                let digest_path = format!("{}.digest", get_string(&path));
-                std::fs::remove_file(download_path).ok();
-                std::fs::remove_file(digest_path).ok();
+                let download_path = PathBuf::from(format!("{}.download", get_string(&path)));
+                let digest_path = PathBuf::from(format!("{}.digest", get_string(&path)));
+                if open_readonly_no_follow_single_link(&download_path, None).is_ok() {
+                    std::fs::remove_file(&download_path).ok();
+                }
+                if open_readonly_no_follow_single_link(&digest_path, None).is_ok() {
+                    std::fs::remove_file(&digest_path).ok();
+                }
             }
         }
     }
@@ -1137,6 +1333,9 @@ impl TransferJob {
         if block.id != self.id {
             bail!("Wrong id");
         }
+        if let Some(resume_err) = self.resume_failed_err.as_ref() {
+            bail!("{resume_err}");
+        }
         #[cfg(any(target_os = "android", all(test, unix)))]
         if self.is_document() {
             return self.write_document(block).await;
@@ -1152,7 +1351,7 @@ impl TransferJob {
                         file.sync_all().await?;
                     }
                     self.data_stream = None;
-                    self.modify_time();
+                    self.try_finalize_write_files()?;
                     self.file_num = block.file_num;
                     let entry = &self.files[file_num];
                     #[cfg(windows)]
@@ -1172,33 +1371,32 @@ impl TransferJob {
                     #[cfg(not(windows))]
                     let pre_canon_root: Option<PathBuf> = None;
                     let (path, digest_path) = if self.r#type == JobType::Printer {
-                        (p.to_string_lossy().to_string(), None)
+                        (p.clone(), None)
                     } else {
                         let path = join_validated_path(p, &entry.name)?;
-                        if is_existing_symlink_or_reparse(&path) {
-                            bail!("Refusing symlink/reparse transfer destination");
-                        }
+                        ensure_destination_safe_for_overwrite(&path, pre_canon_root.as_deref())?;
                         if let Some(pp) = path.parent() {
-                            std::fs::create_dir_all(pp).ok();
+                            std::fs::create_dir_all(pp)?;
                             if is_existing_symlink_or_reparse(pp) {
                                 bail!("Refusing symlink/reparse parent directory");
                             }
                         }
                         let file_path = get_string(&path);
                         (
-                            format!("{}.download", &file_path),
-                            Some(format!("{}.digest", &file_path)),
+                            PathBuf::from(format!("{}.download", &file_path)),
+                            Some(PathBuf::from(format!("{}.digest", &file_path))),
                         )
                     };
-                    if let Some(dp) = digest_path.as_ref() {
-                        if Path::new(dp).exists() {
-                            std::fs::remove_file(dp)?;
-                        }
-                    }
-                    let std_file = create_download_file_no_follow(&path, pre_canon_root.as_deref())?;
+                    let std_file =
+                        create_exclusive_staging_file_no_follow(&path, pre_canon_root.as_deref())?;
                     self.data_stream = Some(DataStream::FileStream(File::from_std(std_file)));
                     if let Some(dp) = digest_path.as_ref() {
-                        std::fs::write(dp, json!(self.digest).to_string()).ok();
+                        let digest_bytes = json!(self.digest).to_string();
+                        write_exclusive_digest_file_no_follow(
+                            dp,
+                            digest_bytes.as_bytes(),
+                            pre_canon_root.as_deref(),
+                        )?;
                     }
                 }
             }
@@ -1613,32 +1811,88 @@ impl TransferJob {
             let download_path = format!("{}.download", &file_path);
             let digest_path = format!("{}.digest", &file_path);
 
-            let mut f = if Path::new(&download_path).exists() && Path::new(&digest_path).exists() {
-                // If both download and digest files exist, seek (writer) to the offset
-                // NOTE: same as write path: best-effort symlink validation happened earlier,
-                // but this reopen remains TOCTOU-prone by design for now.
-                match OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .open(&download_path)
-                    .await
-                {
-                    Ok(f) => f,
+            let mut f = if !self.is_remote
+                && (Path::new(&download_path).exists() || Path::new(&digest_path).exists())
+            {
+                let resume_res = (|| -> ResultType<std::fs::File> {
+                    #[cfg(windows)]
+                    let pre_canon_root: Option<PathBuf> = {
+                        let entry = &self.files[file_num];
+                        let auth_root = if entry.name.is_empty() {
+                            p.parent()
+                        } else {
+                            Some(p.as_path())
+                        };
+                        auth_root
+                            .filter(|r| !r.as_os_str().is_empty())
+                            .map(capture_confined_transfer_root)
+                            .transpose()?
+                    };
+                    #[cfg(not(windows))]
+                    let pre_canon_root: Option<PathBuf> = None;
+
+                    let _digest_ro = open_readonly_no_follow_single_link(
+                        Path::new(&digest_path),
+                        pre_canon_root.as_deref(),
+                    )?;
+                    #[cfg(unix)]
+                    let opened = {
+                        use std::os::unix::fs::OpenOptionsExt;
+                        std::fs::OpenOptions::new()
+                            .write(true)
+                            .custom_flags(hbb_common::libc::O_NOFOLLOW)
+                            .open(&download_path)?
+                    };
+                    #[cfg(windows)]
+                    let opened = {
+                        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+                        std::fs::OpenOptions::new()
+                            .write(true)
+                            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+                            .open(&download_path)?
+                    };
+                    #[cfg(not(any(unix, windows)))]
+                    let opened = std::fs::OpenOptions::new()
+                        .write(true)
+                        .open(&download_path)?;
+
+                    verify_std_handle_single_link_regular_confined(
+                        &opened,
+                        pre_canon_root.as_deref(),
+                    )?;
+                    if opened.metadata()?.len() != offset {
+                        bail!(
+                            "upload resume offset {} does not match staging size",
+                            offset
+                        );
+                    }
+                    Ok(opened)
+                })();
+                match resume_res {
+                    Ok(std_f) => File::from_std(std_f),
                     Err(e) => {
-                        log::warn!("Failed to open file {}: {}", download_path, e);
+                        let msg = format!("refusing unsafe upload resume staging '{}': {e}", download_path);
+                        self.resume_failed_err = Some(msg);
                         return;
                     }
                 }
-            } else if Path::new(&file_path).exists() {
-                // If `file_path` exists, seek (reader) to the offset
-                match File::open(&file_path).await {
-                    Ok(f) => f,
+            } else if self.is_remote && Path::new(&file_path).exists() {
+                match open_readonly_no_follow_single_link(Path::new(&file_path), None)
+                    .or_else(|_| std::fs::File::open(&file_path))
+                {
+                    Ok(std_f) => File::from_std(std_f),
                     Err(e) => {
                         log::warn!("Failed to open file {}: {}", file_path, e);
                         return;
                     }
                 }
             } else {
+                if !self.is_remote {
+                    self.resume_failed_err = Some(format!(
+                        "upload resume staging files missing for '{}'",
+                        file_path
+                    ));
+                }
                 log::warn!(
                     "File {} not found, cannot seek to offset {}",
                     file_path,
@@ -2386,8 +2640,195 @@ mod tests {
             .await
             .unwrap();
         writer.flush_and_close_stream().await.unwrap();
-        writer.modify_time();
+        assert!(writer.try_finalize_write_files().is_err());
         assert!(!dst_dir.join("out.bin").exists());
         assert!(dst_dir.join("out.bin.download").exists());
+    }
+
+    #[tokio::test]
+    async fn ft010_b02_fresh_and_resume_upload_staging_hardlinks_preserve_outside_victim_bytes() {
+        struct ScopedDir(PathBuf);
+        impl Drop for ScopedDir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let workspace = ScopedDir(std::env::temp_dir().join(format!(
+            "dv_ft010_b02_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )));
+        let allowed = workspace.0.join("allowed");
+        let outside = workspace.0.join("outside_transfer_root");
+        std::fs::create_dir_all(&allowed).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        // Exact 43-byte victim payload from Codex FT010-B02 reproduction
+        let victim_bytes: &[u8] = b"OUTSIDE_VICTIM_SECRET_43_BYTES_DO_NOT_TOUCH";
+        assert_eq!(victim_bytes.len(), 43);
+        let victim = outside.join("victim.txt");
+        std::fs::write(&victim, victim_bytes).unwrap();
+
+        // Case 1: Preexisting .download hardlink on fresh upload MUST error without truncating victim!
+        let staged_hardlink = allowed.join("payload.bin.download");
+        std::fs::hard_link(&victim, &staged_hardlink).unwrap();
+
+        let (payload_sha, _) = {
+            let tmp = outside.join("src_payload.bin");
+            std::fs::write(&tmp, b"NEW_DATA").unwrap();
+            compute_file_sha256_and_size(&tmp).unwrap()
+        };
+
+        let mut fresh_writer = TransferJob::new_write(
+            91,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(allowed.clone()),
+            0,
+            false,
+            false,
+            false,
+        )
+        .with_files(vec![FileEntry {
+            name: "payload.bin".to_string(),
+            size: 8,
+            sha256: payload_sha.clone(),
+            ..Default::default()
+        }])
+        .unwrap();
+
+        let err = fresh_writer
+            .write(FileTransferBlock {
+                id: 91,
+                file_num: 0,
+                data: b"NEW_DATA".to_vec().into(),
+                compressed: false,
+                ..Default::default()
+            })
+            .await
+            .expect_err("fresh upload must reject preexisting hard-linked .download staging file");
+        assert!(
+            err.to_string().contains("hard-linked"),
+            "unexpected error: {}",
+            err
+        );
+        fresh_writer.remove_download_file();
+        // Out-of-root victim MUST remain byte-identical (43 bytes, never truncated to 0!)
+        assert_eq!(std::fs::read(&victim).unwrap(), victim_bytes);
+        std::fs::remove_file(&staged_hardlink).unwrap();
+
+        // Case 2: Preexisting .digest hardlink on fresh upload MUST error without truncating victim!
+        let digest_hardlink = allowed.join("payload2.bin.digest");
+        std::fs::hard_link(&victim, &digest_hardlink).unwrap();
+        let mut digest_writer = TransferJob::new_write(
+            92,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(allowed.clone()),
+            0,
+            false,
+            false,
+            false,
+        )
+        .with_files(vec![FileEntry {
+            name: "payload2.bin".to_string(),
+            size: 8,
+            sha256: payload_sha.clone(),
+            ..Default::default()
+        }])
+        .unwrap();
+        assert!(digest_writer
+            .write(FileTransferBlock {
+                id: 92,
+                file_num: 0,
+                data: b"NEW_DATA".to_vec().into(),
+                compressed: false,
+                ..Default::default()
+            })
+            .await
+            .is_err());
+        assert_eq!(std::fs::read(&victim).unwrap(), victim_bytes);
+        std::fs::remove_file(&digest_hardlink).unwrap();
+
+        // Case 3: Upload resume with hard-linked .download MUST fail closed without modifying victim!
+        let resume_dl = allowed.join("resumed.bin.download");
+        let resume_dg = allowed.join("resumed.bin.digest");
+        std::fs::hard_link(&victim, &resume_dl).unwrap();
+        std::fs::write(&resume_dg, r#"{"size":51,"modified":1}"#).unwrap();
+
+        let mut resume_writer = TransferJob::new_write(
+            93,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(allowed.clone()),
+            0,
+            false,
+            false,
+            true,
+        )
+        .with_files(vec![FileEntry {
+            name: "resumed.bin".to_string(),
+            size: 51,
+            sha256: payload_sha.clone(),
+            ..Default::default()
+        }])
+        .unwrap();
+        resume_writer.is_resume = true;
+        resume_writer
+            .confirm(&FileTransferSendConfirmRequest {
+                id: 93,
+                file_num: 0,
+                union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(43)),
+                ..Default::default()
+            })
+            .await;
+        assert!(resume_writer
+            .write(FileTransferBlock {
+                id: 93,
+                file_num: 0,
+                data: b"APPENDED".to_vec().into(),
+                compressed: false,
+                ..Default::default()
+            })
+            .await
+            .is_err());
+        assert_eq!(std::fs::read(&victim).unwrap(), victim_bytes);
+        std::fs::remove_file(&resume_dl).unwrap();
+        std::fs::remove_file(&resume_dg).unwrap();
+
+        // Case 4: Valid fresh upload still succeeds cleanly
+        let mut valid_writer = TransferJob::new_write(
+            94,
+            JobType::Generic,
+            "".to_string(),
+            DataSource::FilePath(allowed.clone()),
+            0,
+            false,
+            false,
+            false,
+        )
+        .with_files(vec![FileEntry {
+            name: "clean_ok.bin".to_string(),
+            size: 8,
+            sha256: payload_sha,
+            ..Default::default()
+        }])
+        .unwrap();
+        valid_writer
+            .write(FileTransferBlock {
+                id: 94,
+                file_num: 0,
+                data: b"NEW_DATA".to_vec().into(),
+                compressed: false,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        valid_writer.flush_and_close_stream().await.unwrap();
+        valid_writer.try_finalize_write_files().unwrap();
+        assert_eq!(std::fs::read(allowed.join("clean_ok.bin")).unwrap(), b"NEW_DATA");
     }
 }

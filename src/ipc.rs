@@ -56,6 +56,8 @@ pub(crate) use ipc_auth::authorize_windows_portable_service_ipc_connection;
 pub(crate) use ipc_auth::ensure_peer_executable_matches_current_by_pid_opt;
 #[cfg(windows)]
 pub(crate) use ipc_auth::log_rejected_windows_ipc_connection;
+#[cfg(windows)]
+pub(crate) use ipc_windows::ensure_raw_pipe_server;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use ipc_auth::{active_uid, authorize_service_scoped_ipc_connection};
 #[cfg(target_os = "macos")]
@@ -520,6 +522,7 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     Whiteboard((String, crate::whiteboard::CustomEvent)),
     ControlPermissionsRemoteModify(Option<bool>),
+    DauverseEmergencyRevoke(Option<Result<usize, String>>),
     #[cfg(target_os = "windows")]
     FileTransferEnabledState(Option<bool>),
     /// CM -> server: the connection manager's WINDOW went away, which is not the same event
@@ -869,6 +872,15 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::MouseMoveTime(_) => {
             let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
+        }
+        Data::DauverseEmergencyRevoke(None) => {
+            let _chk = CheckIfRestart::new();
+            let res = hbb_common::tokio::task::spawn_blocking(|| {
+                crate::dauverse::service_ctrl::execute_in_process_server_emergency_revoke()
+            })
+            .await
+            .unwrap_or_else(|e| Err(format!("IPC_REVOKE_JOIN_FAILED: {e}")));
+            allow_err!(stream.send(&Data::DauverseEmergencyRevoke(Some(res))).await);
         }
         Data::Close => {
             log::info!("Receive close message");

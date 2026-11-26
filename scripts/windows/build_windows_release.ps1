@@ -13,6 +13,7 @@
 #>
 param(
     [string]$WorkspaceRoot = "",
+    [string]$MakensisPath = "",
     [switch]$UseRepoTargetDir = $false,
     [switch]$SkipVcpkgInstall = $false,
     [switch]$SkipTests = $false,
@@ -23,6 +24,51 @@ $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $true
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 
+function Resolve-PinnedMakensisExecutable {
+    param(
+        [string]$ExplicitPath = "",
+        [string]$EnvPath = "",
+        [string[]]$CandidatePaths = @(),
+        [string]$RequiredVersion = "v3.11",
+        [scriptblock]$VersionProbe = $null
+    )
+    if ($null -eq $VersionProbe) {
+        $VersionProbe = {
+            param([string]$ExePath)
+            return (& $ExePath /VERSION 2>&1 | Out-String).Trim()
+        }
+    }
+    foreach ($pinned in @($ExplicitPath, $EnvPath)) {
+        if (-not [string]::IsNullOrWhiteSpace($pinned)) {
+            if (-not (Test-Path -LiteralPath $pinned)) {
+                throw "F15_NSIS_PIN_MISSING: Pinned makensis.exe path does not exist: $pinned"
+            }
+            $ver = (& $VersionProbe $pinned)
+            if ($ver -ne $RequiredVersion) {
+                throw "F15_NSIS_PIN_MISMATCH: Pinned makensis.exe '$pinned' reported '$ver' (expected '$RequiredVersion')"
+            }
+            return [ordered]@{
+                path = (Resolve-Path -LiteralPath $pinned).Path
+                version = $ver
+            }
+        }
+    }
+    $ObservedVersions = @()
+    foreach ($cand in $CandidatePaths) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path -LiteralPath $cand)) {
+            $ver = (& $VersionProbe $cand)
+            $ObservedVersions += "${cand}=${ver}"
+            if ($ver -eq $RequiredVersion) {
+                return [ordered]@{
+                    path = (Resolve-Path -LiteralPath $cand).Path
+                    version = $ver
+                }
+            }
+        }
+    }
+    throw "F15_NSIS_PIN_FAILED: No makensis.exe candidate matched required '$RequiredVersion' (observed: $($ObservedVersions -join ', '))"
+}
+
 function Invoke-Checked {
     param(
         [Parameter(Mandatory = $true)][string]$StepName,
@@ -30,9 +76,19 @@ function Invoke-Checked {
     )
     Write-Host ">>> [$StepName]"
     $global:LASTEXITCODE = 0
-    & $Command
-    if ($LASTEXITCODE -ne 0) {
-        throw "BUILD/TEST STEP FAILED [$StepName] with non-zero exit code $LASTEXITCODE."
+    $prevEap = $ErrorActionPreference
+    $prevNative = $PSNativeCommandUseErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $PSNativeCommandUseErrorActionPreference = $false
+    try {
+        & $Command 2>&1 | ForEach-Object { Write-Host "$_" }
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+        $PSNativeCommandUseErrorActionPreference = $prevNative
+    }
+    if ($exitCode -ne 0) {
+        throw "BUILD/TEST STEP FAILED [$StepName] with non-zero exit code $exitCode."
     }
 }
 
@@ -306,35 +362,42 @@ try {
     }
     Copy-Item -Force $PackerExe $PortableOut
 
-    # 8. Build Windows Setup Installer (DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe via NSIS makensis.exe)
+    # 8. Build Windows Setup Installer (DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe via exact pinned NSIS v3.11)
     $SetupOut = Join-Path $ReleaseDir "DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe"
-    $MakensisPath = $null
+    $CandidateList = @()
     $MakensisCmd = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
     if ($MakensisCmd) {
-        $MakensisPath = $MakensisCmd.Source
-    } else {
-        foreach ($cand in @("C:\Program Files (x86)\NSIS\makensis.exe", "C:\Program Files\NSIS\makensis.exe")) {
-            if (Test-Path $cand) {
-                $MakensisPath = $cand
-                break
-            }
-        }
+        $CandidateList += $MakensisCmd.Source
     }
+    $CandidateList += @("C:\Program Files (x86)\NSIS\makensis.exe", "C:\Program Files\NSIS\makensis.exe")
 
     $FallbackSetupUsed = $false
     $MakensisVersion = "NONE"
-    if ($MakensisPath) {
-        $MakensisVersion = (& $MakensisPath /VERSION | Out-String).Trim()
+    $ResolvedMakensisExe = $null
+    try {
+        $ResolvedNsisInfo = Resolve-PinnedMakensisExecutable -ExplicitPath $MakensisPath -EnvPath $env:DAUVERSE_MAKENSIS_PATH -CandidatePaths $CandidateList -RequiredVersion "v3.11"
+        $ResolvedMakensisExe = $ResolvedNsisInfo.path
+        $MakensisVersion = $ResolvedNsisInfo.version
+    } catch {
+        if ($AllowPortableAsSetupFallback -and [string]::IsNullOrWhiteSpace($MakensisPath) -and [string]::IsNullOrWhiteSpace($env:DAUVERSE_MAKENSIS_PATH)) {
+            $FallbackSetupUsed = $true
+            Write-Warning "Pinned NSIS v3.11 not found ($($_.Exception.Message)) and -AllowPortableAsSetupFallback specified; copying portable binary to SETUP.exe (NOT RC ELIGIBLE)."
+            Copy-Item -Force $PortableOut $SetupOut
+        } else {
+            throw
+        }
+    }
+
+    if ($ResolvedMakensisExe) {
+        $ImmediateCheckVer = (& $ResolvedMakensisExe /VERSION 2>&1 | Out-String).Trim()
+        if ($ImmediateCheckVer -ne "v3.11") {
+            throw "F15_NSIS_PRE_INVOKE_MISMATCH: '$ResolvedMakensisExe' changed version before invocation ('$ImmediateCheckVer' != 'v3.11')"
+        }
+        $MakensisVersion = $ImmediateCheckVer
         $NsiScript = Join-Path $RepoRoot "installer\nsis\dauverse_setup.nsi"
         Invoke-Checked "Compile NSIS Setup Installer" {
-            & $MakensisPath "/WX" "/V3" "/DSTAGING_DIR=$StagingAppDir" "/DOUT_FILE=$SetupOut" $NsiScript
+            & $ResolvedMakensisExe "/WX" "/V3" "/DSTAGING_DIR=$StagingAppDir" "/DOUT_FILE=$SetupOut" $NsiScript
         }
-    } elseif ($AllowPortableAsSetupFallback) {
-        $FallbackSetupUsed = $true
-        Write-Warning "NSIS not found and -AllowPortableAsSetupFallback specified; copying portable binary to SETUP.exe (NOT RC ELIGIBLE)."
-        Copy-Item -Force $PortableOut $SetupOut
-    } else {
-        throw "NSIS (makensis.exe) not found in PATH or Program Files. Install NSIS or pass -AllowPortableAsSetupFallback explicitly."
     }
 
     # 9. Code Signing Status Check (Never fake signatures!)
@@ -389,9 +452,9 @@ try {
     }
 
     $BuildProv = [ordered]@{
-        schema_version = 3
-        task_id = "DREMOTE-V1-REMEDIATION-007"
-        release_candidate = "RC3"
+        schema_version = 4
+        task_id = "DREMOTE-V1-RC4-FOCUSED-CLOSURE-011"
+        release_candidate = "RC4"
         built_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         source = [ordered]@{
             repository = "trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP"
@@ -415,6 +478,7 @@ try {
             cargo_version = $CargoVer
             flutter_machine = $FlutterVerJson
             clang_version = $ClangVer
+            makensis_path = $(if ($ResolvedMakensisExe) { $ResolvedMakensisExe } else { "NONE" })
             makensis_version = $MakensisVersion
             python_version = $PythonVer
             vcpkg_commit_sha = $VcpkgResolvedSha
@@ -454,17 +518,30 @@ try {
     }
     Copy-Item -LiteralPath $LogFile -Destination (Join-Path $ReleaseDir "WINDOWS_NATIVE_BUILD.log") -Force
 
-    # 11. Freeze immutable INITIAL_BUILD_SHA256_MANIFEST.txt + SHA256_MANIFEST.txt
-    $ManifestLines = @()
+    # 11. Freeze immutable INITIAL_BUILD_SHA256_MANIFEST.txt, then generate SHA256_MANIFEST.txt listing INITIAL_BUILD_SHA256_MANIFEST.txt (FT010-B01)
+    $InitialManifestFile = Join-Path $ReleaseDir "INITIAL_BUILD_SHA256_MANIFEST.txt"
+    $FinalManifestFile   = Join-Path $ReleaseDir "SHA256_MANIFEST.txt"
+    if (Test-Path -LiteralPath $FinalManifestFile) {
+        Remove-Item -LiteralPath $FinalManifestFile -Force
+    }
+    $InitialLines = @()
     Get-ChildItem -LiteralPath $ReleaseDir -File | Sort-Object Name | ForEach-Object {
         if ($_.Name -notin @("SHA256_MANIFEST.txt", "INITIAL_BUILD_SHA256_MANIFEST.txt")) {
             $h = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            $ManifestLines += "$h  $($_.Name)"
+            $InitialLines += "$h  $($_.Name)"
         }
     }
-    Set-Content -LiteralPath (Join-Path $ReleaseDir "INITIAL_BUILD_SHA256_MANIFEST.txt") -Value $ManifestLines -Encoding UTF8
-    Set-Content -LiteralPath (Join-Path $ReleaseDir "SHA256_MANIFEST.txt") -Value $ManifestLines -Encoding UTF8
-    Get-Content (Join-Path $ReleaseDir "SHA256_MANIFEST.txt")
+    Set-Content -LiteralPath $InitialManifestFile -Value $InitialLines -Encoding UTF8
+
+    $FinalLines = @()
+    Get-ChildItem -LiteralPath $ReleaseDir -File | Sort-Object Name | ForEach-Object {
+        if ($_.Name -ne "SHA256_MANIFEST.txt") {
+            $h = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $FinalLines += "$h  $($_.Name)"
+        }
+    }
+    Set-Content -LiteralPath $FinalManifestFile -Value $FinalLines -Encoding UTF8
+    Get-Content $FinalManifestFile
 } finally {
     if ($null -ne $ManifestXmlBackup) {
         Set-Content -Path $ManifestXmlPath -Value $ManifestXmlBackup -NoNewline -Encoding UTF8

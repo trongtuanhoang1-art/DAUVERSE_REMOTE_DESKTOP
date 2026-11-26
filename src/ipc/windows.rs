@@ -110,7 +110,14 @@ pub(super) async fn connect(path: &str, postfix: &str) -> ResultType<ConnectionC
 }
 
 fn ensure_server(client: &ConnectionClient, require_system: bool) -> ResultType<()> {
-    let pipe = HANDLE(client.as_raw_handle());
+    ensure_raw_pipe_server(client.as_raw_handle(), require_system)
+}
+
+pub(crate) fn ensure_raw_pipe_server(
+    raw_handle: std::os::windows::io::RawHandle,
+    require_system: bool,
+) -> ResultType<()> {
+    let pipe = HANDLE(raw_handle);
     let mut pid = 0;
     unsafe { GetNamedPipeServerProcessId(pipe, &mut pid) }
         .context("Failed to resolve IPC server process")?;

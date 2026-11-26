@@ -240,6 +240,7 @@ pub fn canonical_signing_bytes_checked(
     )
 }
 
+#[cfg(test)]
 pub fn canonical_signing_bytes(event: &AiEvent, issued_at_ms: i64, nonce: &str) -> Vec<u8> {
     let progress_tag = event.progress.map(|p| format!("f32:{:08x}", p.to_bits()));
     let confidence_tag = format!("f32:{:08x}", event.confidence.to_bits());
@@ -254,6 +255,27 @@ pub fn canonical_signing_bytes(event: &AiEvent, issued_at_ms: i64, nonce: &str) 
     .unwrap_or_default()
 }
 
+pub fn sign_event_envelope_checked(
+    event: AiEvent,
+    secret_key: &[u8],
+    issued_at_ms: i64,
+    nonce: String,
+) -> Result<SignedAiEventEnvelope, String> {
+    if nonce.trim().len() < 8 {
+        return Err("SIGNER_INVALID_NONCE: nonce must be at least 8 characters".to_owned());
+    }
+    let payload = canonical_signing_bytes_checked(&event, AI_EVENT_SCHEMA_V3, issued_at_ms, &nonce)?;
+    let sig = hex::encode(hmac_sha256(secret_key, &payload));
+    Ok(SignedAiEventEnvelope {
+        schema_version: AI_EVENT_SCHEMA_V3,
+        event,
+        issued_at_ms,
+        nonce,
+        signature_hex: sig,
+    })
+}
+
+#[cfg(test)]
 pub fn sign_event_envelope(
     event: AiEvent,
     secret_key: &[u8],
@@ -585,9 +607,9 @@ impl AiEventBridge {
         event: AiEvent,
         issued_at_ms: i64,
         nonce: String,
-    ) -> SignedAiEventEnvelope {
+    ) -> Result<SignedAiEventEnvelope, String> {
         let secret = self.hmac_secret.lock().unwrap();
-        sign_event_envelope(event, &secret, issued_at_ms, nonce)
+        sign_event_envelope_checked(event, &secret, issued_at_ms, nonce)
     }
 
     pub fn ingest_signed_envelope(

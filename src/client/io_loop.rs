@@ -66,10 +66,12 @@ use std::{
     num::NonZeroI64,
     path::PathBuf,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, RwLock,
     },
 };
+
+static NEXT_DAUVERSE_CLIENT_SCOPE_ID: AtomicU64 = AtomicU64::new(1);
 
 pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
@@ -93,6 +95,8 @@ pub struct Remote<T: InvokeUiSession> {
     first_frame: bool,
     #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
     client_conn_id: i32, // used for file clipboard
+    dauverse_scope_id: u64,
+    dauverse_round: u32,
     data_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
     elevation_requested: bool,
@@ -145,6 +149,8 @@ impl<T: InvokeUiSession> Remote<T> {
             first_frame: false,
             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
             client_conn_id: 0,
+            dauverse_scope_id: NEXT_DAUVERSE_CLIENT_SCOPE_ID.fetch_add(1, Ordering::SeqCst),
+            dauverse_round: 0,
             data_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
             stop_voice_call_sender: None,
@@ -161,7 +167,28 @@ impl<T: InvokeUiSession> Remote<T> {
         }
     }
 
+    #[inline]
+    fn dauverse_session_scope(&self, round: u32) -> String {
+        format!("client-sess-{}-r{}", self.dauverse_scope_id, round)
+    }
+
+    #[inline]
+    fn dauverse_transfer_identity(
+        &self,
+        direction: crate::dauverse::transfer_guard::TransferDirection,
+        engine_job_id: i32,
+    ) -> crate::dauverse::transfer_guard::EngineTransferIdentity {
+        let scoped_conn_id = ((self.dauverse_scope_id % (i32::MAX as u64)) as i32).max(1);
+        crate::dauverse::transfer_guard::EngineTransferIdentity::new(
+            self.dauverse_session_scope(self.dauverse_round),
+            scoped_conn_id,
+            direction,
+            engine_job_id,
+        )
+    }
+
     pub async fn io_loop(&mut self, key: &str, token: &str, round: u32) {
+        self.dauverse_round = round;
         #[cfg(target_os = "windows")]
         let _file_clip_context_holder = {
             // `is_port_forward()` will not reach here, but we still check it for clarity.
@@ -464,6 +491,12 @@ impl<T: InvokeUiSession> Remote<T> {
     }
 
     fn handle_disconnected(&self, round: u32) {
+        crate::dauverse::DauverseRuntime::global()
+            .transfer_queue
+            .fail_all_active_for_scope(
+                &self.dauverse_session_scope(round),
+                "CLIENT_SESSION_DISCONNECTED",
+            );
         // set_disconnected_ok is used to check if new connection round is started.
         let _set_disconnected_ok = self
             .handler
@@ -958,6 +991,36 @@ impl<T: InvokeUiSession> Remote<T> {
                                 fs::transform_windows_path(&mut files);
                             }
                             let total_size = job.total_size();
+                            if job.r#type == fs::JobType::Generic && !job.files().is_empty() {
+                                let ul_specs: Vec<
+                                    crate::dauverse::transfer_guard::ExpectedFileIntegritySpec,
+                                > = job
+                                    .files()
+                                    .iter()
+                                    .map(|e| {
+                                        crate::dauverse::transfer_guard::ExpectedFileIntegritySpec {
+                                            relative_path: if e.name.is_empty() {
+                                                "single_upload".to_owned()
+                                            } else {
+                                                e.name.clone()
+                                            },
+                                            expected_bytes: e.size,
+                                            expected_sha256: e.sha256.clone(),
+                                        }
+                                    })
+                                    .collect();
+                                let _ = crate::dauverse::DauverseRuntime::global()
+                                    .transfer_queue
+                                    .track_engine_transfer_start_scoped(
+                                        self.dauverse_transfer_identity(
+                                            crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                                            id,
+                                        ),
+                                        &to,
+                                        ul_specs,
+                                        total_size,
+                                    );
+                            }
                             self.read_jobs.push(job);
                             self.timer = crate::rustdesk_interval(time::interval(MILLI1));
                             allow_err!(
@@ -1054,6 +1117,36 @@ impl<T: InvokeUiSession> Remote<T> {
                                 !is_remote,
                                 true,
                             );
+                            if job.r#type == fs::JobType::Generic && !job.files().is_empty() {
+                                let ul_specs: Vec<
+                                    crate::dauverse::transfer_guard::ExpectedFileIntegritySpec,
+                                > = job
+                                    .files()
+                                    .iter()
+                                    .map(|e| {
+                                        crate::dauverse::transfer_guard::ExpectedFileIntegritySpec {
+                                            relative_path: if e.name.is_empty() {
+                                                "single_upload".to_owned()
+                                            } else {
+                                                e.name.clone()
+                                            },
+                                            expected_bytes: e.size,
+                                            expected_sha256: e.sha256.clone(),
+                                        }
+                                    })
+                                    .collect();
+                                let _ = crate::dauverse::DauverseRuntime::global()
+                                    .transfer_queue
+                                    .track_engine_transfer_start_scoped(
+                                        self.dauverse_transfer_identity(
+                                            crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                                            id,
+                                        ),
+                                        &to,
+                                        ul_specs,
+                                        job.total_size(),
+                                    );
+                            }
                             job.is_last_job = true;
                             self.read_jobs.push(job);
                             self.timer = crate::rustdesk_interval(time::interval(MILLI1));
@@ -1063,9 +1156,16 @@ impl<T: InvokeUiSession> Remote<T> {
             }
             Data::ResumeJob((id, is_remote)) => {
                 if is_remote {
+                    let resume_dl_id = self.dauverse_transfer_identity(
+                        crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                        id,
+                    );
                     if let Some(job) = get_job(id, &mut self.write_jobs) {
                         job.is_last_job = false;
                         job.is_resume = true;
+                        let _ = crate::dauverse::DauverseRuntime::global()
+                            .transfer_queue
+                            .resume_engine_transfer_scoped(&resume_dl_id, job.finished_size());
                         allow_err!(
                             peer.send(&fs::new_send(
                                 id,
@@ -1078,12 +1178,22 @@ impl<T: InvokeUiSession> Remote<T> {
                         );
                     }
                 } else {
+                    let resume_ul_id = self.dauverse_transfer_identity(
+                        crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                        id,
+                    );
                     if let Some(job) = get_job(id, &mut self.read_jobs) {
                         match &job.data_source {
                             fs::DataSource::FilePath(_p) => {
                                 job.is_last_job = false;
                                 job.is_resume = true;
                                 job.set_finished_size_on_resume();
+                                let _ = crate::dauverse::DauverseRuntime::global()
+                                    .transfer_queue
+                                    .resume_engine_transfer_scoped(
+                                        &resume_ul_id,
+                                        job.finished_size(),
+                                    );
                                 #[cfg(not(windows))]
                                 let files = job.files().clone();
                                 #[cfg(windows)]
@@ -1467,11 +1577,33 @@ impl<T: InvokeUiSession> Remote<T> {
                 self.handle_job_status(id, job.file_num(), Some(error.to_string()));
             }
             job.remove_download_file();
-            crate::dauverse::DauverseRuntime::global()
+            let _ = crate::dauverse::DauverseRuntime::global()
                 .transfer_queue
-                .track_engine_receive_finish(id, false, true, Some("Cancelled"));
+                .track_engine_transfer_finish_scoped(
+                    &self.dauverse_transfer_identity(
+                        crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                        id,
+                    ),
+                    None,
+                    false,
+                    true,
+                    Some("Cancelled"),
+                );
         }
-        let _ = fs::remove_job(id, &mut self.read_jobs);
+        if fs::remove_job(id, &mut self.read_jobs).is_some() {
+            let _ = crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .track_engine_transfer_finish_scoped(
+                    &self.dauverse_transfer_identity(
+                        crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                        id,
+                    ),
+                    None,
+                    false,
+                    true,
+                    Some("Cancelled"),
+                );
+        }
         self.remove_jobs.remove(&id);
     }
 
@@ -1991,6 +2123,10 @@ impl<T: InvokeUiSession> Remote<T> {
                             // a mutable borrow from fs::get_job(&mut self.write_jobs), so defer
                             // the error handling until after the borrow scope ends.
                             let mut set_files_err = None;
+                            let fd_dl_identity = self.dauverse_transfer_identity(
+                                crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                                fd.id,
+                            );
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
                                 if let Err(err) = job.set_files(entries) {
@@ -2026,15 +2162,17 @@ impl<T: InvokeUiSession> Remote<T> {
                                                 } else {
                                                     match crate::dauverse::transfer_guard::resolve_transfer_manifest_root_and_specs(base, job.files()) {
                                                         Ok((dest_root, file_specs)) => {
-                                                            crate::dauverse::DauverseRuntime::global()
+                                                            if let Err(track_err) = crate::dauverse::DauverseRuntime::global()
                                                                 .transfer_queue
-                                                                .track_engine_receive_start_manifest(
-                                                                    fd.id,
-                                                                    0,
+                                                                .track_engine_transfer_start_scoped(
+                                                                    fd_dl_identity,
                                                                     &dest_root.to_string_lossy(),
                                                                     file_specs,
                                                                     job.total_size(),
-                                                                );
+                                                                )
+                                                            {
+                                                                guard_rejected = Some(track_err);
+                                                            }
                                                         }
                                                         Err(guard_err) => {
                                                             crate::dauverse::DauverseRuntime::global()
@@ -2281,11 +2419,16 @@ impl<T: InvokeUiSession> Remote<T> {
                                 #[cfg(not(target_os = "android"))]
                                 let is_android_doc = false;
                                 if job_type == fs::JobType::Generic && !is_android_doc {
+                                    let dl_identity = self.dauverse_transfer_identity(
+                                        crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                                        d.id,
+                                    );
                                     if let Some(ref failure_msg) = err {
-                                        crate::dauverse::DauverseRuntime::global()
+                                        let _ = crate::dauverse::DauverseRuntime::global()
                                             .transfer_queue
-                                            .track_engine_receive_finish(
-                                                d.id,
+                                            .track_engine_transfer_finish_scoped(
+                                                &dl_identity,
+                                                None,
                                                 false,
                                                 failure_msg == "skipped",
                                                 Some(failure_msg),
@@ -2294,7 +2437,10 @@ impl<T: InvokeUiSession> Remote<T> {
                                         if let Err(integrity_err) =
                                             crate::dauverse::DauverseRuntime::global()
                                                 .transfer_queue
-                                                .verify_and_finalize_engine_receive(d.id)
+                                                .verify_and_finalize_engine_receive_scoped(
+                                                    &dl_identity,
+                                                    None,
+                                                )
                                         {
                                             crate::dauverse::DauverseRuntime::global()
                                                 .security
@@ -2315,6 +2461,29 @@ impl<T: InvokeUiSession> Remote<T> {
                                         None
                                     }
                                 };
+                            } else {
+                                let premature_active_read =
+                                    fs::remove_job(d.id, &mut self.read_jobs).is_some();
+                                let _ = crate::dauverse::DauverseRuntime::global()
+                                    .transfer_queue
+                                    .track_engine_transfer_finish_scoped(
+                                        &self.dauverse_transfer_identity(
+                                            crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                                            d.id,
+                                        ),
+                                        None,
+                                        !premature_active_read,
+                                        false,
+                                        premature_active_read.then_some(
+                                            "INTEGRITY_PREMATURE_PEER_DONE_BEFORE_SENDER_EOF",
+                                        ),
+                                    );
+                                if premature_active_read {
+                                    err = Some(
+                                        "INTEGRITY_PREMATURE_PEER_DONE_BEFORE_SENDER_EOF"
+                                            .to_owned(),
+                                    );
+                                }
                             }
                             match job_type {
                                 fs::JobType::Generic => {
@@ -2370,10 +2539,27 @@ impl<T: InvokeUiSession> Remote<T> {
                             }
                             let removed_write = fs::remove_job(e.id, &mut self.write_jobs);
                             if removed_write.is_some() {
-                                crate::dauverse::DauverseRuntime::global()
+                                let _ = crate::dauverse::DauverseRuntime::global()
                                     .transfer_queue
-                                    .track_engine_receive_finish(
-                                        e.id,
+                                    .track_engine_transfer_finish_scoped(
+                                        &self.dauverse_transfer_identity(
+                                            crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                                            e.id,
+                                        ),
+                                        None,
+                                        false,
+                                        false,
+                                        Some(&e.error),
+                                    );
+                            } else {
+                                let _ = crate::dauverse::DauverseRuntime::global()
+                                    .transfer_queue
+                                    .track_engine_transfer_finish_scoped(
+                                        &self.dauverse_transfer_identity(
+                                            crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                                            e.id,
+                                        ),
+                                        None,
                                         false,
                                         false,
                                         Some(&e.error),

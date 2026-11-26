@@ -36,6 +36,7 @@ $ReleaseDir    = Join-Path $WorkspaceRoot "RELEASE"
 $StagingAppDir = Join-Path $WorkspaceRoot "STAGING\DAUVERSE_REMOTE_APP"
 $ExpectedCodexReportSha = "f07b61edbd82a376cc5e3f854d72d0cc3331735094bc0631e37fbc9ebc60a913"
 $ExpectedCodexRc2ReQaReportSha = "c23d36e7d83b2fb1402238d8a8501b9de899fcd94b2774155b6a602fd77fb954"
+$ExpectedCodexRc3SourceQaReportSha = "d7bf8f93fde76a95cbfcc3c089018f607c9b7743c679a1b3f8c8d38ce98e61ad"
 
 function Assert-PackCondition {
     param([bool]$Condition, [string]$Message)
@@ -118,9 +119,17 @@ $ActualCodexReQaSha = (Get-FileHash -LiteralPath $CodexReQaReportSrc -Algorithm 
 Assert-PackCondition ($ActualCodexReQaSha -eq $ExpectedCodexRc2ReQaReportSha) "Codex RC2 Re-QA report SHA-256 mismatch! Expected $ExpectedCodexRc2ReQaReportSha, got $ActualCodexReQaSha"
 Copy-Item -LiteralPath $CodexReQaReportSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md") -Force
 
-$Rc3HandoffSrc = Join-Path $RepoRoot "DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md"
-if (Test-Path -LiteralPath $Rc3HandoffSrc) {
-    Copy-Item -LiteralPath $Rc3HandoffSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md") -Force
+$CodexRc3ReportSrc = Join-Path $RepoRoot "QA\DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md"
+Assert-PackCondition (Test-Path -LiteralPath $CodexRc3ReportSrc) "Missing QA/DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md"
+$ActualCodexRc3Sha = (Get-FileHash -LiteralPath $CodexRc3ReportSrc -Algorithm SHA256).Hash.ToLowerInvariant()
+Assert-PackCondition ($ActualCodexRc3Sha -eq $ExpectedCodexRc3SourceQaReportSha) "Codex RC3 Source QA report SHA-256 mismatch! Expected $ExpectedCodexRc3SourceQaReportSha, got $ActualCodexRc3Sha"
+Copy-Item -LiteralPath $CodexRc3ReportSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md") -Force
+
+foreach ($handoffName in @("DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md", "DAUVERSE_REMOTE_V1_RC4_SOURCE_REVIEW_HANDOFF.md")) {
+    $hSrc = Join-Path $RepoRoot $handoffName
+    if (Test-Path -LiteralPath $hSrc) {
+        Copy-Item -LiteralPath $hSrc -Destination (Join-Path $PackStage "QA\$handoffName") -Force
+    }
 }
 
 $MatrixSrc = Join-Path $RepoRoot "FINDINGS_REMEDIATION_MATRIX.md"

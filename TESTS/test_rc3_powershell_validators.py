@@ -146,20 +146,47 @@ try {
     }
     [System.IO.File]::WriteAllText($manifestPath, $origManifest)
 
-    # 3. F02: Assert-ManifestFileValid & Assert-OriginalBuildLogValid in verify_and_package_windows_rc.ps1
+    # 3. F02 / FT010-B01 / FT010-Q01: Assert-ManifestFileValid, New-ReleaseManifestLines & Assert-OriginalBuildLogValid
     Import-GlobalFunctionsFromScript (Join-Path $repo "scripts/windows/verify_and_package_windows_rc.ps1") @(
         "Assert-Condition",
+        "New-ReleaseManifestLines",
         "Assert-ManifestFileValid",
         "Assert-OriginalBuildLogValid"
     )
 
     $mRoot = Join-Path $tmpRoot "pkg_manifest"
     New-Item -ItemType Directory -Force -Path $mRoot | Out-Null
-    [System.IO.File]::WriteAllBytes((Join-Path $mRoot "a.txt"), [Text.Encoding]::UTF8.GetBytes("alpha"))
-    $ha = (Get-FileHash -LiteralPath (Join-Path $mRoot "a.txt") -Algorithm SHA256).Hash.ToLowerInvariant()
+    [System.IO.File]::WriteAllBytes((Join-Path $mRoot "DAUVERSE_REMOTE_PORTABLE.exe"), (New-SyntheticPeBytes 0x44))
+
+    # FT010-B01 Positive: Exact Initial + Final release manifest layout (INITIAL_BUILD_SHA256_MANIFEST.txt listed & counted in SHA256_MANIFEST.txt)
+    $initManifestFile = Join-Path $mRoot "INITIAL_BUILD_SHA256_MANIFEST.txt"
+    $initLines = New-ReleaseManifestLines -BaseDirectory $mRoot -ManifestRole "Initial"
+    [System.IO.File]::WriteAllText($initManifestFile, (($initLines -join "`n") + "`n"))
+    $initCount = Assert-ManifestFileValid -ManifestFilePath $initManifestFile -BaseDirectory $mRoot -ManifestRole "Initial"
+    if ($initCount -ne 1) {
+        throw "FT010-B01: Expected 1 entry in INITIAL_BUILD_SHA256_MANIFEST.txt, got $initCount"
+    }
+
     $mFile = Join-Path $mRoot "SHA256_MANIFEST.txt"
-    [System.IO.File]::WriteAllText($mFile, "$ha  a.txt`n")
-    $null = Assert-ManifestFileValid -ManifestFilePath $mFile -BaseDirectory $mRoot
+    $finalLines = New-ReleaseManifestLines -BaseDirectory $mRoot -ManifestRole "Final"
+    [System.IO.File]::WriteAllText($mFile, (($finalLines -join "`n") + "`n"))
+    $finalCount = Assert-ManifestFileValid -ManifestFilePath $mFile -BaseDirectory $mRoot -ManifestRole "Final"
+    if ($finalCount -ne 2) {
+        throw "FT010-B01: Expected 2 entries (portable + INITIAL_BUILD_SHA256_MANIFEST.txt) in final SHA256_MANIFEST.txt, got $finalCount"
+    }
+
+    # FT010-B01 Negative: Omitting INITIAL_BUILD_SHA256_MANIFEST.txt from final SHA256_MANIFEST.txt MUST fail
+    [System.IO.File]::WriteAllText($mFile, (($initLines -join "`n") + "`n"))
+    $rejectedMissingInitialInFinal = $false
+    try {
+        $null = Assert-ManifestFileValid -ManifestFilePath $mFile -BaseDirectory $mRoot -ManifestRole "Final"
+    } catch {
+        $rejectedMissingInitialInFinal = $true
+    }
+    if (-not $rejectedMissingInitialInFinal) {
+        throw "FT010-B01 REGRESSION: Final manifest omitting INITIAL_BUILD_SHA256_MANIFEST.txt was accepted!"
+    }
+    [System.IO.File]::WriteAllText($mFile, (($finalLines -join "`n") + "`n"))
 
     # Negative F02a: Unlisted rogue file on disk MUST fail Assert-ManifestFileValid
     [System.IO.File]::WriteAllBytes((Join-Path $mRoot "rogue_unlisted.exe"), [Text.Encoding]::UTF8.GetBytes("rogue"))
@@ -175,18 +202,94 @@ try {
         throw "F02 REGRESSION: Assert-ManifestFileValid accepted unlisted rogue file!"
     }
 
-    # Negative F02b: Synthetic 2KB padded log missing ordered real compiler stages MUST fail Assert-OriginalBuildLogValid
-    $fakeLog = Join-Path $tmpRoot "fake_build.log"
-    $pad = "x" * 2048
-    [System.IO.File]::WriteAllText($fakeLog, "cargo build`nflutter build windows --release`nBUILD_WINDOWS_RC_DONE`n$pad")
-    $rejectedSyntheticLog = $false
+    # Negative FT010-Q01: Complete-marker fabricated build log (exact 9 ordered RC3 stage headers + padding, zero compiler/NSIS output) MUST fail
+    $fakeAllMarkersLog = Join-Path $tmpRoot "all_markers_synthetic_build.log"
+    $pad = "x" * 3072
+    $syntheticAllMarkers = @(
+        "RepoRoot      : E:\DAUVERSE_REMOTE_DESKTOP\repo",
+        "CargoTarget   : E:\DAUVERSE_REMOTE_DESKTOP\BUILD\cargo-target",
+        ">>> [flutter pub get]",
+        ">>> [Build dylib_virtual_display]",
+        ">>> [Build librustdesk.dll]",
+        ">>> [flutter build windows --release]",
+        ">>> [Generate single-file portable executable]",
+        ">>> [Compile NSIS Setup Installer]",
+        $pad,
+        "=== NATIVE COMPILATION & PACKAGING SUCCEEDED ==="
+    ) -join "`n"
+    [System.IO.File]::WriteAllText($fakeAllMarkersLog, $syntheticAllMarkers)
+    $rejectedAllMarkersLog = $false
     try {
-        Assert-OriginalBuildLogValid -LogPath $fakeLog
+        Assert-OriginalBuildLogValid -LogPath $fakeAllMarkersLog
     } catch {
-        $rejectedSyntheticLog = $true
+        $rejectedAllMarkersLog = $true
     }
-    if (-not $rejectedSyntheticLog) {
-        throw "F02 REGRESSION: Assert-OriginalBuildLogValid accepted synthetic padded build log!"
+    if (-not $rejectedAllMarkersLog) {
+        throw "FT010-Q01 REGRESSION: Assert-OriginalBuildLogValid accepted complete-marker fabricated build log!"
+    }
+
+    # Positive FT010-Q01: Realistic transcript produced by Invoke-Checked (piping Cargo + NSIS output through Write-Host) MUST pass
+    $validBuildLog = Join-Path $tmpRoot "valid_real_shape_build.log"
+    $validTranscript = @(
+        "RepoRoot      : E:\DAUVERSE_REMOTE_DESKTOP\repo",
+        "CargoTarget   : E:\DAUVERSE_REMOTE_DESKTOP\BUILD\cargo-target",
+        ">>> [flutter pub get]",
+        "Got dependencies!",
+        ">>> [Build dylib_virtual_display]",
+        "   Compiling virtual_display v0.1.0",
+        "    Finished ``release`` profile [optimized] target(s) in 12.4s",
+        ">>> [Build librustdesk.dll (Release FFI)]",
+        "   Compiling rustdesk v1.5.3",
+        "    Finished ``release`` profile [optimized] target(s) in 4m 18s",
+        ">>> [flutter build windows --release]",
+        "Built build\windows\x64\runner\Release\rustdesk.exe",
+        ">>> [Generate single-file portable executable]",
+        ">>> [Compile NSIS Setup Installer]",
+        'Output: "E:\DAUVERSE_REMOTE_DESKTOP\RELEASE\DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe"',
+        $pad,
+        "=== NATIVE COMPILATION & PACKAGING SUCCEEDED ==="
+    ) -join "`r`n"
+    [System.IO.File]::WriteAllText($validBuildLog, $validTranscript)
+    Assert-OriginalBuildLogValid -LogPath $validBuildLog
+
+    # 3b. FT010-Q02: Resolve-PinnedMakensisExecutable exact v3.11 selection & mismatch rejection
+    Import-GlobalFunctionsFromScript (Join-Path $repo "scripts/windows/build_windows_release.ps1") @(
+        "Resolve-PinnedMakensisExecutable"
+    )
+    $nsis310 = Join-Path $tmpRoot "makensis_310.exe"
+    $nsis311 = Join-Path $tmpRoot "makensis_311.exe"
+    [System.IO.File]::WriteAllBytes($nsis310, (New-SyntheticPeBytes 0x30))
+    [System.IO.File]::WriteAllBytes($nsis311, (New-SyntheticPeBytes 0x31))
+    $mockProbe = {
+        param([string]$ExePath)
+        if ($ExePath -like "*311*") { return "v3.11" }
+        return "v3.10"
+    }
+    $resolvedNsis = Resolve-PinnedMakensisExecutable -CandidatePaths @($nsis310, $nsis311) -RequiredVersion "v3.11" -VersionProbe $mockProbe
+    if ($resolvedNsis.version -ne "v3.11" -or $resolvedNsis.path -notlike "*makensis_311.exe") {
+        throw "FT010-Q02 REGRESSION: Wrong PATH v3.10 was selected instead of v3.11 candidate!"
+    }
+    $rejectedExplicitWrongVer = $false
+    try {
+        $null = Resolve-PinnedMakensisExecutable -ExplicitPath $nsis310 -CandidatePaths @($nsis311) -RequiredVersion "v3.11" -VersionProbe $mockProbe
+    } catch {
+        if ($_.Exception.Message -match "F15_NSIS_PIN_MISMATCH") {
+            $rejectedExplicitWrongVer = $true
+        }
+    }
+    if (-not $rejectedExplicitWrongVer) {
+        throw "FT010-Q02 REGRESSION: Explicit wrong-version makensis path was not rejected!"
+    }
+    $rejectedNoExactVer = $false
+    try {
+        $null = Resolve-PinnedMakensisExecutable -CandidatePaths @($nsis310) -RequiredVersion "v3.11" -VersionProbe $mockProbe
+    } catch {
+        if ($_.Exception.Message -match "F15_NSIS_PIN_FAILED") {
+            $rejectedNoExactVer = $true
+        }
+    }
+    if (-not $rejectedNoExactVer) {
+        throw "FT010-Q02 REGRESSION: Missing exact v3.11 makensis did not fail closed!"
     }
 
     # 4. F01: ConvertTo-CanonicalF32Tag in dauverse_job_wrapper.ps1 matches Rust/Python bit-for-bit & rejects -0.0
@@ -215,7 +318,9 @@ try {
         status = "PASS"
         ps_files_checked = $psFiles.Count
         f11_backup_closure_verified = $true
-        f02_manifest_and_build_log_validators_verified = $true
+        ft010_b01_final_manifest_layout_verified = $true
+        ft010_q01_complete_marker_fabricated_log_rejected = $true
+        ft010_q02_pinned_makensis_resolution_verified = $true
         f01_ps_canonical_f32_tags_verified = $true
     } | ConvertTo-Json -Compress)
 } finally {

@@ -314,6 +314,9 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
         }
         "revoke_all_access" => {
             let revoked_sessions = rt.security.revoke_all_active_sessions();
+            let cancelled_transfers = rt
+                .transfer_queue
+                .fail_all_active_transfers("EMERGENCY_REVOKE_ALL_ACCESS");
             match rt.service_ctrl.revoke_all_access_immediately() {
                 Ok(svc) => {
                     rt.security.append_audit(
@@ -321,7 +324,7 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                         "EMERGENCY_REVOKE_ALL_ACCESS",
                         "OK",
                         &format!(
-                            "Revoked unattended, auto-start, owned service, and {revoked_sessions} active session(s)"
+                            "Verified engine disconnect, durable Config2 commit, owned service cutoff, {revoked_sessions} security session(s), and {cancelled_transfers} transfer(s)"
                         ),
                     );
                     serde_json::json!({ "ok": true, "data": svc })
@@ -363,7 +366,8 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
             "data": rt.clipboard_guard.stats(),
         }),
         "set_clipboard_policy" => {
-            let mut pol = rt.clipboard_guard.get_policy();
+            let prev_pol = rt.clipboard_guard.get_policy();
+            let mut pol = prev_pol.clone();
             if let Some(v) = args.get("enabled").and_then(|v| v.as_bool()) {
                 pol.enabled = v;
             }
@@ -391,19 +395,31 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                     _ => super::clipboard_guard::ClipboardSyncDirection::Bidirectional,
                 };
             }
-            let updated = rt.clipboard_guard.update_policy(pol);
-            let enable_flag = if updated.enabled
-                && updated.direction != super::clipboard_guard::ClipboardSyncDirection::Disabled
+            let enable_flag = if pol.enabled
+                && pol.direction != super::clipboard_guard::ClipboardSyncDirection::Disabled
             {
                 "Y"
             } else {
                 "N"
             };
-            hbb_common::config::Config::set_option(
-                "enable-clipboard".to_owned(),
-                enable_flag.to_owned(),
-            );
+            if let Err(cfg_err) = rt.service_ctrl.commit_security_options(
+                &[("enable-clipboard", enable_flag)],
+                enable_flag == "N",
+            ) {
+                if enable_flag == "N" {
+                    // Enforce conservative clipboard denial in memory even when disk commit fails
+                    let mut deny_pol = prev_pol;
+                    deny_pol.enabled = false;
+                    deny_pol.direction = super::clipboard_guard::ClipboardSyncDirection::Disabled;
+                    rt.clipboard_guard.update_policy(deny_pol);
+                }
+                return serde_json::json!({ "ok": false, "error": cfg_err });
+            }
+            let updated = rt.clipboard_guard.update_policy(pol);
             if let Err(e) = rt.persist_user_settings() {
+                if enable_flag != "N" {
+                    rt.clipboard_guard.update_policy(prev_pol);
+                }
                 return serde_json::json!({ "ok": false, "error": e });
             }
             rt.security.append_audit(
@@ -440,8 +456,39 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
             }
         }
         "transfer_track_receive" => {
-            let engine_id = args.get("engine_job_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
-            let conn_id = args.get("conn_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+            let engine_id = args
+                .get("engine_job_id")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1) as i32;
+            let conn_id = match args.get("conn_id").and_then(|v| v.as_i64()) {
+                Some(v) => v as i32,
+                None => 1,
+            };
+            let session_scope = args
+                .get("session_scope")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+                .unwrap_or_else(|| format!("ffi-conn-{conn_id}"));
+            let direction = match args.get("direction").and_then(|v| v.as_str()) {
+                Some("UPLOAD_TO_REMOTE") => {
+                    super::transfer_guard::TransferDirection::UploadToRemote
+                }
+                Some("DOWNLOAD_TO_LOCAL") | None => {
+                    super::transfer_guard::TransferDirection::DownloadToLocal
+                }
+                Some(other) => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "error": format!("INVALID_TRANSFER_DIRECTION: {other}")
+                    });
+                }
+            };
+            let identity = super::transfer_guard::EngineTransferIdentity::new(
+                session_scope,
+                conn_id,
+                direction,
+                engine_id,
+            );
             let dest_dir = args.get("dest_dir").and_then(|v| v.as_str()).unwrap_or("");
             let total_bytes = args.get("total_bytes").and_then(|v| v.as_u64()).unwrap_or(0);
             if let Some(specs_val) = args.get("file_specs") {
@@ -449,14 +496,21 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                     specs_val.clone(),
                 ) {
                     Ok(specs) => {
-                        rt.transfer_queue.track_engine_receive_start_manifest(
-                            engine_id,
-                            conn_id,
+                        match rt.transfer_queue.track_engine_transfer_start_scoped(
+                            identity,
                             dest_dir,
                             specs,
                             total_bytes,
-                        );
-                        serde_json::json!({ "ok": true })
+                        ) {
+                            Ok((job_id, generation)) => serde_json::json!({
+                                "ok": true,
+                                "data": {
+                                    "job_id": job_id,
+                                    "generation": generation,
+                                }
+                            }),
+                            Err(e) => serde_json::json!({ "ok": false, "error": e }),
+                        }
                     }
                     Err(e) => serde_json::json!({
                         "ok": false,
@@ -473,19 +527,48 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                             .collect()
                     })
                     .unwrap_or_default();
-                rt.transfer_queue.track_engine_receive_start_batch(
-                    engine_id,
-                    conn_id,
+                match rt.transfer_queue.track_engine_receive_start_batch_scoped(
+                    identity,
                     dest_dir,
                     files,
                     total_bytes,
-                );
-                serde_json::json!({ "ok": true })
+                ) {
+                    Ok((job_id, generation)) => serde_json::json!({
+                        "ok": true,
+                        "data": {
+                            "job_id": job_id,
+                            "generation": generation,
+                        }
+                    }),
+                    Err(e) => serde_json::json!({ "ok": false, "error": e }),
+                }
             }
         }
         "transfer_finalize_receive" => {
-            let engine_id = args.get("engine_job_id").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
-            match rt.transfer_queue.verify_and_finalize_engine_receive(engine_id) {
+            let engine_id = args
+                .get("engine_job_id")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1) as i32;
+            let conn_id = match args.get("conn_id").and_then(|v| v.as_i64()) {
+                Some(v) => v as i32,
+                None => 1,
+            };
+            let session_scope = args
+                .get("session_scope")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+                .unwrap_or_else(|| format!("ffi-conn-{conn_id}"));
+            let expected_generation = args.get("generation").and_then(|v| v.as_u64());
+            let identity = super::transfer_guard::EngineTransferIdentity::new(
+                session_scope,
+                conn_id,
+                super::transfer_guard::TransferDirection::DownloadToLocal,
+                engine_id,
+            );
+            match rt
+                .transfer_queue
+                .verify_and_finalize_engine_receive_scoped(&identity, expected_generation)
+            {
                 Ok(job) => serde_json::json!({ "ok": true, "data": job }),
                 Err(e) => serde_json::json!({ "ok": false, "error": e }),
             }
@@ -575,7 +658,10 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 },
             };
             let nonce = super::crypto_util::generate_nonce_hex();
-            let env = rt.ai_bridge.sign_with_runtime_secret(ev, now_ms, nonce);
+            let env = match rt.ai_bridge.sign_with_runtime_secret(ev, now_ms, nonce) {
+                Ok(v) => v,
+                Err(e) => return serde_json::json!({ "ok": false, "error": e }),
+            };
             let body = serde_json::to_string(&env).unwrap_or_default();
             let req = format!(
                 "POST /v1/events HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -694,16 +780,26 @@ mod tests {
         assert_eq!(probe["ok"], true);
         assert!(probe["data"]["unread_notifications"].as_u64().unwrap_or(0) >= 1);
 
-        let clip_res = dispatch_command(
-            "set_clipboard_policy",
-            r#"{"enabled":false,"direction":"DISABLED"}"#,
-        );
-        assert_eq!(clip_res["ok"], true);
-        assert_eq!(hbb_common::config::Config::get_option("enable-clipboard"), "N");
-        let _ = dispatch_command(
-            "set_clipboard_policy",
-            r#"{"enabled":true,"direction":"BIDIRECTIONAL"}"#,
-        );
+        {
+            let _cfg_guard =
+                crate::dauverse::service_ctrl::GlobalTestSerialToken::acquire_sync();
+            if let Some(parent) = hbb_common::config::Config2::file().parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let clip_res = dispatch_command(
+                "set_clipboard_policy",
+                r#"{"enabled":false,"direction":"DISABLED"}"#,
+            );
+            assert_eq!(clip_res["ok"], true);
+            assert_eq!(
+                hbb_common::config::Config::get_option("enable-clipboard"),
+                "N"
+            );
+            let _ = dispatch_command(
+                "set_clipboard_policy",
+                r#"{"enabled":true,"direction":"BIDIRECTIONAL"}"#,
+            );
+        }
 
         let unauth_live = dispatch_command(
             "smart_power_action",
@@ -733,8 +829,20 @@ mod tests {
         );
 
         let rt = DauverseRuntime::global();
+        let test_xfer_id = crate::dauverse::transfer_guard::EngineTransferIdentity::new(
+            "ffi-test-scope",
+            1,
+            crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+            77,
+        );
         rt.transfer_queue
-            .track_engine_receive_start(77, 1, "/tmp", "render.mp4", 10_485_760);
+            .track_engine_receive_start_batch_scoped(
+                test_xfer_id.clone(),
+                "/tmp",
+                vec!["render.mp4".to_owned()],
+                10_485_760,
+            )
+            .unwrap();
         let blocked_by_xfer = dispatch_command(
             "smart_power_action",
             r#"{"operation":"SLEEP","step_up_pin":"BossVault#2026","dry_run":true}"#,
@@ -745,6 +853,7 @@ mod tests {
             "SAFETY_INTERLOCK_CONFIRMATION_REQUIRED"
         );
         rt.transfer_queue
-            .track_engine_receive_finish(77, false, true, Some("cleanup"));
+            .track_engine_transfer_finish_scoped(&test_xfer_id, None, false, true, Some("cleanup"))
+            .unwrap();
     }
 }

@@ -70,6 +70,10 @@ impl DauverseRuntime {
         GLOBAL_RUNTIME.get_or_init(Self::init_default)
     }
 
+    pub fn try_global() -> Option<&'static Self> {
+        GLOBAL_RUNTIME.get()
+    }
+
     fn init_default() -> Self {
         #[cfg(test)]
         let base_dir = std::env::var("DAUVERSE_DATA_DIR")
@@ -330,7 +334,8 @@ impl DauverseRuntime {
     }
 
     pub fn dashboard_snapshot(&self) -> serde_json::Value {
-        let svc_running = self.service_ctrl.is_service_running();
+        let svc_status = self.service_ctrl.status();
+        let svc_running = svc_status.service_state == service_ctrl::ServiceRunState::Running;
         let (hw, hw_alerts) = self.hardware.sample_now_with_service_health(svc_running);
         let (ai_running, ai_waiting_approval, comfy_rendering) = self.ai_bridge.active_counts();
         let live_tasks = self.ai_bridge.live_tasks();
@@ -362,6 +367,7 @@ impl DauverseRuntime {
             .clone()
             .or_else(|| self.ai_bridge.replay_journal_error())
             .or_else(|| self.notifications.journal_error())
+            .or_else(|| svc_status.last_persistence_error.clone())
             .or_else(|| {
                 sec_summary
                     .get("last_persistence_error")
@@ -371,6 +377,7 @@ impl DauverseRuntime {
         let storage_healthy = storage_err.is_none()
             && self.ai_bridge.is_replay_journal_healthy()
             && self.notifications.journal_healthy()
+            && svc_status.config_persistence_healthy
             && sec_persist_ok;
 
         serde_json::json!({
@@ -423,7 +430,7 @@ impl DauverseRuntime {
                 "recent_events": self.smart_power.recent_events(),
             },
             "headless": self.headless.get_state(),
-            "service": self.service_ctrl.status(),
+            "service": svc_status,
             "security": {
                 "summary": sec_summary,
                 "recent_audit": self.security.recent_audit_entries(30),

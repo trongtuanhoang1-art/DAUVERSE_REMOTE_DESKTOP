@@ -175,6 +175,33 @@ lazy_static::lazy_static! {
     static ref CLIENTS: RwLock<HashMap<i32, Client>> = Default::default();
 }
 
+pub fn kick_all_cm_clients_for_revoke() -> usize {
+    let mut clients = CLIENTS.write().unwrap();
+    let count = clients.len();
+    for client in clients.values_mut() {
+        client.authorized = false;
+        client.keyboard = false;
+        client.clipboard = false;
+        client.audio = false;
+        client.file = false;
+        client.restart = false;
+        client.recording = false;
+        client.block_input = false;
+        #[cfg(not(any(target_os = "ios")))]
+        {
+            for perm in ["keyboard", "clipboard", "audio", "file", "restart"] {
+                let _ = client.tx.send(Data::SwitchPermission {
+                    name: perm.to_owned(),
+                    enabled: false,
+                });
+            }
+            let _ = client.tx.send(Data::Close);
+        }
+    }
+    clients.clear();
+    count
+}
+
 static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[derive(Clone)]
@@ -834,6 +861,12 @@ impl<T: InvokeUiCM> IpcTaskRunner<T> {
             task_runner.run().await;
         }
         if task_runner.conn_id > 0 {
+            crate::dauverse::DauverseRuntime::global()
+                .transfer_queue
+                .fail_all_active_for_scope(
+                    &format!("server-cm-conn-{}", task_runner.conn_id),
+                    "CM_CONNECTION_CLOSED",
+                );
             task_runner
                 .cm
                 .remove_connection(task_runner.conn_id, task_runner.close);
@@ -967,6 +1000,14 @@ pub async fn start_listen<T: InvokeUiCM>(
             _ => {}
         }
     }
+    if current_id > 0 {
+        crate::dauverse::DauverseRuntime::global()
+            .transfer_queue
+            .fail_all_active_for_scope(
+                &format!("server-cm-conn-{current_id}"),
+                "CM_CONNECTION_CLOSED",
+            );
+    }
     cm.remove_connection(current_id, true);
     for job in &mut write_jobs {
         if let Err(error) = job.cancel_document().await {
@@ -990,8 +1031,31 @@ async fn handle_fs(
     read_jobs: &mut Vec<fs::TransferJob>,
     tx: &UnboundedSender<Data>,
     tx_log: Option<&UnboundedSender<String>>,
-    _conn_id: i32,
+    cm_conn_id: i32,
 ) {
+    let make_cm_transfer_identity = |msg_conn_id: i32,
+                                     direction: crate::dauverse::transfer_guard::TransferDirection,
+                                     engine_job_id: i32|
+     -> Result<
+        crate::dauverse::transfer_guard::EngineTransferIdentity,
+        String,
+    > {
+        if cm_conn_id > 0 && msg_conn_id > 0 && cm_conn_id != msg_conn_id {
+            return Err(format!(
+                "SECURITY_REJECT_CONN_ID_MISMATCH: CM session conn_id {} != FS payload conn_id {}",
+                cm_conn_id, msg_conn_id
+            ));
+        }
+        let effective_conn_id = if cm_conn_id > 0 { cm_conn_id } else { msg_conn_id };
+        let identity = crate::dauverse::transfer_guard::EngineTransferIdentity::new(
+            format!("server-cm-conn-{effective_conn_id}"),
+            effective_conn_id,
+            direction,
+            engine_job_id,
+        );
+        identity.validate()?;
+        Ok(identity)
+    };
     // Android is scoped-storage only, so every peer supplied path has to stay inside the
     // app workspace. This is the filesystem boundary, keep it enforced here even though
     // `Connection` rejects out-of-workspace requests earlier as well.
@@ -1080,6 +1144,23 @@ async fn handle_fs(
             total_size,
             conn_id,
         } => {
+            let rx_identity = match make_cm_transfer_identity(
+                conn_id,
+                crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                id,
+            ) {
+                Ok(v) => v,
+                Err(id_err) => {
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "INCOMING_FILE_WRITE_GUARD",
+                        "DENIED",
+                        &id_err,
+                    );
+                    send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(id_err), file_num), tx);
+                    return;
+                }
+            };
             // Convert files to FileEntry
             let file_entries: Vec<FileEntry> = files
                 .drain(..)
@@ -1110,7 +1191,7 @@ async fn handle_fs(
                 return;
             }
             job.total_size = total_size;
-            job.conn_id = conn_id;
+            job.conn_id = rx_identity.conn_id;
             if job.files().is_empty() {
                 if total_size > 0 {
                     let msg =
@@ -1170,23 +1251,49 @@ async fn handle_fs(
                             return;
                         }
                     };
-                crate::dauverse::DauverseRuntime::global()
+                if let Err(track_err) = crate::dauverse::DauverseRuntime::global()
                     .transfer_queue
-                    .track_engine_receive_start_manifest(
-                        id,
-                        conn_id,
+                    .track_engine_transfer_start_scoped(
+                        rx_identity,
                         &dest_root.to_string_lossy(),
                         file_specs,
                         total_size,
+                    )
+                {
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "INCOMING_FILE_WRITE_GUARD",
+                        "DENIED",
+                        &track_err,
                     );
+                    send_raw(
+                        fs::new_error(id, hbb_common::anyhow::anyhow!(track_err), file_num),
+                        tx,
+                    );
+                    return;
+                }
             }
             write_jobs.push(job);
         }
         ipc::FS::CancelWrite { id } => {
-            crate::dauverse::DauverseRuntime::global()
-                .transfer_queue
-                .track_engine_receive_finish(id, false, true, Some("Cancelled by peer"));
-            if let Some(job) = fs::remove_job(id, write_jobs) {
+            let removed_job = fs::remove_job(id, write_jobs);
+            let msg_conn_id = removed_job.as_ref().map_or(0, |j| j.conn_id);
+            if let Ok(rx_identity) = make_cm_transfer_identity(
+                msg_conn_id,
+                crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                id,
+            ) {
+                let _ = crate::dauverse::DauverseRuntime::global()
+                    .transfer_queue
+                    .track_engine_transfer_finish_scoped(
+                        &rx_identity,
+                        None,
+                        false,
+                        true,
+                        Some("Cancelled by peer"),
+                    );
+            }
+            if let Some(job) = removed_job {
                 #[cfg(target_os = "android")]
                 let mut job = job;
                 #[cfg(target_os = "android")]
@@ -1203,35 +1310,96 @@ async fn handle_fs(
         }
         ipc::FS::WriteDone { id, file_num } => {
             if let Some(mut job) = fs::remove_job(id, write_jobs) {
+                let rx_identity = match make_cm_transfer_identity(
+                    job.conn_id,
+                    crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                    id,
+                ) {
+                    Ok(v) => v,
+                    Err(id_err) => {
+                        tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &id_err)));
+                        send_raw(fs::new_error(id, hbb_common::anyhow::anyhow!(id_err), file_num), tx);
+                        return;
+                    }
+                };
                 #[cfg(target_os = "android")]
                 if let Err(error) = job.finish_document().await {
-                    crate::dauverse::DauverseRuntime::global()
+                    let _ = crate::dauverse::DauverseRuntime::global()
                         .transfer_queue
-                        .track_engine_receive_finish(id, false, false, Some(&error.to_string()));
+                        .track_engine_transfer_finish_scoped(
+                            &rx_identity,
+                            None,
+                            false,
+                            false,
+                            Some(&error.to_string()),
+                        );
                     send_raw(fs::new_error(id, error, file_num), tx);
                     return;
                 }
                 if let Err(flush_err) = job.flush_and_close_stream().await {
                     let msg = flush_err.to_string();
-                    crate::dauverse::DauverseRuntime::global()
+                    let _ = crate::dauverse::DauverseRuntime::global()
                         .transfer_queue
-                        .track_engine_receive_finish(id, false, false, Some(&msg));
+                        .track_engine_transfer_finish_scoped(
+                            &rx_identity,
+                            None,
+                            false,
+                            false,
+                            Some(&msg),
+                        );
                     send_raw(fs::new_error(id, flush_err, file_num), tx);
                     return;
                 }
                 if job.job_skipped() {
-                    crate::dauverse::DauverseRuntime::global()
+                    let _ = crate::dauverse::DauverseRuntime::global()
                         .transfer_queue
-                        .track_engine_receive_finish(id, false, true, Some("skipped"));
+                        .track_engine_transfer_finish_scoped(
+                            &rx_identity,
+                            None,
+                            false,
+                            true,
+                            Some("skipped"),
+                        );
                     tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, true, "skipped")));
                     send_raw(fs::new_error(id, "skipped", file_num), tx);
                     return;
                 }
-                job.modify_time();
+                if let Err(finalize_err) = job.try_finalize_write_files() {
+                    let err_msg = format!("INTEGRITY_FINALIZE_WRITE_FAILED: {finalize_err}");
+                    let _ = crate::dauverse::DauverseRuntime::global()
+                        .transfer_queue
+                        .track_engine_transfer_finish_scoped(
+                            &rx_identity,
+                            None,
+                            false,
+                            false,
+                            Some(&err_msg),
+                        );
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "RECEIVE_FINALIZE_RENAME",
+                        "FAILED",
+                        &err_msg,
+                    );
+                    hbb_common::throttled_log!(
+                        std::time::Duration::from_secs(30),
+                        warn,
+                        "DAUVERSE receive staging finalization failed for conn {} job {}: {}",
+                        rx_identity.conn_id,
+                        id,
+                        err_msg
+                    );
+                    tx_log.map(|tx| tx.send(serialize_transfer_job(&job, false, false, &err_msg)));
+                    send_raw(
+                        fs::new_error(id, hbb_common::anyhow::anyhow!(err_msg), file_num),
+                        tx,
+                    );
+                    return;
+                }
                 if !job.files().is_empty() {
                     if let Err(integrity_err) = crate::dauverse::DauverseRuntime::global()
                         .transfer_queue
-                        .verify_and_finalize_engine_receive(id)
+                        .verify_and_finalize_engine_receive_scoped(&rx_identity, None)
                     {
                         crate::dauverse::DauverseRuntime::global().security.append_audit(
                             "FILE_TRANSFER_HOST",
@@ -1242,7 +1410,8 @@ async fn handle_fs(
                         hbb_common::throttled_log!(
                             std::time::Duration::from_secs(30),
                             warn,
-                            "DAUVERSE receive integrity verification failed for job {}: {}",
+                            "DAUVERSE receive integrity verification failed for conn {} job {}: {}",
+                            rx_identity.conn_id,
                             id,
                             integrity_err
                         );
@@ -1253,17 +1422,35 @@ async fn handle_fs(
                 }
                 send_raw(fs::new_done(id, file_num), tx);
                 tx_log.map(|tx| tx.send(serialize_transfer_job(&job, true, false, "")));
-            } else {
-                crate::dauverse::DauverseRuntime::global()
+            } else if let Ok(rx_identity) = make_cm_transfer_identity(
+                0,
+                crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                id,
+            ) {
+                let _ = crate::dauverse::DauverseRuntime::global()
                     .transfer_queue
-                    .track_engine_receive_finish(id, false, false, Some("ORPHAN_WRITE_DONE_NO_ACTIVE_JOB"));
+                    .track_engine_transfer_finish_scoped(
+                        &rx_identity,
+                        None,
+                        false,
+                        false,
+                        Some("ORPHAN_WRITE_DONE_NO_ACTIVE_JOB"),
+                    );
             }
         }
         ipc::FS::WriteError { id, file_num, err } => {
-            crate::dauverse::DauverseRuntime::global()
-                .transfer_queue
-                .track_engine_receive_finish(id, false, false, Some(&err));
-            if let Some(job) = fs::remove_job(id, write_jobs) {
+            let removed_job = fs::remove_job(id, write_jobs);
+            let msg_conn_id = removed_job.as_ref().map_or(0, |j| j.conn_id);
+            if let Ok(rx_identity) = make_cm_transfer_identity(
+                msg_conn_id,
+                crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                id,
+            ) {
+                let _ = crate::dauverse::DauverseRuntime::global()
+                    .transfer_queue
+                    .track_engine_transfer_finish_scoped(&rx_identity, None, false, false, Some(&err));
+            }
+            if let Some(job) = removed_job {
                 #[cfg(target_os = "android")]
                 let mut job = job;
                 #[cfg(target_os = "android")]
@@ -1289,7 +1476,8 @@ async fn handle_fs(
             compressed,
         } => {
             if let Some(job) = fs::get_job(id, write_jobs) {
-                if let Err(err) = job
+                let job_conn_id = job.conn_id;
+                match job
                     .write(FileTransferBlock {
                         id,
                         file_num,
@@ -1299,7 +1487,35 @@ async fn handle_fs(
                     })
                     .await
                 {
-                    send_raw(fs::new_error(id, err, file_num), &tx);
+                    Ok(()) => {
+                        if let Ok(rx_identity) = make_cm_transfer_identity(
+                            job_conn_id,
+                            crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                            id,
+                        ) {
+                            let _ = crate::dauverse::DauverseRuntime::global()
+                                .transfer_queue
+                                .update_engine_progress_scoped(&rx_identity, job.transferred(), 0);
+                        }
+                    }
+                    Err(err) => {
+                        if let Ok(rx_identity) = make_cm_transfer_identity(
+                            job_conn_id,
+                            crate::dauverse::transfer_guard::TransferDirection::DownloadToLocal,
+                            id,
+                        ) {
+                            let _ = crate::dauverse::DauverseRuntime::global()
+                                .transfer_queue
+                                .track_engine_transfer_finish_scoped(
+                                    &rx_identity,
+                                    None,
+                                    false,
+                                    false,
+                                    Some(&err.to_string()),
+                                );
+                        }
+                        send_raw(fs::new_error(id, err, file_num), &tx);
+                    }
                 }
             }
         }
@@ -1391,12 +1607,35 @@ async fn handle_fs(
             conn_id,
             overwrite_detection,
         } => {
+            let tx_identity = match make_cm_transfer_identity(
+                conn_id,
+                crate::dauverse::transfer_guard::TransferDirection::UploadToRemote,
+                id,
+            ) {
+                Ok(v) => v,
+                Err(id_err) => {
+                    crate::dauverse::DauverseRuntime::global().security.append_audit(
+                        "FILE_TRANSFER_HOST",
+                        "OUTBOUND_FILE_READ_GUARD",
+                        "DENIED",
+                        &id_err,
+                    );
+                    let _ = tx.send(Data::ReadJobInitResult {
+                        id,
+                        file_num,
+                        include_hidden,
+                        conn_id,
+                        result: Err(id_err),
+                    });
+                    return;
+                }
+            };
             start_read_job(
                 path,
                 file_num,
                 include_hidden,
                 id,
-                conn_id,
+                tx_identity.conn_id,
                 overwrite_detection,
                 read_jobs,
                 tx,

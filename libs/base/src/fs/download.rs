@@ -1,7 +1,9 @@
 use super::{
-    get_string, is_write_need_confirmation, join_validated_path, validate_file_name_no_traversal,
-    validate_no_symlink_components, verify_staging_file_sha256, DataSource, DataStream,
-    DigestCheckResult, TransferJob,
+    create_exclusive_staging_file_no_follow, ensure_destination_safe_for_overwrite, get_string,
+    is_write_need_confirmation, join_validated_path, open_readonly_no_follow_single_link,
+    validate_file_name_no_traversal, validate_no_symlink_components,
+    verify_staging_file_sha256_confined, write_exclusive_digest_file_no_follow, DataSource,
+    DataStream, DigestCheckResult, TransferJob,
 };
 use crate::message_proto::{
     file_transfer_send_confirm_request, FileEntry, FileTransferBlock, FileTransferDigest,
@@ -99,14 +101,6 @@ pub(super) fn validated_target(base: &PathBuf, name: &str) -> ResultType<PathBuf
 
 fn remove_if_exists(path: &Path) -> ResultType<()> {
     match std::fs::remove_file(path) {
-        Ok(()) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
-        Err(err) => Err(err.into()),
-    }
-}
-
-async fn remove_if_exists_async(path: &Path) -> ResultType<()> {
-    match fs::remove_file(path).await {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err.into()),
@@ -238,6 +232,8 @@ impl TransferJob {
         result?;
         #[cfg(windows)]
         let pre_canon_root = self.capture_download_root_before_open(file_num)?;
+        #[cfg(not(windows))]
+        let pre_canon_root: Option<PathBuf> = None;
         let target = self.download_target(file_num)?;
         let staging = PathBuf::from(format!("{}.download", target.display()));
         let digest = PathBuf::from(format!("{}.digest", target.display()));
@@ -255,45 +251,50 @@ impl TransferJob {
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).await?;
         }
-        remove_if_exists_async(&staging).await?;
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&staging)
-            .await?;
-        #[cfg(windows)]
-        super::verify_windows_raw_handle_confined(
-            std::os::windows::io::AsRawHandle::as_raw_handle(&file),
-            pre_canon_root.as_deref(),
-        )?;
+        let digest_payload = serde_json::to_string(&self.digest)?;
+        let target_clone = target.clone();
+        let staging_clone = staging.clone();
+        let digest_clone = digest.clone();
+        let root_clone = pre_canon_root.clone();
+        let std_file = tokio::task::spawn_blocking(move || -> ResultType<std::fs::File> {
+            ensure_destination_safe_for_overwrite(&target_clone, root_clone.as_deref())?;
+            let f = create_exclusive_staging_file_no_follow(&staging_clone, root_clone.as_deref())?;
+            write_exclusive_digest_file_no_follow(
+                &digest_clone,
+                digest_payload.as_bytes(),
+                root_clone.as_deref(),
+            )?;
+            Ok(f)
+        })
+        .await??;
         self.file_num = file_num;
-        self.data_stream = Some(DataStream::FileStream(file));
-        remove_if_exists_async(&digest).await?;
-        let mut metadata = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&digest)
-            .await?;
-        metadata
-            .write_all(serde_json::to_string(&self.digest)?.as_bytes())
-            .await?;
-        metadata.flush().await?;
+        self.data_stream = Some(DataStream::FileStream(tokio::fs::File::from_std(std_file)));
         Ok(())
     }
 
     async fn resume_download(&mut self, file_num: i32, offset: u32) -> ResultType<()> {
         #[cfg(windows)]
         let pre_canon_root = self.capture_download_root_before_open(file_num)?;
+        #[cfg(not(windows))]
+        let pre_canon_root: Option<PathBuf> = None;
         let target = self.download_target(file_num)?;
         if fs::try_exists(&target).await? {
             bail!("download overwrite requires confirmation");
         }
-        let digest = fs::metadata(format!("{}.digest", target.display())).await?;
-        if !digest.is_file() {
-            bail!("download resume metadata is not a regular file");
-        }
+        let digest_path = PathBuf::from(format!("{}.digest", target.display()));
+        let root_for_digest = pre_canon_root.clone();
+        tokio::task::spawn_blocking(move || -> ResultType<()> {
+            let _ro = open_readonly_no_follow_single_link(&digest_path, root_for_digest.as_deref())?;
+            Ok(())
+        })
+        .await??;
+
         let mut open_opts = OpenOptions::new();
         open_opts.write(true);
+        #[cfg(unix)]
+        {
+            open_opts.custom_flags(hbb_common::libc::O_NOFOLLOW);
+        }
         #[cfg(windows)]
         {
             open_opts.custom_flags(0x0020_0000);
@@ -346,26 +347,36 @@ impl TransferJob {
 
     pub fn finish_download(&self) -> ResultType<()> {
         if !self.is_download() {
-            self.modify_time();
-            return Ok(());
+            return self.try_finalize_write_files();
         }
         if self.data_stream.is_none() {
             return Ok(());
         }
+        #[cfg(windows)]
+        let pre_canon_root = self.capture_download_root_before_open(self.file_num)?;
+        #[cfg(not(windows))]
+        let pre_canon_root: Option<PathBuf> = None;
         let target = self.download_target(self.file_num)?;
         if target.try_exists()? && self.download_confirmation_offset(self.file_num) != Some(0) {
             bail!("download overwrite requires confirmation");
         }
+        ensure_destination_safe_for_overwrite(&target, pre_canon_root.as_deref())?;
         let entry = self
             .files
             .get(self.file_num as usize)
             .ok_or_else(|| anyhow!("Wrong file number"))?;
         let staging = PathBuf::from(format!("{}.download", target.display()));
-        if !entry.sha256.trim().is_empty() {
-            verify_staging_file_sha256(&staging, entry.size, entry.sha256.trim())?;
-        }
+        verify_staging_file_sha256_confined(
+            &staging,
+            entry.size,
+            entry.sha256.trim(),
+            pre_canon_root.as_deref(),
+        )?;
         std::fs::rename(&staging, &target)?;
-        remove_if_exists(&PathBuf::from(format!("{}.digest", target.display())))?;
+        let digest_path = PathBuf::from(format!("{}.digest", target.display()));
+        if open_readonly_no_follow_single_link(&digest_path, pre_canon_root.as_deref()).is_ok() {
+            remove_if_exists(&digest_path)?;
+        }
         filetime::set_file_mtime(
             &target,
             filetime::FileTime::from_unix_time(entry.modified_time as _, 0),

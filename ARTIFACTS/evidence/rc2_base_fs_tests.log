@@ -12,6 +12,7 @@ warning: `package.homepage` is redundant with `package.repository`
    = note: `cargo::redundant_homepage` is set to `warn` by default
 help: consider removing `package.homepage`
 warning: `enigo` (manifest) generated 1 warning
+   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
 warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
    --> libs/hbb_common/src/lib.rs:192:41
     |
@@ -32,12 +33,11 @@ help: replace the use of the deprecated method
 365 +                     .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
     |
 
-   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
 warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_common` to apply 1 suggestion)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.43s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.00s
      Running unittests src/lib.rs (target/debug/build/base/ef3382270ef47cae/out/base-ef3382270ef47cae)
 
-running 26 tests
+running 27 tests
 test fs::android::metadata_tests::negative_modification_time_is_unknown ... ok
 test fs::android::tests::document_paths_cannot_escape_the_selected_location ... ok
 test config::keys::tests::key_names_do_not_collide_with_hbb_common ... ok
@@ -48,22 +48,23 @@ test fs::download_tests::download_recovers_interrupted_transfer ... ok
 test fs::download_tests::download_refuses_linked_target_and_staging_files ... ok
 test fs::download_tests::download_refuses_symlink_destination_directory ... ok
 test fs::download_tests::download_requires_confirmation_to_overwrite ... ok
+test fs::android::tests::selected_folder_transfers_directly_and_preserves_data_on_publish_failure ... ok
 test fs::download_tests::download_requires_separate_confirmation_for_each_existing_file ... ok
-test fs::download_tests::f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch ... ok
 test fs::tests::compressed_file_extensions_ignore_case ... ok
+test fs::download_tests::f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch ... ok
 test fs::tests::f16_new_read_populates_sha256_and_detects_mid_transfer_mutation_and_corrupted_staging ... ok
 test fs::tests::path_traversal_e2e_write_rejects_absolute_path ... ok
 test fs::tests::path_traversal_e2e_write_rejects_relative_escape ... ok
 test fs::tests::path_traversal_e2e_write_rejects_symlink_escape ... ok
 test fs::tests::rename_file_accepts_valid_new_name ... ok
 test fs::tests::rename_file_rejects_invalid_new_name ... ok
+test fs::tests::ft010_b02_fresh_and_resume_upload_staging_hardlinks_preserve_outside_victim_bytes ... ok
 test fs::tests::set_files_allows_single_empty_name_for_single_file_transfer ... ok
 test fs::tests::set_files_rejects_empty_name_in_multi_file_transfer ... ok
 test fs::tests::set_files_rejects_mixed_entries_when_one_is_traversal ... ok
 test platform::linux::tests::test_get_home_dir_trusted ... ok
 test platform::linux::tests::test_shell_quote_metacharacters ... ok
 test platform::linux::tests::test_shell_quote_single_quotes ... ok
-test fs::android::tests::selected_folder_transfers_directly_and_preserves_data_on_publish_failure ... ok
 
-test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
 
