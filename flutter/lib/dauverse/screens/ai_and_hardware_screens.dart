@@ -34,15 +34,25 @@ class _DauverseAiLiveStatusScreenState extends State<DauverseAiLiveStatusScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 660),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(i18n.t('AI Live Status — Bảng theo dõi tác vụ AI thực tế (HTTP + HMAC)', 'AI Live Status — Live HMAC-Verified Bridge Tasks'),
-                        style: DauverseTypography.heading(p, size: 19)),
+                    Text(
+                      i18n.t(
+                        'AI Live Status — Bảng theo dõi tác vụ AI thực tế (HTTP + HMAC)',
+                        'AI Live Status — Live HMAC-Verified Bridge Tasks',
+                      ),
+                      style: DauverseTypography.heading(p, size: 19),
+                    ),
+                    const SizedBox(height: 4),
                     Text(
                       '$bridgeUrl  •  Rejected Spoof/Replay: $rejectedCount  •  ${i18n.t("Không tạo tác vụ/tiến độ giả", "Zero fake tasks or synthetic progress")}',
                       style: DauverseTypography.caption(p),
@@ -50,9 +60,9 @@ class _DauverseAiLiveStatusScreenState extends State<DauverseAiLiveStatusScreen>
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
               Wrap(
                 spacing: 10,
+                runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   DropdownButton<String>(
@@ -98,13 +108,19 @@ class _DauverseAiLiveStatusScreenState extends State<DauverseAiLiveStatusScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(i18n.t('Danh mục Adapter Nguồn AI & Trạng thái Hỗ trợ trung thực', 'Supported AI Sources & Honest Adapter Capabilities'),
-                      style: DauverseTypography.heading(p, size: 15)),
+                  Text(
+                    i18n.t(
+                      'Danh mục Adapter Nguồn AI & Trạng thái Hỗ trợ trung thực',
+                      'Supported AI Sources & Honest Adapter Capabilities',
+                    ),
+                    style: DauverseTypography.heading(p, size: 15),
+                  ),
                   const SizedBox(height: 8),
                   for (final src in catalog)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           DauverseStatusBadge(
                             label: src['support_status']?.toString() ?? 'UNKNOWN',
@@ -148,18 +164,24 @@ class _DauverseAiLiveStatusScreenState extends State<DauverseAiLiveStatusScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              DauverseStatusBadge(label: status, color: statusColor),
-              const SizedBox(width: 10),
-              Text('${t['source']}', style: DauverseTypography.heading(p, size: 15)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '• ${t['project_id']} • ${t['device_id']}',
-                  style: DauverseTypography.caption(p),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  DauverseStatusBadge(label: status, color: statusColor),
+                  Text('${t['source']}', style: DauverseTypography.heading(p, size: 15)),
+                  Text(
+                    '• ${t['project_id']} • ${t['device_id']}',
+                    style: DauverseTypography.caption(p),
+                  ),
+                ],
               ),
               Text(updatedAt, style: DauverseTypography.kpi(p, size: 11, color: p.cyan)),
             ],
@@ -221,28 +243,38 @@ class _DauverseNotificationCenterScreenState extends State<DauverseNotificationC
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(i18n.t('AI Notification Center — Hàng đợi thực tế & Nhật ký Offline', 'AI Notification Center — Live Rust History & Offline Journal'),
-                        style: DauverseTypography.heading(p, size: 19)),
                     Text(
                       i18n.t(
-                        'Đồng bộ trực tiếp với Rust NotificationCenter • Tự ẩn 5–8s không chiếm focus • Cấm phê duyệt AI tự động qua thông báo.',
-                        'Synced directly with Rust NotificationCenter • 5–8s non-focus-stealing toast • Notification AI auto-approval blocked.',
+                        'AI Notification Center — Hàng đợi thực tế & Nhật ký Offline',
+                        'AI Notification Center — Live History & Offline Journal',
+                      ),
+                      style: DauverseTypography.heading(p, size: 19),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      i18n.t(
+                        'Đồng bộ trực tiếp với NotificationCenter • Tự ẩn 5–8s không chiếm focus • Cấm phê duyệt AI tự động qua thông báo.',
+                        'Synced directly with NotificationCenter • 5–8s non-focus-stealing toast • Notification AI auto-approval blocked.',
                       ),
                       style: DauverseTypography.caption(p),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   OutlinedButton(
                     onPressed: () {
@@ -264,7 +296,7 @@ class _DauverseNotificationCenterScreenState extends State<DauverseNotificationC
           const SizedBox(height: 14),
           DauverseCard(
             child: Wrap(
-              spacing: 18,
+              spacing: 16,
               runSpacing: 10,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
@@ -278,16 +310,20 @@ class _DauverseNotificationCenterScreenState extends State<DauverseNotificationC
                   selected: c.doNotDisturb,
                   onSelected: (v) => c.updateNotificationPrefs(dnd: v),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(i18n.t('Tự ẩn Toast:', 'Auto-hide:'), style: DauverseTypography.caption(p)),
-                    Slider(
-                      min: 5,
-                      max: 8,
-                      divisions: 3,
-                      value: c.toastAutoHideSeconds.toDouble(),
-                      onChanged: (v) => c.updateNotificationPrefs(autoHideSec: v.round()),
+                    SizedBox(
+                      width: 135,
+                      child: Slider(
+                        min: 5,
+                        max: 8,
+                        divisions: 3,
+                        value: c.toastAutoHideSeconds.toDouble(),
+                        onChanged: (v) => c.updateNotificationPrefs(autoHideSec: v.round()),
+                      ),
                     ),
                     Text('${c.toastAutoHideSeconds}s', style: DauverseTypography.kpi(p, size: 13, color: p.cyan)),
                   ],
@@ -366,7 +402,7 @@ class DauverseHardwareMonitorScreen extends StatelessWidget {
     final scope = hw['telemetry_scope']?.toString() ?? 'LOCAL_HOST_SENSORS';
     final cpuBrand = hw['cpu_brand']?.toString() ?? 'System CPU';
     final cpuPct = (hw['cpu_usage_pct'] as num?)?.toStringAsFixed(1) ?? '0.0';
-    final cpuTemp = hw['cpu_temp_c'] != null ? '${hw['cpu_temp_c']} °C' : 'Sensor N/A (VM)';
+    final cpuTemp = hw['cpu_temp_c'] != null ? '${hw['cpu_temp_c']} °C' : 'Sensor N/A';
     final ramUsed = (hw['ram_used_gb'] as num?)?.toStringAsFixed(2) ?? '0.00';
     final ramTotal = (hw['ram_total_gb'] as num?)?.toStringAsFixed(2) ?? '0.00';
     final ramPct = (hw['ram_usage_pct'] as num?)?.toStringAsFixed(1) ?? '0.0';
@@ -375,102 +411,132 @@ class DauverseHardwareMonitorScreen extends StatelessWidget {
     final uptimeHrs = (((hw['system_uptime_secs'] as num?)?.toDouble() ?? 0.0) / 3600.0).toStringAsFixed(1);
     final gpuModel = hw['gpu_model']?.toString() ?? 'No Local NVIDIA GPU Detected';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, viewport) {
+        final contentWidth = (viewport.maxWidth - 40).clamp(240.0, 2400.0);
+        final int cols = contentWidth >= 1120 ? 4 : (contentWidth >= 560 ? 2 : 1);
+        final double cardW = (contentWidth - (cols - 1) * 14.0) / cols;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 680),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          i18n.t(
+                            'Hardware Monitor — Giám sát Phần cứng Máy Cục bộ thực tế',
+                            'Hardware Monitor — Live Local Host OS & GPU Sensors',
+                          ),
+                          style: DauverseTypography.heading(p, size: 19),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          i18n.t(
+                            'Phạm vi đo: Máy đang chạy ứng dụng ($scope) qua sysinfo + nvidia-smi (CREATE_NO_WINDOW, cache 4s).',
+                            'Measurement scope: Current host ($scope) via sysinfo + cached nvidia-smi (CREATE_NO_WINDOW).',
+                          ),
+                          style: DauverseTypography.caption(p),
+                        ),
+                      ],
+                    ),
+                  ),
+                  DauverseStatusBadge(label: scope, color: p.cyan),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (alerts.isNotEmpty) ...[
+                DauverseCard(
+                  accentBorder: p.danger,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final a in alerts)
+                        Text(
+                          'ALERT [${a['code']}]: ${a['message']}',
+                          style: DauverseTypography.kpi(p, size: 12, color: p.danger),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  _metricBox(p, cardW, 'CPU ($cpuBrand)', '$cpuPct%', 'Temp: $cpuTemp', p.cyan),
+                  _metricBox(p, cardW, 'RAM Memory', '$ramUsed / $ramTotal GB', 'Usage: $ramPct% (Alert >=90%)', p.blue),
+                  _metricBox(
+                    p,
+                    cardW,
+                    'GPU / VRAM',
+                    gpuModel,
+                    hw['gpu_temp_c'] != null ? '${hw['gpu_temp_c']}°C • ${hw['vram_used_mb']} MB' : 'NVML / nvidia-smi Idle',
+                    p.purple,
+                  ),
+                  _metricBox(p, cardW, 'Disk & Uptime', '$diskFree GB Free', 'Total: $diskTotal GB • Up ${uptimeHrs}h', p.success),
+                ],
+              ),
+              const SizedBox(height: 18),
+              DauverseCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(i18n.t('Hardware Monitor — Giám sát Phần cứng Máy Cục bộ thực tế', 'Hardware Monitor — Live Local Host OS & GPU Sensors'),
-                        style: DauverseTypography.heading(p, size: 19)),
                     Text(
-                      i18n.t(
-                        'Phạm vi đo: Máy đang chạy ứng dụng ($scope) qua sysinfo + nvidia-smi (CREATE_NO_WINDOW, cache 4s).',
-                        'Measurement scope: Current host ($scope) via sysinfo + cached nvidia-smi (CREATE_NO_WINDOW).',
-                      ),
-                      style: DauverseTypography.caption(p),
+                      i18n.t('Biểu đồ Lịch sử CPU & RAM thực tế', 'Live Historical CPU & RAM Sparklines'),
+                      style: DauverseTypography.heading(p, size: 16),
                     ),
+                    const SizedBox(height: 12),
+                    DauverseSparkline(values: c.cpuHistory.isEmpty ? const [0, 0] : c.cpuHistory, color: p.cyan, height: 72),
+                    const SizedBox(height: 14),
+                    DauverseSparkline(values: c.ramHistory.isEmpty ? const [0, 0] : c.ramHistory, color: p.blue, height: 72),
                   ],
                 ),
               ),
-              DauverseStatusBadge(label: scope, color: p.cyan),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (alerts.isNotEmpty) ...[
-            DauverseCard(
-              accentBorder: p.danger,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final a in alerts)
-                    Text('ALERT [${a['code']}]: ${a['message']}',
-                        style: DauverseTypography.kpi(p, size: 12, color: p.danger)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-          ],
-          Wrap(
-            spacing: 14,
-            runSpacing: 14,
-            children: [
-              _metricBox(p, 'CPU ($cpuBrand)', '$cpuPct%', 'Temp: $cpuTemp', p.cyan),
-              _metricBox(p, 'RAM Memory', '$ramUsed / $ramTotal GB', 'Usage: $ramPct% (Alert >=90%)', p.blue),
-              _metricBox(p, 'GPU / VRAM', gpuModel,
-                  hw['gpu_temp_c'] != null ? '${hw['gpu_temp_c']}°C • ${hw['vram_used_mb']} MB' : 'NVML / nvidia-smi Idle', p.purple),
-              _metricBox(p, 'Disk & Uptime', '$diskFree GB Free', 'Total: $diskTotal GB • Up ${uptimeHrs}h', p.success),
-            ],
-          ),
-          const SizedBox(height: 18),
-          DauverseCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(i18n.t('Biểu đồ Lịch sử CPU & RAM thực tế', 'Live Historical CPU & RAM Sparklines'),
-                    style: DauverseTypography.heading(p, size: 16)),
-                const SizedBox(height: 12),
-                DauverseSparkline(values: c.cpuHistory.isEmpty ? const [0, 0] : c.cpuHistory, color: p.cyan, height: 72),
-                const SizedBox(height: 14),
-                DauverseSparkline(values: c.ramHistory.isEmpty ? const [0, 0] : c.ramHistory, color: p.blue, height: 72),
-              ],
-            ),
-          ),
-          if (procs.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            DauverseCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(i18n.t('Tiến trình AI / Toolchain phát hiện trên máy này', 'Detected Local AI / Toolchain Processes'),
-                      style: DauverseTypography.heading(p, size: 15)),
-                  const SizedBox(height: 8),
-                  for (final pr in procs.take(8))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 3),
-                      child: Text(
-                        'PID ${pr['pid']} • ${pr['name']} (${pr['category']}) — CPU ${(pr['cpu_pct'] as num?)?.toStringAsFixed(1) ?? "0"}% • RAM ${pr['memory_mb']} MB',
-                        style: DauverseTypography.kpi(p, size: 12),
+              if (procs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                DauverseCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        i18n.t('Tiến trình AI / Toolchain phát hiện trên máy này', 'Detected Local AI / Toolchain Processes'),
+                        style: DauverseTypography.heading(p, size: 15),
                       ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
+                      const SizedBox(height: 8),
+                      for (final pr in procs.take(8))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Text(
+                            'PID ${pr['pid']} • ${pr['name']} (${pr['category']}) — CPU ${(pr['cpu_pct'] as num?)?.toStringAsFixed(1) ?? "0"}% • RAM ${pr['memory_mb']} MB',
+                            style: DauverseTypography.kpi(p, size: 12),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _metricBox(DauversePalette p, String title, String val, String sub, Color color) {
+  Widget _metricBox(DauversePalette p, double width, String title, String val, String sub, Color color) {
     return SizedBox(
-      width: 280,
+      width: width,
       child: DauverseCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,7 +545,7 @@ class DauverseHardwareMonitorScreen extends StatelessWidget {
             const SizedBox(height: 6),
             Text(val, style: DauverseTypography.kpi(p, size: 18, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
-            Text(sub, style: DauverseTypography.caption(p, size: 11)),
+            Text(sub, style: DauverseTypography.caption(p, size: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
           ],
         ),
       ),

@@ -81,16 +81,21 @@ fn make_tray() -> hbb_common::ResultType<()> {
         tray_menu.append_items(&[&open_i]).ok();
     }
     let tooltip = |count: usize| {
+        let brand = if crate::is_rustdesk() {
+            "DAUVERSE Remote Desktop".to_owned()
+        } else {
+            crate::get_app_name()
+        };
         if count == 0 {
             format!(
                 "{} {}",
-                crate::get_app_name(),
+                brand,
                 translate("Service is running".to_owned()),
             )
         } else {
             format!(
                 "{} - {}\n{}",
-                crate::get_app_name(),
+                brand,
                 translate("Ready".to_owned()),
                 translate("{".to_string() + &format!("{count}") + "} sessions"),
             )

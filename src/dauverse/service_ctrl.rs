@@ -1228,6 +1228,396 @@ impl ServiceController {
             Ok(refreshed)
         }
     }
+
+    pub fn read_live_host_capabilities(&self) -> serde_json::Value {
+        let deny = is_conservative_access_denied();
+        let cfg2 = read_durable_config2_at(&Config2::file())
+            .map(|(c, _)| c)
+            .unwrap_or_else(|_| Config2::get());
+        let opt_enabled = |key: &str| -> bool {
+            if deny {
+                return false;
+            }
+            let v = effective_option_from_config2(&cfg2, key);
+            hbb_common::config::option2bool(key, &v)
+        };
+        let approve_mode = effective_option_from_config2(&cfg2, "approve-mode");
+        let stop_service = hbb_common::config::option2bool(
+            "stop-service",
+            &effective_option_from_config2(&cfg2, "stop-service"),
+        );
+        let direct_ip = hbb_common::config::option2bool(
+            hbb_common::config::keys::OPTION_DIRECT_SERVER,
+            &effective_option_from_config2(&cfg2, hbb_common::config::keys::OPTION_DIRECT_SERVER),
+        );
+        serde_json::json!({
+            "conservative_deny_latched": deny,
+            "stop_service": stop_service,
+            "approve_mode": if approve_mode.is_empty() { "password_and_click".to_owned() } else { approve_mode },
+            "direct_ip_access_enabled": direct_ip,
+            "enable_keyboard": opt_enabled("enable-keyboard"),
+            "enable_clipboard": opt_enabled("enable-clipboard"),
+            "enable_file_transfer": opt_enabled("enable-file-transfer"),
+            "enable_audio": opt_enabled("enable-audio"),
+            "enable_tunnel": opt_enabled("enable-tunnel"),
+            "enable_remote_restart": opt_enabled("enable-remote-restart"),
+            "enable_record_session": hbb_common::config::option2bool(
+                "allow-auto-record-incoming",
+                &effective_option_from_config2(&cfg2, "allow-auto-record-incoming"),
+            ),
+        })
+    }
+
+    pub fn windows_access_readiness(&self) -> serde_json::Value {
+        let st = self.status();
+        let owned_installed = st.service_owned_by_dauverse == Some(true);
+        let owned_running = owned_installed && st.service_state == ServiceRunState::Running;
+        let has_perm_pw = Config::has_permanent_password();
+        let readiness_code = if st.external_service_collision_detected {
+            "BLOCKED_EXTERNAL_RUSTDESK_SERVICE_COLLISION"
+        } else if owned_running && st.unattended_access_enabled && has_perm_pw {
+            "READY_PRELOGIN_AND_UNATTENDED"
+        } else if owned_running {
+            "SERVICE_RUNNING_AWAITING_UNATTENDED_OR_PASSWORD"
+        } else {
+            "PORTABLE_OR_USER_SESSION_ONLY"
+        };
+        serde_json::json!({
+            "readiness_code": readiness_code,
+            "windows_password_preserved": true,
+            "windows_auto_login_disabled": true,
+            "owned_service_installed": owned_installed,
+            "owned_service_running": owned_running,
+            "external_rustdesk_collision": st.external_service_collision_detected,
+            "pre_login_winlogon_ready": owned_running,
+            "lock_screen_uac_ready": owned_running,
+            "auto_start_user_logon": st.auto_start_with_windows,
+            "unattended_access_enabled": st.unattended_access_enabled,
+            "permanent_password_set": has_perm_pw,
+            "service_state": st.service_state,
+        })
+    }
+
+    pub fn manage_owned_windows_service(
+        &self,
+        action: &str,
+        user_confirmed: bool,
+    ) -> Result<ServiceStartupState, String> {
+        if !user_confirmed {
+            return Err(
+                "SECURITY_DENY_USER_CONFIRMATION_REQUIRED: Explicit user confirmation is required for Windows Service operations."
+                    .to_owned(),
+            );
+        }
+        let norm_action = action.trim().to_ascii_uppercase();
+        if !matches!(
+            norm_action.as_str(),
+            "INSTALL_AND_START_ELEVATED" | "START_ELEVATED" | "STOP" | "UNINSTALL_ELEVATED"
+        ) {
+            return Err(format!("UNSUPPORTED_SERVICE_ACTION: {action}"));
+        }
+
+        let current_status = self.status();
+        if current_status.external_service_collision_detected
+            || current_status.service_owned_by_dauverse == Some(false)
+        {
+            return Err(
+                "F03_EXTERNAL_RUSTDESK_SERVICE_COLLISION: An external RustDesk installation owns Windows Service 'RustDesk'; DAUVERSE refuses to modify or delete it."
+                    .to_owned(),
+            );
+        }
+
+        #[cfg(all(target_os = "windows", not(test)))]
+        {
+            let exe_path = std::env::current_exe()
+                .map_err(|e| format!("SERVICE_CURRENT_EXE_FAILED: {e}"))?;
+            let exe_dir = exe_path
+                .parent()
+                .ok_or_else(|| "SERVICE_EXE_DIR_MISSING".to_owned())?;
+            check_no_symlink_or_reparse_component(exe_dir)?;
+            let svc_exe = exe_dir.join("rustdesk.exe");
+            let main_exe = exe_dir.join("DAUVERSE_REMOTE.exe");
+            if !svc_exe.is_file() || !main_exe.is_file() {
+                return Err(format!(
+                    "SERVICE_BINARY_NOT_FOUND: Expected DAUVERSE_REMOTE.exe and rustdesk.exe inside '{}'",
+                    exe_dir.display()
+                ));
+            }
+            check_no_symlink_or_reparse_component(&svc_exe)?;
+
+            if norm_action == "STOP" {
+                if current_status.service_owned_by_dauverse != Some(true) {
+                    return Err(
+                        "SERVICE_NOT_REGISTERED_BY_DAUVERSE: Owned Windows Service is not registered."
+                            .to_owned(),
+                    );
+                }
+                stop_owned_windows_scm_service("RustDesk")?;
+                return Ok(self.status());
+            }
+
+            let exe_dir_lc = exe_dir.to_string_lossy().replace('/', "\\").to_ascii_lowercase();
+            let is_ephemeral_portable_dir =
+                exe_dir_lc.contains("\\appdata\\local\\") || exe_dir_lc.contains("\\temp\\");
+            if norm_action == "INSTALL_AND_START_ELEVATED"
+                && (!crate::platform::is_installed() || is_ephemeral_portable_dir)
+            {
+                return Err(
+                    "SERVICE_REQUIRES_NSIS_INSTALLATION: Run DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe from the installed Program Files directory before registering the system-wide pre-login Windows Service (portable extraction directories are not registered in SCM)."
+                        .to_owned(),
+                );
+            }
+
+            let svc_exe_str = svc_exe.to_string_lossy().replace('"', "");
+            let cmd_line = match norm_action.as_str() {
+                "INSTALL_AND_START_ELEVATED" => {
+                    let _ = self.commit_security_options(&[("stop-service", "N")], false);
+                    set_conservative_access_denied(false);
+                    format!(
+                        "/c sc create RustDesk binPath= \"\\\"{svc_exe_str}\\\" --service\" start= auto DisplayName= \"DAUVERSE Remote Desktop Service (RustDesk Engine)\" & sc failure RustDesk reset= 86400 actions= restart/5000/restart/15000/restart/30000 & sc start RustDesk"
+                    )
+                }
+                "START_ELEVATED" => {
+                    if current_status.service_owned_by_dauverse != Some(true) {
+                        return Err(
+                            "SERVICE_NOT_REGISTERED_BY_DAUVERSE: Install the owned Windows Service first."
+                                .to_owned(),
+                        );
+                    }
+                    let _ = self.commit_security_options(&[("stop-service", "N")], false);
+                    set_conservative_access_denied(false);
+                    "/c sc start RustDesk".to_owned()
+                }
+                "UNINSTALL_ELEVATED" => {
+                    if current_status.service_owned_by_dauverse != Some(true) {
+                        return Err(
+                            "SERVICE_NOT_REGISTERED_BY_DAUVERSE: No owned Windows Service to uninstall."
+                                .to_owned(),
+                        );
+                    }
+                    "/c sc stop RustDesk & sc delete RustDesk".to_owned()
+                }
+                _ => return Err(format!("UNSUPPORTED_SERVICE_ACTION: {action}")),
+            };
+
+            let launched = crate::platform::windows::run_uac("cmd.exe", &cmd_line)
+                .map_err(|e| format!("SERVICE_UAC_ELEVATION_FAILED: {e}"))?;
+            if !launched {
+                return Err(
+                    "SERVICE_UAC_CANCELLED_OR_DENIED: Administrator UAC prompt was declined or failed."
+                        .to_owned(),
+                );
+            }
+
+            for _ in 0..25 {
+                std::thread::sleep(Duration::from_millis(300));
+                let st = self.status();
+                match norm_action.as_str() {
+                    "INSTALL_AND_START_ELEVATED" | "START_ELEVATED" => {
+                        if st.service_owned_by_dauverse == Some(true)
+                            && st.service_state == ServiceRunState::Running
+                        {
+                            let mut g = self.state.lock().unwrap();
+                            g.boss_service_install_approved = true;
+                            g.pre_login_session_helper_enabled = true;
+                            drop(g);
+                            return Ok(self.status());
+                        }
+                    }
+                    "UNINSTALL_ELEVATED" => {
+                        if st.service_owned_by_dauverse.is_none() {
+                            let mut g = self.state.lock().unwrap();
+                            g.pre_login_session_helper_enabled = false;
+                            drop(g);
+                            return Ok(self.status());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(self.status())
+        }
+
+        #[cfg(not(all(target_os = "windows", not(test))))]
+        {
+            Err(
+                "WINDOWS_SCM_REQUIRES_WINDOWS_HOST: Windows Service Control Manager (SCM) operations are only executable on a native Windows host."
+                    .to_owned(),
+            )
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LanInterfaceInfo {
+    pub interface_name: String,
+    pub friendly_name: String,
+    pub ipv4: String,
+    pub netmask: String,
+    pub mac: Option<String>,
+    pub is_default_route: bool,
+}
+
+pub fn format_connection_id_display(raw_id: &str) -> String {
+    let trimmed = raw_id.trim();
+    if trimmed.len() >= 6 && trimmed.chars().all(|c| c.is_ascii_digit()) {
+        let chars: Vec<char> = trimmed.chars().collect();
+        let mut out = String::with_capacity(trimmed.len() + 4);
+        let first_group = if chars.len() % 3 == 0 { 3 } else { chars.len() % 3 };
+        for (idx, ch) in chars.iter().enumerate() {
+            if idx > 0 && idx >= first_group && (idx - first_group) % 3 == 0 {
+                out.push(' ');
+            }
+            out.push(*ch);
+        }
+        out
+    } else {
+        trimmed.to_owned()
+    }
+}
+
+pub fn enumerate_active_lan_interfaces() -> Vec<LanInterfaceInfo> {
+    static CACHE: OnceLock<Mutex<Option<(Instant, Vec<LanInterfaceInfo>)>>> = OnceLock::new();
+    let cache_lock = CACHE.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cache_lock.lock() {
+        if let Some((ts, ref cached)) = *guard {
+            if ts.elapsed() < Duration::from_secs(5) {
+                return cached.clone();
+            }
+        }
+    }
+
+    let default_if_name = default_net::get_default_interface()
+        .ok()
+        .map(|iface| iface.name);
+    let mut seen_ips = HashSet::new();
+    let mut items = Vec::new();
+    for iface in default_net::get_interfaces() {
+        if iface.is_loopback() {
+            continue;
+        }
+        let is_default = default_if_name.as_deref() == Some(iface.name.as_str());
+        let friendly = iface
+            .friendly_name
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| iface.name.clone());
+        let mac_str = iface.mac_addr.map(|m| m.address().to_ascii_uppercase());
+        for v4 in &iface.ipv4 {
+            if v4.addr.is_loopback() || v4.addr.is_unspecified() || v4.addr.is_link_local() {
+                continue;
+            }
+            let ip_str = v4.addr.to_string();
+            if !seen_ips.insert(ip_str.clone()) {
+                continue;
+            }
+            items.push(LanInterfaceInfo {
+                interface_name: iface.name.clone(),
+                friendly_name: friendly.clone(),
+                ipv4: ip_str,
+                netmask: v4.netmask.to_string(),
+                mac: mac_str.clone(),
+                is_default_route: is_default,
+            });
+        }
+    }
+    items.sort_by(|a, b| {
+        b.is_default_route
+            .cmp(&a.is_default_route)
+            .then_with(|| a.interface_name.cmp(&b.interface_name))
+            .then_with(|| a.ipv4.cmp(&b.ipv4))
+    });
+    if let Ok(mut guard) = cache_lock.lock() {
+        *guard = Some((Instant::now(), items.clone()));
+    }
+    items
+}
+
+pub fn collect_connection_identity_snapshot(
+    public_ip: Option<String>,
+    public_ip_status: &str,
+) -> serde_json::Value {
+    let raw_id = Config::get_id();
+    let formatted_id = format_connection_id_display(&raw_id);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let synced_temp_pw = crate::ui_interface::temporary_password();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let synced_temp_pw = String::new();
+    let temp_pw = if !synced_temp_pw.trim().is_empty() {
+        synced_temp_pw
+    } else {
+        hbb_common::password_security::temporary_password()
+    };
+
+    let lan_interfaces = enumerate_active_lan_interfaces();
+    let lan_ips: Vec<String> = lan_interfaces.iter().map(|i| i.ipv4.clone()).collect();
+
+    let service_stopped =
+        hbb_common::config::option2bool("stop-service", &Config::get_option("stop-service"));
+    let direct_ip_enabled = hbb_common::config::option2bool(
+        hbb_common::config::keys::OPTION_DIRECT_SERVER,
+        &Config::get_option(hbb_common::config::keys::OPTION_DIRECT_SERVER),
+    );
+    let direct_port = Config::get_option("direct-access-port")
+        .trim()
+        .parse::<u16>()
+        .unwrap_or(21118);
+
+    #[cfg(all(feature = "flutter", not(any(target_os = "android", target_os = "ios"))))]
+    let (ui_status_num, ui_video_conns) = {
+        let st = crate::ui_interface::get_connect_status();
+        (st.status_num, st.video_conn_count)
+    };
+    #[cfg(not(all(feature = "flutter", not(any(target_os = "android", target_os = "ios")))))]
+    let (ui_status_num, ui_video_conns) = {
+        let raw = hbb_common::config::get_online_state();
+        (if raw > 0 { 1 } else if raw < 0 { -1 } else { 0 }, 0usize)
+    };
+
+    let engine_conns = active_live_engine_connection_count().max(ui_video_conns);
+    let effective_online_num = if service_stopped || is_conservative_access_denied() {
+        -1
+    } else if ui_status_num != 0 {
+        ui_status_num
+    } else {
+        let raw = hbb_common::config::get_online_state();
+        if raw > 0 {
+            1
+        } else if raw < 0 {
+            -1
+        } else {
+            0
+        }
+    };
+
+    let connection_status = if engine_conns > 0 {
+        "CONNECTED"
+    } else if effective_online_num < 0 {
+        "OFFLINE"
+    } else if effective_online_num > 0 {
+        "ONLINE"
+    } else {
+        "CONNECTING"
+    };
+
+    serde_json::json!({
+        "connection_id": raw_id,
+        "formatted_id": formatted_id,
+        "temporary_password": temp_pw,
+        "permanent_password_configured": Config::has_permanent_password(),
+        "lan_interfaces": lan_interfaces,
+        "lan_ips": lan_ips,
+        "public_ip": public_ip,
+        "public_ip_status": public_ip_status,
+        "direct_ip_access_enabled": direct_ip_enabled,
+        "direct_ip_port": direct_port,
+        "rendezvous_server": Config::get_rendezvous_server(),
+        "using_public_rendezvous": crate::using_public_server(),
+        "service_stopped": service_stopped,
+        "active_sessions_count": engine_conns,
+        "online_state_code": effective_online_num,
+        "connection_status": connection_status,
+    })
 }
 
 #[cfg(test)]

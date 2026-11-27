@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "DAUVERSE-REMOTE-DESKTOP-V1-SBOM",
-  "documentNamespace": "https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/sbom/v1.0.0",
+  "documentNamespace": "https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/sbom/v1.0.0-rc4.3",
   "creationInfo": {
-    "created": "2026-11-24T16:58:40Z",
+    "created": "2026-11-27T09:00:46Z",
     "creators": [
       "Tool: generate_sbom_and_notices.py",
       "Organization: DAUVERSE"
@@ -15,7 +15,7 @@
     {
       "SPDXID": "SPDXRef-RootPackage-DauverseRemoteDesktop",
       "name": "DAUVERSE-REMOTE-DESKTOP",
-      "versionInfo": "1.0.0",
+      "versionInfo": "1.0.0-rc4.3",
       "downloadLocation": "https://github.com/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP",
       "licenseConcluded": "AGPL-3.0-only",
       "licenseDeclared": "AGPL-3.0-only",
@@ -21258,7 +21258,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-auto-size-text-field-1035",
       "name": "auto_size_text_field",
-      "versionInfo": "2.2.4",
+      "versionInfo": "2.3.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21266,7 +21266,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/auto_size_text_field@2.2.4"
+          "referenceLocator": "pkg:pub/auto_size_text_field@2.3.0"
         }
       ]
     },
@@ -21438,7 +21438,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-built-value-1047",
       "name": "built_value",
-      "versionInfo": "8.10.1",
+      "versionInfo": "8.13.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21446,7 +21446,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/built_value@8.10.1"
+          "referenceLocator": "pkg:pub/built_value@8.13.0"
         }
       ]
     },
@@ -21498,7 +21498,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-characters-1051",
       "name": "characters",
-      "versionInfo": "1.4.1",
+      "versionInfo": "1.3.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21506,7 +21506,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/characters@1.4.1"
+          "referenceLocator": "pkg:pub/characters@1.3.0"
         }
       ]
     },
@@ -21558,7 +21558,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-clock-1055",
       "name": "clock",
-      "versionInfo": "1.1.3",
+      "versionInfo": "1.1.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21566,7 +21566,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/clock@1.1.3"
+          "referenceLocator": "pkg:pub/clock@1.1.1"
         }
       ]
     },
@@ -21588,7 +21588,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-collection-1057",
       "name": "collection",
-      "versionInfo": "1.19.1",
+      "versionInfo": "1.18.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21596,7 +21596,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/collection@1.19.1"
+          "referenceLocator": "pkg:pub/collection@1.18.0"
         }
       ]
     },
@@ -21648,7 +21648,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-crypto-1061",
       "name": "crypto",
-      "versionInfo": "3.0.6",
+      "versionInfo": "3.0.8",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21656,7 +21656,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/crypto@3.0.6"
+          "referenceLocator": "pkg:pub/crypto@3.0.8"
         }
       ]
     },
@@ -21708,7 +21708,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-dbus-1065",
       "name": "dbus",
-      "versionInfo": "0.7.11",
+      "versionInfo": "0.7.12",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21716,7 +21716,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/dbus@0.7.11"
+          "referenceLocator": "pkg:pub/dbus@0.7.12"
         }
       ]
     },
@@ -21843,7 +21843,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-equatable-1074",
       "name": "equatable",
-      "versionInfo": "2.0.7",
+      "versionInfo": "2.1.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21851,14 +21851,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/equatable@2.0.7"
+          "referenceLocator": "pkg:pub/equatable@2.1.0"
         }
       ]
     },
     {
       "SPDXID": "SPDXRef-Pkg-pub-extended-text-1075",
       "name": "extended_text",
-      "versionInfo": "15.0.2",
+      "versionInfo": "14.0.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21866,7 +21866,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/extended_text@15.0.2"
+          "referenceLocator": "pkg:pub/extended_text@14.0.0"
         }
       ]
     },
@@ -21888,7 +21888,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-fake-async-1077",
       "name": "fake_async",
-      "versionInfo": "1.3.3",
+      "versionInfo": "1.3.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -21896,7 +21896,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/fake_async@1.3.3"
+          "referenceLocator": "pkg:pub/fake_async@1.3.1"
         }
       ]
     },
@@ -22413,7 +22413,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-get-1112",
       "name": "get",
-      "versionInfo": "4.7.2",
+      "versionInfo": "4.7.3",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22421,14 +22421,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/get@4.7.2"
+          "referenceLocator": "pkg:pub/get@4.7.3"
         }
       ]
     },
     {
       "SPDXID": "SPDXRef-Pkg-pub-glob-1113",
       "name": "glob",
-      "versionInfo": "2.1.3",
+      "versionInfo": "2.2.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22436,14 +22436,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/glob@2.1.3"
+          "referenceLocator": "pkg:pub/glob@2.2.0"
         }
       ]
     },
     {
       "SPDXID": "SPDXRef-Pkg-pub-google-fonts-1114",
       "name": "google_fonts",
-      "versionInfo": "8.2.1",
+      "versionInfo": "6.3.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22451,7 +22451,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/google_fonts@8.2.1"
+          "referenceLocator": "pkg:pub/google_fonts@6.3.0"
         }
       ]
     },
@@ -22488,7 +22488,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-http-1117",
       "name": "http",
-      "versionInfo": "1.4.0",
+      "versionInfo": "1.6.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22496,14 +22496,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/http@1.4.0"
+          "referenceLocator": "pkg:pub/http@1.6.0"
         }
       ]
     },
     {
       "SPDXID": "SPDXRef-Pkg-pub-http-multi-server-1118",
       "name": "http_multi_server",
-      "versionInfo": "3.2.2",
+      "versionInfo": "3.2.3",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22511,7 +22511,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/http_multi_server@3.2.2"
+          "referenceLocator": "pkg:pub/http_multi_server@3.2.3"
         }
       ]
     },
@@ -22698,7 +22698,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-io-1131",
       "name": "io",
-      "versionInfo": "1.0.5",
+      "versionInfo": "1.1.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22706,7 +22706,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/io@1.0.5"
+          "referenceLocator": "pkg:pub/io@1.1.0"
         }
       ]
     },
@@ -22743,7 +22743,7 @@
     {
       "SPDXID": "SPDXRef-Pkg-pub-leak-tracker-1134",
       "name": "leak_tracker",
-      "versionInfo": "11.0.2",
+      "versionInfo": "10.0.5",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22751,14 +22751,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/leak_tracker@11.0.2"
+          "referenceLocator": "pkg:pub/leak_tracker@10.0.5"
         }
       ]
     },
     {
       "SPDXID": "SPDXRef-Pkg-pub-leak-tracker-flutter-testing-1135",
       "name": "leak_tracker_flutter_testing",
-      "versionInfo": "3.0.10",
+      "versionInfo": "3.0.5",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22766,14 +22766,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/leak_tracker_flutter_testing@3.0.10"
+          "referenceLocator": "pkg:pub/leak_tracker_flutter_testing@3.0.5"
         }
       ]
     },
     {
       "SPDXID": "SPDXRef-Pkg-pub-leak-tracker-testing-1136",
       "name": "leak_tracker_testing",
-      "versionInfo": "3.0.2",
+      "versionInfo": "3.0.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22781,7 +22781,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/leak_tracker_testing@3.0.2"
+          "referenceLocator": "pkg:pub/leak_tracker_testing@3.0.1"
         }
       ]
     },
@@ -22801,22 +22801,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-listen-1138",
-      "name": "listen",
-      "versionInfo": "1.0.1",
-      "downloadLocation": "hosted",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:pub/listen@1.0.1"
-        }
-      ]
-    },
-    {
-      "SPDXID": "SPDXRef-Pkg-pub-logging-1139",
+      "SPDXID": "SPDXRef-Pkg-pub-logging-1138",
       "name": "logging",
       "versionInfo": "1.3.0",
       "downloadLocation": "hosted",
@@ -22831,9 +22816,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-matcher-1140",
+      "SPDXID": "SPDXRef-Pkg-pub-matcher-1139",
       "name": "matcher",
-      "versionInfo": "0.12.20",
+      "versionInfo": "0.12.16+1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22841,14 +22826,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/matcher@0.12.20"
+          "referenceLocator": "pkg:pub/matcher@0.12.16+1"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-material-color-utilities-1141",
+      "SPDXID": "SPDXRef-Pkg-pub-material-color-utilities-1140",
       "name": "material_color_utilities",
-      "versionInfo": "0.13.0",
+      "versionInfo": "0.11.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22856,14 +22841,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/material_color_utilities@0.13.0"
+          "referenceLocator": "pkg:pub/material_color_utilities@0.11.1"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-meta-1142",
+      "SPDXID": "SPDXRef-Pkg-pub-meta-1141",
       "name": "meta",
-      "versionInfo": "1.19.0",
+      "versionInfo": "1.15.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22871,14 +22856,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/meta@1.19.0"
+          "referenceLocator": "pkg:pub/meta@1.15.0"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-mime-1143",
+      "SPDXID": "SPDXRef-Pkg-pub-mime-1142",
       "name": "mime",
-      "versionInfo": "2.0.0",
+      "versionInfo": "2.1.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22886,12 +22871,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/mime@2.0.0"
+          "referenceLocator": "pkg:pub/mime@2.1.0"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-nested-1144",
+      "SPDXID": "SPDXRef-Pkg-pub-nested-1143",
       "name": "nested",
       "versionInfo": "1.0.0",
       "downloadLocation": "hosted",
@@ -22906,9 +22891,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-octo-image-1145",
+      "SPDXID": "SPDXRef-Pkg-pub-octo-image-1144",
       "name": "octo_image",
-      "versionInfo": "2.1.0",
+      "versionInfo": "2.1.5",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22916,12 +22901,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/octo_image@2.1.0"
+          "referenceLocator": "pkg:pub/octo_image@2.1.5"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-package-config-1146",
+      "SPDXID": "SPDXRef-Pkg-pub-package-config-1145",
       "name": "package_config",
       "versionInfo": "2.2.0",
       "downloadLocation": "hosted",
@@ -22936,7 +22921,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-package-info-plus-1147",
+      "SPDXID": "SPDXRef-Pkg-pub-package-info-plus-1146",
       "name": "package_info_plus",
       "versionInfo": "4.2.0",
       "downloadLocation": "hosted",
@@ -22951,7 +22936,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-package-info-plus-platform-interface-1148",
+      "SPDXID": "SPDXRef-Pkg-pub-package-info-plus-platform-interface-1147",
       "name": "package_info_plus_platform_interface",
       "versionInfo": "2.0.1",
       "downloadLocation": "hosted",
@@ -22966,7 +22951,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-password-strength-1149",
+      "SPDXID": "SPDXRef-Pkg-pub-password-strength-1148",
       "name": "password_strength",
       "versionInfo": "0.2.0",
       "downloadLocation": "hosted",
@@ -22981,9 +22966,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-1150",
+      "SPDXID": "SPDXRef-Pkg-pub-path-1149",
       "name": "path",
-      "versionInfo": "1.9.1",
+      "versionInfo": "1.9.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -22991,12 +22976,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/path@1.9.1"
+          "referenceLocator": "pkg:pub/path@1.9.0"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-parsing-1151",
+      "SPDXID": "SPDXRef-Pkg-pub-path-parsing-1150",
       "name": "path_parsing",
       "versionInfo": "1.1.0",
       "downloadLocation": "hosted",
@@ -23011,7 +22996,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-provider-1152",
+      "SPDXID": "SPDXRef-Pkg-pub-path-provider-1151",
       "name": "path_provider",
       "versionInfo": "2.1.5",
       "downloadLocation": "hosted",
@@ -23026,7 +23011,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-provider-android-1153",
+      "SPDXID": "SPDXRef-Pkg-pub-path-provider-android-1152",
       "name": "path_provider_android",
       "versionInfo": "2.2.15",
       "downloadLocation": "hosted",
@@ -23041,7 +23026,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-provider-foundation-1154",
+      "SPDXID": "SPDXRef-Pkg-pub-path-provider-foundation-1153",
       "name": "path_provider_foundation",
       "versionInfo": "2.4.1",
       "downloadLocation": "hosted",
@@ -23056,7 +23041,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-provider-linux-1155",
+      "SPDXID": "SPDXRef-Pkg-pub-path-provider-linux-1154",
       "name": "path_provider_linux",
       "versionInfo": "2.2.1",
       "downloadLocation": "hosted",
@@ -23071,7 +23056,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-provider-platform-interface-1156",
+      "SPDXID": "SPDXRef-Pkg-pub-path-provider-platform-interface-1155",
       "name": "path_provider_platform_interface",
       "versionInfo": "2.1.2",
       "downloadLocation": "hosted",
@@ -23086,7 +23071,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-path-provider-windows-1157",
+      "SPDXID": "SPDXRef-Pkg-pub-path-provider-windows-1156",
       "name": "path_provider_windows",
       "versionInfo": "2.3.0",
       "downloadLocation": "hosted",
@@ -23101,7 +23086,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-pedantic-1158",
+      "SPDXID": "SPDXRef-Pkg-pub-pedantic-1157",
       "name": "pedantic",
       "versionInfo": "1.11.1",
       "downloadLocation": "hosted",
@@ -23116,7 +23101,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-percent-indicator-1159",
+      "SPDXID": "SPDXRef-Pkg-pub-percent-indicator-1158",
       "name": "percent_indicator",
       "versionInfo": "4.2.5",
       "downloadLocation": "hosted",
@@ -23131,7 +23116,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-petitparser-1160",
+      "SPDXID": "SPDXRef-Pkg-pub-petitparser-1159",
       "name": "petitparser",
       "versionInfo": "6.0.2",
       "downloadLocation": "hosted",
@@ -23146,7 +23131,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-platform-1161",
+      "SPDXID": "SPDXRef-Pkg-pub-platform-1160",
       "name": "platform",
       "versionInfo": "3.1.6",
       "downloadLocation": "hosted",
@@ -23161,7 +23146,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-plugin-platform-interface-1162",
+      "SPDXID": "SPDXRef-Pkg-pub-plugin-platform-interface-1161",
       "name": "plugin_platform_interface",
       "versionInfo": "2.1.8",
       "downloadLocation": "hosted",
@@ -23176,9 +23161,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-pool-1163",
+      "SPDXID": "SPDXRef-Pkg-pub-pool-1162",
       "name": "pool",
-      "versionInfo": "1.5.1",
+      "versionInfo": "1.5.3",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23186,14 +23171,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/pool@1.5.1"
+          "referenceLocator": "pkg:pub/pool@1.5.3"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-provider-1164",
+      "SPDXID": "SPDXRef-Pkg-pub-provider-1163",
       "name": "provider",
-      "versionInfo": "6.1.5",
+      "versionInfo": "6.1.5+1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23201,14 +23186,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/provider@6.1.5"
+          "referenceLocator": "pkg:pub/provider@6.1.5+1"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-pub-semver-1165",
+      "SPDXID": "SPDXRef-Pkg-pub-pub-semver-1164",
       "name": "pub_semver",
-      "versionInfo": "2.2.0",
+      "versionInfo": "2.2.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23216,12 +23201,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/pub_semver@2.2.0"
+          "referenceLocator": "pkg:pub/pub_semver@2.2.1"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-pubspec-parse-1166",
+      "SPDXID": "SPDXRef-Pkg-pub-pubspec-parse-1165",
       "name": "pubspec_parse",
       "versionInfo": "1.4.0",
       "downloadLocation": "hosted",
@@ -23236,7 +23221,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-pull-down-button-1167",
+      "SPDXID": "SPDXRef-Pkg-pub-pull-down-button-1166",
       "name": "pull_down_button",
       "versionInfo": "0.9.4",
       "downloadLocation": "hosted",
@@ -23251,7 +23236,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-puppeteer-1168",
+      "SPDXID": "SPDXRef-Pkg-pub-puppeteer-1167",
       "name": "puppeteer",
       "versionInfo": "3.16.0",
       "downloadLocation": "hosted",
@@ -23266,9 +23251,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-qr-1169",
+      "SPDXID": "SPDXRef-Pkg-pub-qr-1168",
       "name": "qr",
-      "versionInfo": "3.0.2",
+      "versionInfo": "3.0.3",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23276,12 +23261,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/qr@3.0.2"
+          "referenceLocator": "pkg:pub/qr@3.0.3"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-qr-code-scanner-1170",
+      "SPDXID": "SPDXRef-Pkg-pub-qr-code-scanner-1169",
       "name": "qr_code_scanner",
       "versionInfo": "1.0.1",
       "downloadLocation": "hosted",
@@ -23296,7 +23281,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-qr-flutter-1171",
+      "SPDXID": "SPDXRef-Pkg-pub-qr-flutter-1170",
       "name": "qr_flutter",
       "versionInfo": "4.1.0",
       "downloadLocation": "hosted",
@@ -23311,7 +23296,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-quiver-1172",
+      "SPDXID": "SPDXRef-Pkg-pub-quiver-1171",
       "name": "quiver",
       "versionInfo": "3.2.2",
       "downloadLocation": "hosted",
@@ -23326,7 +23311,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-rxdart-1173",
+      "SPDXID": "SPDXRef-Pkg-pub-rxdart-1172",
       "name": "rxdart",
       "versionInfo": "0.27.7",
       "downloadLocation": "hosted",
@@ -23341,7 +23326,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-screen-retriever-1174",
+      "SPDXID": "SPDXRef-Pkg-pub-screen-retriever-1173",
       "name": "screen_retriever",
       "versionInfo": "0.1.9",
       "downloadLocation": "hosted",
@@ -23356,7 +23341,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-scroll-pos-1175",
+      "SPDXID": "SPDXRef-Pkg-pub-scroll-pos-1174",
       "name": "scroll_pos",
       "versionInfo": "0.4.0",
       "downloadLocation": "hosted",
@@ -23371,7 +23356,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-settings-ui-1176",
+      "SPDXID": "SPDXRef-Pkg-pub-settings-ui-1175",
       "name": "settings_ui",
       "versionInfo": "2.0.2",
       "downloadLocation": "hosted",
@@ -23386,7 +23371,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-shelf-1177",
+      "SPDXID": "SPDXRef-Pkg-pub-shelf-1176",
       "name": "shelf",
       "versionInfo": "1.4.1",
       "downloadLocation": "hosted",
@@ -23401,7 +23386,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-shelf-static-1178",
+      "SPDXID": "SPDXRef-Pkg-pub-shelf-static-1177",
       "name": "shelf_static",
       "versionInfo": "1.1.3",
       "downloadLocation": "hosted",
@@ -23416,7 +23401,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-shelf-web-socket-1179",
+      "SPDXID": "SPDXRef-Pkg-pub-shelf-web-socket-1178",
       "name": "shelf_web_socket",
       "versionInfo": "1.0.4",
       "downloadLocation": "hosted",
@@ -23431,7 +23416,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-simple-observable-1180",
+      "SPDXID": "SPDXRef-Pkg-pub-simple-observable-1179",
       "name": "simple_observable",
       "versionInfo": "2.0.0",
       "downloadLocation": "hosted",
@@ -23446,9 +23431,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-sky-engine-1181",
+      "SPDXID": "SPDXRef-Pkg-pub-sky-engine-1180",
       "name": "sky_engine",
-      "versionInfo": "0.0.0",
+      "versionInfo": "0.0.99",
       "downloadLocation": "sdk",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23456,12 +23441,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/sky_engine@0.0.0"
+          "referenceLocator": "pkg:pub/sky_engine@0.0.99"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-source-gen-1182",
+      "SPDXID": "SPDXRef-Pkg-pub-source-gen-1181",
       "name": "source_gen",
       "versionInfo": "1.5.0",
       "downloadLocation": "hosted",
@@ -23476,7 +23461,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-source-span-1183",
+      "SPDXID": "SPDXRef-Pkg-pub-source-span-1182",
       "name": "source_span",
       "versionInfo": "1.10.0",
       "downloadLocation": "hosted",
@@ -23491,7 +23476,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-sqflite-1184",
+      "SPDXID": "SPDXRef-Pkg-pub-sqflite-1183",
       "name": "sqflite",
       "versionInfo": "2.2.0",
       "downloadLocation": "hosted",
@@ -23506,7 +23491,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-sqflite-common-1185",
+      "SPDXID": "SPDXRef-Pkg-pub-sqflite-common-1184",
       "name": "sqflite_common",
       "versionInfo": "2.5.4+6",
       "downloadLocation": "hosted",
@@ -23521,9 +23506,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-stack-trace-1186",
+      "SPDXID": "SPDXRef-Pkg-pub-stack-trace-1185",
       "name": "stack_trace",
-      "versionInfo": "1.12.2",
+      "versionInfo": "1.11.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23531,14 +23516,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/stack_trace@1.12.2"
+          "referenceLocator": "pkg:pub/stack_trace@1.11.1"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-stream-channel-1187",
+      "SPDXID": "SPDXRef-Pkg-pub-stream-channel-1186",
       "name": "stream_channel",
-      "versionInfo": "2.1.4",
+      "versionInfo": "2.1.2",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23546,14 +23531,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/stream_channel@2.1.4"
+          "referenceLocator": "pkg:pub/stream_channel@2.1.2"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-stream-transform-1188",
+      "SPDXID": "SPDXRef-Pkg-pub-stream-transform-1187",
       "name": "stream_transform",
-      "versionInfo": "2.1.1",
+      "versionInfo": "2.1.2",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23561,12 +23546,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/stream_transform@2.1.1"
+          "referenceLocator": "pkg:pub/stream_transform@2.1.2"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-string-scanner-1189",
+      "SPDXID": "SPDXRef-Pkg-pub-string-scanner-1188",
       "name": "string_scanner",
       "versionInfo": "1.2.0",
       "downloadLocation": "hosted",
@@ -23581,7 +23566,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-synchronized-1190",
+      "SPDXID": "SPDXRef-Pkg-pub-synchronized-1189",
       "name": "synchronized",
       "versionInfo": "3.3.0+3",
       "downloadLocation": "hosted",
@@ -23596,7 +23581,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-term-glyph-1191",
+      "SPDXID": "SPDXRef-Pkg-pub-term-glyph-1190",
       "name": "term_glyph",
       "versionInfo": "1.2.1",
       "downloadLocation": "hosted",
@@ -23611,9 +23596,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-test-api-1192",
+      "SPDXID": "SPDXRef-Pkg-pub-test-api-1191",
       "name": "test_api",
-      "versionInfo": "0.7.14",
+      "versionInfo": "0.7.2",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23621,12 +23606,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/test_api@0.7.14"
+          "referenceLocator": "pkg:pub/test_api@0.7.2"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-texture-rgba-renderer-1193",
+      "SPDXID": "SPDXRef-Pkg-pub-texture-rgba-renderer-1192",
       "name": "texture_rgba_renderer",
       "versionInfo": "0.0.16",
       "downloadLocation": "git",
@@ -23641,7 +23626,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-timing-1194",
+      "SPDXID": "SPDXRef-Pkg-pub-timing-1193",
       "name": "timing",
       "versionInfo": "1.0.2",
       "downloadLocation": "hosted",
@@ -23656,10 +23641,10 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-toggle-switch-1195",
+      "SPDXID": "SPDXRef-Pkg-pub-toggle-switch-1194",
       "name": "toggle_switch",
       "versionInfo": "2.3.0",
-      "downloadLocation": "hosted",
+      "downloadLocation": "path",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "externalRefs": [
@@ -23671,7 +23656,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-tuple-1196",
+      "SPDXID": "SPDXRef-Pkg-pub-tuple-1195",
       "name": "tuple",
       "versionInfo": "2.0.2",
       "downloadLocation": "hosted",
@@ -23686,7 +23671,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-typed-data-1197",
+      "SPDXID": "SPDXRef-Pkg-pub-typed-data-1196",
       "name": "typed_data",
       "versionInfo": "1.4.0",
       "downloadLocation": "hosted",
@@ -23701,7 +23686,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-uni-links-1198",
+      "SPDXID": "SPDXRef-Pkg-pub-uni-links-1197",
       "name": "uni_links",
       "versionInfo": "0.5.1",
       "downloadLocation": "git",
@@ -23716,7 +23701,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-uni-links-desktop-1199",
+      "SPDXID": "SPDXRef-Pkg-pub-uni-links-desktop-1198",
       "name": "uni_links_desktop",
       "versionInfo": "0.1.7",
       "downloadLocation": "hosted",
@@ -23731,7 +23716,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-uni-links-platform-interface-1200",
+      "SPDXID": "SPDXRef-Pkg-pub-uni-links-platform-interface-1199",
       "name": "uni_links_platform_interface",
       "versionInfo": "1.0.0",
       "downloadLocation": "hosted",
@@ -23746,7 +23731,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-uni-links-web-1201",
+      "SPDXID": "SPDXRef-Pkg-pub-uni-links-web-1200",
       "name": "uni_links_web",
       "versionInfo": "0.1.0",
       "downloadLocation": "hosted",
@@ -23761,7 +23746,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-universal-io-1202",
+      "SPDXID": "SPDXRef-Pkg-pub-universal-io-1201",
       "name": "universal_io",
       "versionInfo": "2.2.2",
       "downloadLocation": "hosted",
@@ -23776,7 +23761,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-1203",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-1202",
       "name": "url_launcher",
       "versionInfo": "6.3.1",
       "downloadLocation": "hosted",
@@ -23791,7 +23776,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-android-1204",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-android-1203",
       "name": "url_launcher_android",
       "versionInfo": "6.3.14",
       "downloadLocation": "hosted",
@@ -23806,7 +23791,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-ios-1205",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-ios-1204",
       "name": "url_launcher_ios",
       "versionInfo": "6.3.3",
       "downloadLocation": "hosted",
@@ -23821,7 +23806,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-linux-1206",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-linux-1205",
       "name": "url_launcher_linux",
       "versionInfo": "3.2.1",
       "downloadLocation": "hosted",
@@ -23836,7 +23821,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-macos-1207",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-macos-1206",
       "name": "url_launcher_macos",
       "versionInfo": "3.2.2",
       "downloadLocation": "hosted",
@@ -23851,7 +23836,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-platform-interface-1208",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-platform-interface-1207",
       "name": "url_launcher_platform_interface",
       "versionInfo": "2.3.2",
       "downloadLocation": "hosted",
@@ -23866,7 +23851,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-web-1209",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-web-1208",
       "name": "url_launcher_web",
       "versionInfo": "2.3.3",
       "downloadLocation": "hosted",
@@ -23881,7 +23866,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-windows-1210",
+      "SPDXID": "SPDXRef-Pkg-pub-url-launcher-windows-1209",
       "name": "url_launcher_windows",
       "versionInfo": "3.1.4",
       "downloadLocation": "hosted",
@@ -23896,7 +23881,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-uuid-1211",
+      "SPDXID": "SPDXRef-Pkg-pub-uuid-1210",
       "name": "uuid",
       "versionInfo": "3.0.7",
       "downloadLocation": "hosted",
@@ -23911,7 +23896,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-vector-graphics-1212",
+      "SPDXID": "SPDXRef-Pkg-pub-vector-graphics-1211",
       "name": "vector_graphics",
       "versionInfo": "1.1.18",
       "downloadLocation": "hosted",
@@ -23926,7 +23911,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-vector-graphics-codec-1213",
+      "SPDXID": "SPDXRef-Pkg-pub-vector-graphics-codec-1212",
       "name": "vector_graphics_codec",
       "versionInfo": "1.1.13",
       "downloadLocation": "hosted",
@@ -23941,7 +23926,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-vector-graphics-compiler-1214",
+      "SPDXID": "SPDXRef-Pkg-pub-vector-graphics-compiler-1213",
       "name": "vector_graphics_compiler",
       "versionInfo": "1.1.16",
       "downloadLocation": "hosted",
@@ -23956,9 +23941,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-vector-math-1215",
+      "SPDXID": "SPDXRef-Pkg-pub-vector-math-1214",
       "name": "vector_math",
-      "versionInfo": "2.4.4",
+      "versionInfo": "2.1.4",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -23966,12 +23951,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/vector_math@2.4.4"
+          "referenceLocator": "pkg:pub/vector_math@2.1.4"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-video-player-1216",
+      "SPDXID": "SPDXRef-Pkg-pub-video-player-1215",
       "name": "video_player",
       "versionInfo": "2.9.5",
       "downloadLocation": "hosted",
@@ -23986,7 +23971,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-video-player-android-1217",
+      "SPDXID": "SPDXRef-Pkg-pub-video-player-android-1216",
       "name": "video_player_android",
       "versionInfo": "2.7.16",
       "downloadLocation": "hosted",
@@ -24001,7 +23986,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-video-player-avfoundation-1218",
+      "SPDXID": "SPDXRef-Pkg-pub-video-player-avfoundation-1217",
       "name": "video_player_avfoundation",
       "versionInfo": "2.7.1",
       "downloadLocation": "hosted",
@@ -24016,7 +24001,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-video-player-platform-interface-1219",
+      "SPDXID": "SPDXRef-Pkg-pub-video-player-platform-interface-1218",
       "name": "video_player_platform_interface",
       "versionInfo": "6.3.0",
       "downloadLocation": "hosted",
@@ -24031,7 +24016,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-video-player-web-1220",
+      "SPDXID": "SPDXRef-Pkg-pub-video-player-web-1219",
       "name": "video_player_web",
       "versionInfo": "2.3.5",
       "downloadLocation": "hosted",
@@ -24046,7 +24031,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-visibility-detector-1221",
+      "SPDXID": "SPDXRef-Pkg-pub-visibility-detector-1220",
       "name": "visibility_detector",
       "versionInfo": "0.4.0+2",
       "downloadLocation": "hosted",
@@ -24061,7 +24046,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-vm-service-1222",
+      "SPDXID": "SPDXRef-Pkg-pub-vm-service-1221",
       "name": "vm_service",
       "versionInfo": "14.2.5",
       "downloadLocation": "hosted",
@@ -24076,7 +24061,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-wakelock-plus-1223",
+      "SPDXID": "SPDXRef-Pkg-pub-wakelock-plus-1222",
       "name": "wakelock_plus",
       "versionInfo": "1.2.1",
       "downloadLocation": "hosted",
@@ -24091,9 +24076,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-wakelock-plus-platform-interface-1224",
+      "SPDXID": "SPDXRef-Pkg-pub-wakelock-plus-platform-interface-1223",
       "name": "wakelock_plus_platform_interface",
-      "versionInfo": "1.2.3",
+      "versionInfo": "1.3.0",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -24101,14 +24086,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/wakelock_plus_platform_interface@1.2.3"
+          "referenceLocator": "pkg:pub/wakelock_plus_platform_interface@1.3.0"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-watcher-1225",
+      "SPDXID": "SPDXRef-Pkg-pub-watcher-1224",
       "name": "watcher",
-      "versionInfo": "1.1.2",
+      "versionInfo": "1.2.1",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -24116,12 +24101,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/watcher@1.1.2"
+          "referenceLocator": "pkg:pub/watcher@1.2.1"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-web-1226",
+      "SPDXID": "SPDXRef-Pkg-pub-web-1225",
       "name": "web",
       "versionInfo": "0.5.1",
       "downloadLocation": "hosted",
@@ -24136,7 +24121,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-web-socket-channel-1227",
+      "SPDXID": "SPDXRef-Pkg-pub-web-socket-channel-1226",
       "name": "web_socket_channel",
       "versionInfo": "2.4.5",
       "downloadLocation": "hosted",
@@ -24151,7 +24136,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-win32-1228",
+      "SPDXID": "SPDXRef-Pkg-pub-win32-1227",
       "name": "win32",
       "versionInfo": "5.10.1",
       "downloadLocation": "hosted",
@@ -24166,7 +24151,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-win32-registry-1229",
+      "SPDXID": "SPDXRef-Pkg-pub-win32-registry-1228",
       "name": "win32_registry",
       "versionInfo": "1.1.5",
       "downloadLocation": "hosted",
@@ -24181,7 +24166,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-window-manager-1230",
+      "SPDXID": "SPDXRef-Pkg-pub-window-manager-1229",
       "name": "window_manager",
       "versionInfo": "0.3.6",
       "downloadLocation": "git",
@@ -24196,7 +24181,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-window-size-1231",
+      "SPDXID": "SPDXRef-Pkg-pub-window-size-1230",
       "name": "window_size",
       "versionInfo": "0.1.0",
       "downloadLocation": "git",
@@ -24211,7 +24196,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-xdg-directories-1232",
+      "SPDXID": "SPDXRef-Pkg-pub-xdg-directories-1231",
       "name": "xdg_directories",
       "versionInfo": "1.1.0",
       "downloadLocation": "hosted",
@@ -24226,7 +24211,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-xml-1233",
+      "SPDXID": "SPDXRef-Pkg-pub-xml-1232",
       "name": "xml",
       "versionInfo": "6.5.0",
       "downloadLocation": "hosted",
@@ -24241,7 +24226,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-xterm-1234",
+      "SPDXID": "SPDXRef-Pkg-pub-xterm-1233",
       "name": "xterm",
       "versionInfo": "4.0.0",
       "downloadLocation": "hosted",
@@ -24256,9 +24241,9 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-yaml-1235",
+      "SPDXID": "SPDXRef-Pkg-pub-yaml-1234",
       "name": "yaml",
-      "versionInfo": "3.1.3",
+      "versionInfo": "3.1.4",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -24266,14 +24251,14 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/yaml@3.1.3"
+          "referenceLocator": "pkg:pub/yaml@3.1.4"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-yaml-edit-1236",
+      "SPDXID": "SPDXRef-Pkg-pub-yaml-edit-1235",
       "name": "yaml_edit",
-      "versionInfo": "2.2.2",
+      "versionInfo": "2.2.4",
       "downloadLocation": "hosted",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
@@ -24281,12 +24266,12 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:pub/yaml_edit@2.2.2"
+          "referenceLocator": "pkg:pub/yaml_edit@2.2.4"
         }
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-zmodem-1237",
+      "SPDXID": "SPDXRef-Pkg-pub-zmodem-1236",
       "name": "zmodem",
       "versionInfo": "0.0.6",
       "downloadLocation": "hosted",
@@ -24301,7 +24286,7 @@
       ]
     },
     {
-      "SPDXID": "SPDXRef-Pkg-pub-zxing2-1238",
+      "SPDXID": "SPDXRef-Pkg-pub-zxing2-1237",
       "name": "zxing2",
       "versionInfo": "0.2.4",
       "downloadLocation": "hosted",

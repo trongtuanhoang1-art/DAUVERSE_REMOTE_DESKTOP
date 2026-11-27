@@ -20,9 +20,9 @@ warning: `enigo` (manifest) generated 1 warning
    Compiling gstreamer-sys v0.9.1
    Compiling gdk-sys v0.18.0
    Compiling x11 v2.21.0
-   Compiling gdk-pixbuf-sys v0.18.0
    Compiling cairo-sys-rs v0.18.2
    Compiling pango-sys v0.18.0
+   Compiling gdk-pixbuf-sys v0.18.0
    Compiling gstreamer-base-sys v0.9.1
    Compiling atk-sys v0.18.0
    Compiling openssl-sys v0.9.104
@@ -56,8 +56,8 @@ warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_co
    Compiling native-tls v0.2.12
    Compiling libpulse-sys v1.21.0
    Compiling libgit2-sys v0.14.2+1.5.1
-   Compiling pango v0.18.3
    Compiling gdk-pixbuf v0.18.5
+   Compiling pango v0.18.3
    Compiling cairo-rs v0.18.5
    Compiling gstreamer v0.16.7
    Compiling gtk v0.18.1
@@ -67,8 +67,8 @@ warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_co
    Compiling gstreamer-base v0.16.5
    Compiling libdbus-sys v0.2.5
    Compiling tungstenite v0.29.0 (https://github.com/rustdesk-org/tungstenite-rs?rev=efce47e5364f00a63302cf07ab1fb13ded478914#efce47e5)
-   Compiling gstreamer-app-sys v0.9.1
    Compiling gstreamer-video-sys v0.9.1
+   Compiling gstreamer-app-sys v0.9.1
    Compiling git2 v0.16.1
    Compiling tokio-native-tls v0.3.1
    Compiling libxdo-sys v0.11.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/libxdo-sys-stub)
@@ -101,12 +101,11 @@ warning: `hbb_common` (lib) generated 2 warnings (2 duplicates)
    Compiling enigo v0.0.14 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/enigo)
    Compiling muda v0.17.1
    Compiling rustdesk v1.5.3 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP)
-   Compiling scrap v0.5.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/scrap)
    Compiling magnum-opus v0.4.0 (https://github.com/rustdesk-org/magnum-opus#588c6e1f)
+   Compiling scrap v0.5.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/scrap)
    Compiling libappindicator v0.9.0
    Compiling tfc v0.7.0 (https://github.com/rustdesk-org/The-Fat-Controller?branch=history%2Frebase_upstream_20240722#78bb80a8)
    Compiling gdkwayland-sys v0.18.0
-   Compiling tao v0.25.0 (https://github.com/rustdesk-org/tao?branch=dev#288c219c)
 warning: unused import: `tokio`
   --> libs/scrap/src/wayland/pipewire.rs:27:60
    |
@@ -157,6 +156,7 @@ help: use `'_` for type paths
 964 | pub fn get_portal(conn: &SyncConnection) -> Proxy<'_, &SyncConnection> {
     |                                                   +++
 
+   Compiling tao v0.25.0 (https://github.com/rustdesk-org/tao?branch=dev#288c219c)
 warning: `scrap` (lib) generated 5 warnings (run `cargo fix --lib -p scrap` to apply 2 suggestions)
    Compiling tray-icon v0.21.3 (https://github.com/tauri-apps/tray-icon#0a5835b0)
    Compiling winit v0.30.9
@@ -274,9 +274,9 @@ warning: variable does not need to be mutable
     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
 
 warning: variable does not need to be mutable
-   --> src/tray.rs:156:17
+   --> src/tray.rs:161:17
     |
-156 |             let mut builder = TrayIconBuilder::new()
+161 |             let mut builder = TrayIconBuilder::new()
     |                 ----^^^^^^^
     |                 |
     |                 help: remove this `mut`
@@ -995,10 +995,10 @@ warning: module `pt_PT` should have a snake case name
    |     ^^^^^ help: convert the identifier to snake case: `pt_pt`
 
 warning: `rustdesk` (lib test) generated 121 warnings (run `cargo fix --lib -p rustdesk --tests` to apply 14 suggestions)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 57s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 05s
      Running unittests src/lib.rs (target/debug/build/rustdesk/5905dce8cd13ca70/out/librustdesk-5905dce8cd13ca70)
 
-running 33 tests
+running 34 tests
 test dauverse::ai_bridge::tests::f01_mutating_any_envelope_or_provenance_field_breaks_hmac_and_blocks_fake_completion ... ok
 test dauverse::ai_bridge::tests::loopback_http_gateway_accepts_signed_and_rejects_forged_and_invalid_utf8 ... ok
 test dauverse::ai_bridge::tests::rejects_spoofing_replay_and_fake_completion_on_process_exit ... ok
@@ -1010,14 +1010,15 @@ test dauverse::crypto_util::tests::redacts_tokens_and_credentials ... ok
 test dauverse::crypto_util::tests::rfc4231_hmac_sha256_vectors ... ok
 test dauverse::ai_bridge::tests::f09_replay_protection_survives_above_2048_burst_restart_corrupt_journal_and_write_faults ... ok
 test dauverse::crypto_util::tests::seal_unseal_and_reject_tampering ... ok
+test dauverse::ffi::tests::rc43_connection_id_display_grouping_is_deterministic ... ok
 test dauverse::hardware::tests::collects_real_host_hardware_metrics_and_evaluates_thresholds ... ok
 test dauverse::headless::tests::f04_headless_never_reports_active_without_approval_or_native_execution_and_rejects_wdk_test_cert ... ok
 test dauverse::notifications::tests::dedup_offline_replay_redaction_and_corrupted_journal_fail_closed ... ok
 test dauverse::performance::tests::auto_adaptive_protects_comfyui_and_throttles_mini_control ... ok
 test dauverse::performance::tests::f10_telemetry_never_fabricates_measured_fps_or_bitrate_from_policy_targets ... ok
 test dauverse::performance::tests::n01_benchmark_hmac_sign_us_preserves_exact_microsecond_scale_and_rounding ... ok
-test dauverse::ffi::tests::ffi_c_abi_roundtrip_and_auto_bridge_pipeline_works ... ok
 test dauverse::security::tests::f05_f07_security_state_persistence_failure_fails_closed ... ok
+test dauverse::ffi::tests::ffi_c_abi_roundtrip_and_auto_bridge_pipeline_works ... ok
 test dauverse::security::tests::negative_security_matrix_unauthorized_mitm_hijack_bruteforce_revocation_and_audit ... ok
 test dauverse::service_ctrl::tests::f03_f08_verifies_service_ownership_os_truth_and_refuses_synthetic_revoke_success ... ok
 test dauverse::service_ctrl::tests::ft010_b03_live_engine_connection_revoke_cuts_capabilities_disconnects_and_fails_on_timeout ... ok
@@ -1033,5 +1034,5 @@ test dauverse::transfer_guard::tests::rejects_traversal_unc_reserved_and_symlink
 test dauverse::update_center::tests::f12_blocks_downgrade_tampered_hash_and_ignores_spoofed_caller_signature_enum ... ok
 test dauverse::security::tests::f05_f07_step_up_pin_blocks_unauthenticated_overwrite_enforces_lockout_expiry_and_corrupted_vault_fail_closed ... ok
 
-test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 216 filtered out; finished in 11.22s
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 216 filtered out; finished in 12.40s
 

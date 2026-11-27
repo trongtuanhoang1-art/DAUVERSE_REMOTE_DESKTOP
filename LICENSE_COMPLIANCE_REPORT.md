@@ -28,7 +28,8 @@
 | `Virtual-Display-Driver` | `VirtualDrivers/Virtual-Display-Driver` | `d7244969b2aa8bb38e76d79505eda217996cefea` (`25.7.23`) | `MIT` | Compatible | Documented fallback driver (not bundled) |
 | `sysinfo` | `GuillaumeGomez/sysinfo` (`rustdesk-org/sysinfo`) | `90b1705d909a4902dbbbdea37ee64db17841077d` (`0.29.10`) | `MIT` | Compatible | Linked crate via `Cargo.lock` |
 | `LibreHardwareMonitor` | `LibreHardwareMonitor/LibreHardwareMonitor` | `9e2d677cefff5c614ecc38da88fbc447eb478e2a` (`v0.9.6`) | `MPL-2.0` | Compatible | Optional external HTTP/WMI bridge (not linked) |
-| Flutter Framework | `flutter/flutter` | `3.50.0` | `BSD-3-Clause` | Compatible | UI framework |
+| Flutter Framework & Multi-Window Engine | `flutter/flutter` + `rustdesk/engine` | `3.24.5` (`windows-x64-release.zip` `ec8cabf3...`) | `BSD-3-Clause` | Compatible | UI framework & D3D11-safe multi-window engine |
+| Bundled UI Fonts (`Be Vietnam Pro`, `Inter`, `Roboto Mono`) | `google/fonts` | Offline TTF assets + `OFL.txt` | `SIL OFL-1.1` | Compatible | Bundled offline in `flutter/assets/fonts/` (`allowRuntimeFetching = false`) |
 
 ---
 

@@ -1,6 +1,6 @@
 # THIRD-PARTY OPEN SOURCE NOTICES — DAUVERSE REMOTE DESKTOP V1.0
 
-DAUVERSE REMOTE DESKTOP V1.0 is free and open-source software distributed under the
+DAUVERSE REMOTE DESKTOP V1.0 (`1.0.0-rc4.3`) is free and open-source software distributed under the
 **GNU Affero General Public License v3.0 (AGPL-3.0)**. Full verbatim license text is
 preserved in both `LICENSE` and `LICENCE`.
 
@@ -42,14 +42,20 @@ preserved in both `LICENSE` and `LICENCE`.
   - Copyright (C) Guillaume Gomez and Contributors. License: MIT License.
 - **LibreHardwareMonitor (Optional Sensor Bridge Reference)** (`https://github.com/LibreHardwareMonitor/LibreHardwareMonitor`, v0.9.6)
   - License: Mozilla Public License 2.0 (`MPL-2.0`).
-- **Flutter Framework & Engine** (`https://github.com/flutter/flutter`)
+- **Flutter Framework (`3.24.5`) & Patched Multi-Window Engine** (`https://github.com/flutter/flutter` & `https://github.com/rustdesk/engine`)
   - Copyright 2014 The Flutter Authors. License: BSD 3-Clause License.
+  - Windows x64 Engine Archive (`windows-x64-release.zip`): SHA-256 `ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e` (`flutter_windows.dll` SHA-256 `295d3767a5e5c4017f4877e67a4a8926178ecdfbb1196c3bd21ec5f5097f5ed3`).
+- **Bundled Offline UI Fonts (`Be Vietnam Pro`, `Inter`, `Roboto Mono`)** (`https://github.com/google/fonts`)
+  - License: SIL Open Font License v1.1 (`OFL-1.1`). Verbatim license texts bundled at:
+    - `flutter/assets/fonts/be_vietnam_pro/OFL.txt`
+    - `flutter/assets/fonts/inter/OFL.txt`
+    - `flutter/assets/fonts/roboto_mono/OFL.txt`
 
 ## 2. Locked Dependency Summary
 - **Cargo Lockfile (`Cargo.lock`) SHA-256:** `c09e5bfcb87918f84c0c4f806f1f3b7ef1a8a879c3214f44046f7b516756909b`
 - **Total Locked Rust Crates:** 1026
-- **Total Locked Dart/Flutter Packages:** 212
-- **Full Machine-Readable Inventory:** See `SBOM.spdx.json` (1239 SPDX package records).
+- **Total Locked Dart/Flutter Packages:** 211
+- **Full Machine-Readable Inventory:** See `SBOM.spdx.json` (1238 SPDX package records).
 
 ## 3. Core Rust & Flutter Crate Inventory (Excerpt + Complete Count in SBOM.spdx.json)
 - `cargo:ab_glyph@0.2.31` (registry+https://github.com/rust-lang/crates.io-index)
@@ -132,4 +138,4 @@ preserved in both `LICENSE` and `LICENCE`.
 - `cargo:bitvec@1.0.1` (registry+https://github.com/rust-lang/crates.io-index)
 - `cargo:block@0.1.6` (registry+https://github.com/rust-lang/crates.io-index)
 - `cargo:block-buffer@0.10.4` (registry+https://github.com/rust-lang/crates.io-index)
-- ... plus 946 additional Cargo crates and 212 Pub packages documented in `SBOM.spdx.json`.
+- ... plus 946 additional Cargo crates and 211 Pub packages documented in `SBOM.spdx.json`.

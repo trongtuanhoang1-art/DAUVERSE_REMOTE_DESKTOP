@@ -1,13 +1,13 @@
 name: DAUVERSE Windows Release Build (Manual Dispatch Only)
 
-# Security & Zero-Cost Governance (Sections 06, 08 & 30 — RC2 Hardened for F15 & A01-A04):
+# Security & Zero-Cost Governance (Sections 06, 08 & 30 — RC4.3 Hardened for Phase A Engine Fix, F15 & A01-A04):
 # - Manual workflow_dispatch ONLY (zero automatic push/PR/cron/tag runner minutes).
 # - Concurrency cancel-in-progress prevents accidental duplicate Windows runner jobs.
 # - Least-privilege permissions (contents: read).
 # - All GitHub Actions pinned to full 40-char commit SHAs (Swatinem/rust-cache v2.9.3 for Cache v2).
-# - Exact Rust (1.100.0), Flutter (3.50.0), LLVM (17.0.6), and vcpkg (9e593bb1...) versions pinned.
+# - Exact Rust (1.100.0), Flutter (3.24.5 + pinned rustdesk/engine windows-x64-release), LLVM (17.0.6), and vcpkg (9e593bb1...) versions pinned.
 # - Full unshallow checkout (fetch-depth: 0) so self-contained git bundle passes bare repo verification.
-# - Never auto-publishes public GitHub Releases; uploads complete clean-room-verified RC2 QA archive artifact.
+# - Never auto-publishes public GitHub Releases; uploads complete clean-room-verified RC4.3 QA archive artifact.
 
 on:
   workflow_dispatch:
@@ -31,12 +31,12 @@ env:
   VCPKG_DEFAULT_HOST_TRIPLET: "x64-windows-static"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   RUST_VERSION: "1.100.0"
-  FLUTTER_VERSION: "3.50.0"
+  FLUTTER_VERSION: "3.24.5"
   LLVM_VERSION: "17.0.6"
 
 jobs:
   build-windows-x64:
-    name: Build & Verify DAUVERSE Remote V1 RC2 (Windows x64)
+    name: Build & Verify DAUVERSE Remote V1 RC4.3 (Windows x64)
     runs-on: windows-2022
     timeout-minutes: 120
     steps:
@@ -89,11 +89,17 @@ jobs:
           if ($ActualCodexRc3Sha -ne $ExpectedCodexRc3Sha) {
             throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedCodexRc3Sha, got $ActualCodexRc3Sha"
           }
+          $ExpectedClaudeRc4Sha = "38c30b6515532a031c0a9ea630581f592f2c006f1b67c79ef06a4ba508fb714d"
+          $ActualClaudeRc4Sha = (Get-FileHash -LiteralPath "QA/DAUVERSE_REMOTE_V1_RC4_CLAUDE_QA_REPORT.md" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualClaudeRc4Sha -ne $ExpectedClaudeRc4Sha) {
+            throw "PREFLIGHT_ABORT: QA/DAUVERSE_REMOTE_V1_RC4_CLAUDE_QA_REPORT.md SHA-256 mismatch after checkout! Expected $ExpectedClaudeRc4Sha, got $ActualClaudeRc4Sha"
+          }
           foreach ($reqFile in @(
             "FINDINGS_REMEDIATION_MATRIX.md",
             "QA/CODEX_REQA_WINDOWS_RC2_HANDOFF.md",
             "DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md",
             "DAUVERSE_REMOTE_V1_RC4_SOURCE_REVIEW_HANDOFF.md",
+            "DAUVERSE_REMOTE_V1_RC4_3_INTEGRATION_REPORT.md",
             "FEATURE_ACCEPTANCE_MATRIX.md",
             "HUONG_DAN_BOSS.md",
             "LICENSE",
@@ -124,7 +130,7 @@ jobs:
               }
             }
           }
-          Write-Host "PREFLIGHT OK: Codex QA report SHA-256 ($ActualCodexSha) and all $($lines.Count) SHA256_MANIFEST.txt entries verified byte-for-byte."
+          Write-Host "PREFLIGHT OK: All historical QA report SHA-256 digests and $($lines.Count) SHA256_MANIFEST.txt entries verified byte-for-byte."
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
@@ -141,7 +147,7 @@ jobs:
       - name: Cache Rust build artifacts (GitHub Actions Cache v2)
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          prefix-key: dauverse-win-x64-rc2
+          prefix-key: dauverse-win-x64-rc4-3
           cache-on-failure: true
 
       - name: Export GitHub Actions cache environment variables for vcpkg
@@ -173,6 +179,61 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           architecture: x64
           cache: true
+
+      - name: Install & Verify Pinned RustDesk Windows x64 Flutter 3.24.5 Engine + Dropdown Patch (Phase A Fix)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $FlutterCmd = (Get-Command flutter -ErrorAction Stop).Source
+          $FlutterRoot = Split-Path -Parent (Split-Path -Parent $FlutterCmd)
+          Write-Host "Resolved Flutter 3.24.5 SDK root: $FlutterRoot"
+          & flutter precache --windows
+          if ($LASTEXITCODE -ne 0) { throw "flutter precache --windows failed with exit $LASTEXITCODE" }
+
+          $EngineZipUrl = "https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip"
+          $ExpectedZipSha = "ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e"
+          $ExpectedDllSha = "295d3767a5e5c4017f4877e67a4a8926178ecdfbb1196c3bd21ec5f5097f5ed3"
+          $ExpectedGenSnapSha = "04da97f7903c27593e698cb1d519af2ecc26b1de29d1b45aac869ae73456bd15"
+
+          $TmpDir = Join-Path $env:RUNNER_TEMP "dauverse_flutter_engine_3245"
+          if (Test-Path -LiteralPath $TmpDir) { Remove-Item -LiteralPath $TmpDir -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
+          $EngineZipPath = Join-Path $TmpDir "windows-x64-release.zip"
+          $EngineExtractDir = Join-Path $TmpDir "extracted"
+          Invoke-WebRequest -Uri $EngineZipUrl -OutFile $EngineZipPath
+          $ActualZipSha = (Get-FileHash -LiteralPath $EngineZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualZipSha -ne $ExpectedZipSha) {
+            throw "PHASE_A_ENGINE_ABORT: windows-x64-release.zip SHA-256 mismatch! Expected $ExpectedZipSha, got $ActualZipSha"
+          }
+          Expand-Archive -LiteralPath $EngineZipPath -DestinationPath $EngineExtractDir -Force
+          $TargetEngineDir = Join-Path $FlutterRoot "bin\cache\artifacts\engine\windows-x64-release"
+          New-Item -ItemType Directory -Force -Path $TargetEngineDir | Out-Null
+          Copy-Item -Path (Join-Path $EngineExtractDir "*") -Destination $TargetEngineDir -Recurse -Force
+          Remove-Item -LiteralPath $TmpDir -Recurse -Force -ErrorAction SilentlyContinue
+
+          $ActualDllSha = (Get-FileHash -LiteralPath (Join-Path $TargetEngineDir "flutter_windows.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualDllSha -ne $ExpectedDllSha) {
+            throw "PHASE_A_ENGINE_ABORT: Installed flutter_windows.dll SHA-256 mismatch! Expected $ExpectedDllSha, got $ActualDllSha"
+          }
+          $ActualGenSnapSha = (Get-FileHash -LiteralPath (Join-Path $TargetEngineDir "gen_snapshot.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($ActualGenSnapSha -ne $ExpectedGenSnapSha) {
+            throw "PHASE_A_ENGINE_ABORT: Installed gen_snapshot.exe SHA-256 mismatch! Expected $ExpectedGenSnapSha, got $ActualGenSnapSha"
+          }
+
+          $PatchFile = (Resolve-Path -LiteralPath ".github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff").Path
+          $PrevEap = $ErrorActionPreference
+          $ErrorActionPreference = "Continue"
+          $PSNativeCommandUseErrorActionPreference = $false
+          & git -C $FlutterRoot apply --reverse --check $PatchFile 2>$null
+          $AlreadyPatched = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = $PrevEap
+          $PSNativeCommandUseErrorActionPreference = $true
+          if (-not $AlreadyPatched) {
+            & git -C $FlutterRoot apply $PatchFile
+            if ($LASTEXITCODE -ne 0) { throw "Failed applying flutter_3.24.4_dropdown_menu_enableFilter.diff to $FlutterRoot" }
+          }
+          Write-Host "PHASE A ENGINE OK: Patched Flutter 3.24.5 + rustdesk/engine flutter_windows.dll ($ActualDllSha) verified."
 
       - name: Generate flutter_rust_bridge bindings & apply Dart 3 FFI patch
         shell: bash
@@ -245,14 +306,14 @@ jobs:
             pwsh -NoProfile -NonInteractive -File ./scripts/windows/build_windows_release.ps1 -WorkspaceRoot "$PWD/_win_out" -MakensisPath "$RESOLVED_NSIS_WIN" -UseRepoTargetDir -SkipVcpkgInstall -SkipTests 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_BUILD_CONSOLE.log
           fi
 
-      - name: Verify Coexistence, Startup, 3-Process DPAPI/HMAC/PIN Matrix, Rollback & Uninstaller
+      - name: Verify Coexistence, Startup, 4-Process DPAPI/HMAC/PIN Matrix, Rollback & Uninstaller
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p _win_out/LOGS
           pwsh -NoProfile -NonInteractive -File ./scripts/windows/verify_and_package_windows_rc.ps1 -ReleaseDir "$PWD/_win_out/RELEASE" -RepoRoot "$PWD" -LogsDir "$PWD/_win_out/LOGS" -AuthorizedSandbox 2>&1 | tee _win_out/LOGS/GITHUB_ACTIONS_VERIFY_CONSOLE.log
 
-      - name: Package & Clean-Room Verify Complete Windows RC2 QA Archive
+      - name: Package & Clean-Room Verify Complete Windows RC4.3 QA Archive
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -260,13 +321,13 @@ jobs:
           ./scripts/windows/package_complete_rc2_qa_archive.ps1 -RepoRoot "$PWD" -WorkspaceRoot "$PWD/_win_out" -OutputDir "$PWD/_win_out/HANDOFF"
           if ($LASTEXITCODE -ne 0) { throw "package_complete_rc2_qa_archive.ps1 exited with $LASTEXITCODE" }
 
-      - name: Upload Complete Windows RC2 QA Package & Standalone Binaries
+      - name: Upload Complete Windows RC4.3 QA Package & Standalone Binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA
+          name: DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC4_3_COMPLETE_QA
           path: |
-            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip
-            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip.sha256
+            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC4_3_COMPLETE_QA.zip
+            _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC4_3_COMPLETE_QA.zip.sha256
             _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe
             _win_out/HANDOFF/DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe
             _win_out/HANDOFF/FINAL_HANDOFF_SHA256_MANIFEST.txt

@@ -1,11 +1,12 @@
 {
-  "manifest_version": "1.1.0",
+  "manifest_version": "1.2.0",
   "product": "DAUVERSE REMOTE DESKTOP",
   "product_short_name": "DAUVERSE REMOTE",
-  "product_version": "1.0.0",
+  "product_version": "1.0.0-rc4.3",
+  "release_candidate": "RC4.3",
   "task_id": "DREMOTE-V1-MASTER-001",
-  "remediation_task_id": "DREMOTE-V1-RC1-NEXT-002",
-  "generated_at": "2026-11-25T02:10:00Z",
+  "remediation_task_id": "DREMOTE-V1-FINAL-INTEGRATION-016",
+  "generated_at": "2026-11-27T08:00:00Z",
   "project_repository": {
     "owner": "trongtuanhoang1-art",
     "name": "DAUVERSE_REMOTE_DESKTOP",
@@ -117,16 +118,24 @@
       "rationale": "Primary GPU telemetry (RTX 3060 temp, VRAM, power, utilization) uses NVIDIA NVML / nvidia-smi (with CREATE_NO_WINDOW and 4s TTL cache) without third-party ring0 kernel drivers."
     },
     {
-      "category": "Desktop & Mobile UI Framework",
-      "name": "Flutter",
+      "category": "Desktop & Mobile UI Framework & Patched Multi-Window Engine",
+      "name": "Flutter 3.24.5 + rustdesk/engine windows-x64-release",
       "repository": "https://github.com/flutter/flutter",
-      "cloud_build_version": "3.50.0",
-      "cloud_framework_revision": "ab2912035e",
-      "dart_version": "3.14.0",
-      "windows_ci_pinned_version": "3.50.0",
+      "engine_repository": "https://github.com/rustdesk/engine",
+      "engine_archive_sha256": "ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e",
+      "flutter_windows_dll_sha256": "295d3767a5e5c4017f4877e67a4a8926178ecdfbb1196c3bd21ec5f5097f5ed3",
+      "windows_ci_pinned_version": "3.24.5",
       "license": "BSD-3-Clause",
-      "decision": "SELECTED_UI_FRAMEWORK",
-      "rationale": "Official modern UI layer for RustDesk Desktop & Mobile, extended with the DAUVERSE Executive SaaS design system, 16 screens, real RustDesk engine connection hooks, window_manager desktop controls, AI Live Status, and Notification Center."
+      "decision": "SELECTED_UI_FRAMEWORK_WITH_MULTI_WINDOW_D3D11_FIX",
+      "rationale": "Pinned to upstream RustDesk's multi-window-safe Flutter 3.24.5 + rustdesk/engine windows-x64-release to eliminate the stock Flutter 3.50.0 ANGLE D3D11 rx::StateManager11::updateState access violation (0xc0000005)."
+    },
+    {
+      "category": "Bundled Offline Typography",
+      "name": "Be Vietnam Pro, Inter, Roboto Mono",
+      "repository": "https://github.com/google/fonts",
+      "license": "OFL-1.1",
+      "decision": "BUNDLED_OFFLINE_NO_RUNTIME_NETWORK_FETCH",
+      "rationale": "Bundled locally under flutter/assets/fonts/ with verbatim OFL.txt files and GoogleFonts.config.allowRuntimeFetching = false."
     }
   ]
 }

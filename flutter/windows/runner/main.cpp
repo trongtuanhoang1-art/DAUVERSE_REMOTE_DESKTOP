@@ -162,11 +162,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   Win32Desktop::GetWorkArea(workarea_origin, workarea_size);
 
-  // Compute window bounds for default main window position: (10, 10) x(800, 600)
-  Win32Window::Point relative_origin(10, 10);
+  // Compute window bounds for default main window position: (16, 16) x (1360, 840)
+  Win32Window::Point relative_origin(16, 16);
 
   Win32Window::Point origin(workarea_origin.x + relative_origin.x, workarea_origin.y + relative_origin.y);
-  Win32Window::Size size(800u, 600u);
+  Win32Window::Size size(1360u, 840u);
 
   // Fit the window to the monitor's work area.
   Win32Desktop::FitToWorkArea(origin, size);
@@ -175,7 +175,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   if (is_cm_page) {
     window_title = app_name + L" - Connection Manager";
   } else if (is_install_page) {
-    window_title = app_name + L" - Install";
+    window_title = app_name + L" - Setup";
   } else {
     window_title = app_name;
   }

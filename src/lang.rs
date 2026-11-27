@@ -198,7 +198,12 @@ fn resolve_lang(saved_lang: &str, locale: &str, cjk_fallback: bool) -> String {
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
-    let locale = sys_locale::get_locale().unwrap_or_default();
+    let configured = hbb_common::config::LocalConfig::get_option("lang");
+    let locale = if configured.trim().is_empty() {
+        "vi-VN".to_owned()
+    } else {
+        sys_locale::get_locale().unwrap_or_default()
+    };
     translate_locale(name, &locale)
 }
 
@@ -271,30 +276,23 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         if let Some(value) = placeholder_value.as_ref() {
             s = s.replace("{}", &value);
         }
-        if !crate::is_rustdesk() {
-            if s.contains("RustDesk")
-                && !name.starts_with("upgrade_rustdesk_server_pro")
-                && name != "powered_by_me"
-            {
-                let app_name = crate::get_app_name();
-                if !app_name.contains("RustDesk") {
+        let app_name = if crate::is_rustdesk() {
+            "DAUVERSE Remote".to_owned()
+        } else {
+            crate::get_app_name()
+        };
+        if s.contains("RustDesk")
+            && !name.starts_with("upgrade_rustdesk_server_pro")
+            && name != "powered_by_me"
+        {
+            if !app_name.contains("RustDesk") {
+                s = s.replace("RustDesk", &app_name);
+            } else {
+                const PLACEHOLDER: &str = "#A-P-P-N-A-M-E#";
+                if !s.contains(PLACEHOLDER) {
+                    s = s.replace(&app_name, PLACEHOLDER);
                     s = s.replace("RustDesk", &app_name);
-                } else {
-                    // https://github.com/rustdesk/rustdesk-server-pro/issues/845
-                    // If app_name contains "RustDesk" (e.g., "RustDesk-Admin"), we need to avoid
-                    // replacing "RustDesk" within the already-substituted app_name, which would
-                    // cause duplication like "RustDesk-Admin" -> "RustDesk-Admin-Admin".
-                    //
-                    // app_name only contains alphanumeric and hyphen.
-                    const PLACEHOLDER: &str = "#A-P-P-N-A-M-E#";
-                    if !s.contains(PLACEHOLDER) {
-                        s = s.replace(&app_name, PLACEHOLDER);
-                        s = s.replace("RustDesk", &app_name);
-                        s = s.replace(PLACEHOLDER, &app_name);
-                    } else {
-                        // It's very unlikely to reach here.
-                        // Skip replacement to avoid incorrect result.
-                    }
+                    s = s.replace(PLACEHOLDER, &app_name);
                 }
             }
         }

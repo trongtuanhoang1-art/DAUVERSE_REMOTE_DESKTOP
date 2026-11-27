@@ -134,7 +134,7 @@ Section "DAUVERSE Remote Core & Executive UI (Required)" SecCore
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "DisplayName" "DAUVERSE REMOTE DESKTOP V1.0"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "DisplayVersion" "1.0.0"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "DisplayVersion" "1.0.0-rc4.3"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\DauverseRemoteDesktop" "Publisher" "DAUVERSE Ecosystem (AGPL-3.0)"
   ClearErrors
 SectionEnd

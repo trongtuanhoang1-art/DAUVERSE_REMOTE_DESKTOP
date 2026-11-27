@@ -1,4 +1,3 @@
-import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 
 class DauversePalette {
@@ -38,8 +37,8 @@ class DauversePalette {
     isDark: true,
     bg: Color(0xFF070B14),
     sidebarBg: Color(0xFF0B1120),
-    surface: Color(0xFF111827),
-    surfaceElevated: Color(0xFF182235),
+    surface: Color(0xFF101827),
+    surfaceElevated: Color(0xFF172236),
     border: Color(0xFF23324B),
     textPrimary: Color(0xFFF8FAFC),
     textSecondary: Color(0xFF94A3B8),
@@ -77,60 +76,112 @@ class DauversePalette {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       );
+
+  LinearGradient get ctaGradient => LinearGradient(
+        colors: [cyan, blue],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      );
 }
 
 class DauverseTypography {
   static const String uiFont = 'Be Vietnam Pro';
   static const String kpiFont = 'Inter';
+  static const String monoFont = 'RobotoMono';
   static const List<String> fontFallbacks = [
+    'Inter',
     'Segoe UI',
     'Noto Sans',
     'DejaVu Sans',
     'sans-serif',
   ];
 
-  static TextStyle heading(DauversePalette p, {double size = 20}) => TextStyle(
-        fontFamily: uiFont,
-        fontFamilyFallback: fontFallbacks,
-        fontSize: size,
-        fontWeight: FontWeight.w700,
-        color: p.textPrimary,
-        letterSpacing: -0.2,
-      );
-
-  static TextStyle body(DauversePalette p, {double size = 13, FontWeight weight = FontWeight.w500}) =>
+  static TextStyle heading(
+    DauversePalette p, {
+    double size = 20,
+    Color? color,
+    FontWeight weight = FontWeight.w700,
+  }) =>
       TextStyle(
         fontFamily: uiFont,
         fontFamilyFallback: fontFallbacks,
         fontSize: size,
         fontWeight: weight,
-        color: p.textPrimary,
+        fontVariations: [FontVariation('wght', weight.value.toDouble())],
+        color: color ?? p.textPrimary,
+        letterSpacing: -0.2,
+        height: 1.25,
       );
 
-  static TextStyle caption(DauversePalette p, {double size = 12}) => TextStyle(
+  static TextStyle body(
+    DauversePalette p, {
+    double size = 13,
+    FontWeight weight = FontWeight.w500,
+    Color? color,
+  }) =>
+      TextStyle(
         fontFamily: uiFont,
         fontFamilyFallback: fontFallbacks,
         fontSize: size,
-        fontWeight: FontWeight.w500,
-        color: p.textSecondary,
+        fontWeight: weight,
+        fontVariations: [FontVariation('wght', weight.value.toDouble())],
+        color: color ?? p.textPrimary,
+        height: 1.35,
       );
 
-  static TextStyle kpi(DauversePalette p, {double size = 24, Color? color}) => TextStyle(
+  static TextStyle caption(
+    DauversePalette p, {
+    double size = 12,
+    Color? color,
+    FontWeight weight = FontWeight.w500,
+  }) =>
+      TextStyle(
+        fontFamily: uiFont,
+        fontFamilyFallback: fontFallbacks,
+        fontSize: size,
+        fontWeight: weight,
+        fontVariations: [FontVariation('wght', weight.value.toDouble())],
+        color: color ?? p.textSecondary,
+        height: 1.3,
+      );
+
+  static TextStyle kpi(
+    DauversePalette p, {
+    double size = 24,
+    Color? color,
+    FontWeight weight = FontWeight.w700,
+    double letterSpacing = 0.0,
+  }) =>
+      TextStyle(
         fontFamily: kpiFont,
         fontFamilyFallback: fontFallbacks,
         fontSize: size,
-        fontWeight: FontWeight.w700,
+        fontWeight: weight,
+        fontVariations: [FontVariation('wght', weight.value.toDouble())],
         color: color ?? p.textPrimary,
+        letterSpacing: letterSpacing,
         fontFeatures: const [FontFeature.tabularFigures()],
+        height: 1.18,
       );
 }
 
 class DauverseTheme {
-  static ThemeData buildTheme(bool isDark) {
+  static ThemeData buildTheme(
+    bool isDark, {
+    Iterable<ThemeExtension<dynamic>>? inheritedExtensions,
+  }) {
     final p = isDark ? DauversePalette.dark : DauversePalette.light;
-    final base = isDark ? ThemeData.dark(useMaterial3: true) : ThemeData.light(useMaterial3: true);
+    final base = isDark
+        ? ThemeData.dark(useMaterial3: true)
+        : ThemeData.light(useMaterial3: true);
+    final appliedTextTheme = base.textTheme.apply(
+      fontFamily: DauverseTypography.uiFont,
+      fontFamilyFallback: DauverseTypography.fontFallbacks,
+    );
     return base.copyWith(
       scaffoldBackgroundColor: p.bg,
+      textTheme: appliedTextTheme,
+      primaryTextTheme: appliedTextTheme,
       colorScheme: ColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,
         primary: p.blue,
@@ -145,6 +196,31 @@ class DauverseTheme {
       ),
       cardColor: p.surface,
       dividerColor: p.border,
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: p.cyan.withOpacity(0.35)),
+        ),
+        textStyle: const TextStyle(
+          fontFamily: DauverseTypography.uiFont,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w500,
+          color: Colors.white,
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFF1E293B),
+        contentTextStyle: const TextStyle(
+          fontFamily: DauverseTypography.uiFont,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        behavior: SnackBarBehavior.floating,
+      ),
+      extensions: inheritedExtensions,
     );
   }
 }
@@ -166,7 +242,10 @@ class _DauverseEmblemPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(rect.deflate(size.width * 0.04), Radius.circular(size.width * 0.24));
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(size.width * 0.04),
+      Radius.circular(size.width * 0.24),
+    );
 
     final bgPaint = Paint()
       ..shader = const LinearGradient(
@@ -208,7 +287,11 @@ class _DauverseEmblemPainter extends CustomPainter {
     canvas.drawPath(dPath, dPaint);
 
     final dotPaint = Paint()..color = const Color(0xFF22D3EE);
-    canvas.drawCircle(Offset(size.width * 0.49, size.height * 0.50), size.width * 0.08, dotPaint);
+    canvas.drawCircle(
+      Offset(size.width * 0.49, size.height * 0.50),
+      size.width * 0.08,
+      dotPaint,
+    );
   }
 
   @override
@@ -238,7 +321,7 @@ class DauverseCard extends StatelessWidget {
         border: Border.all(color: accentBorder ?? p.border, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(p.isDark ? 0.28 : 0.05),
+            color: Colors.black.withOpacity(p.isDark ? 0.26 : 0.05),
             blurRadius: 14,
             offset: const Offset(0, 4),
           ),
@@ -255,40 +338,97 @@ class DauverseCard extends StatelessWidget {
 class DauverseStatusBadge extends StatelessWidget {
   final String label;
   final Color color;
+  final IconData? icon;
 
-  const DauverseStatusBadge({Key? key, required this.label, required this.color}) : super(key: key);
+  const DauverseStatusBadge({
+    Key? key,
+    required this.label,
+    required this.color,
+    this.icon,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.14),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.45)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: DauverseTypography.kpiFont,
-              fontFamilyFallback: DauverseTypography.fontFallbacks,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: color,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 420),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.13),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null)
+              Icon(icon, size: 12, color: color)
+            else
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: DauverseTypography.kpiFont,
+                  fontFamilyFallback: DauverseTypography.fontFallbacks,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  fontVariations: const [FontVariation('wght', 700)],
+                  color: color,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+}
+
+class DauverseConnectionStatusPill extends StatelessWidget {
+  final String statusCode;
+  final bool isVi;
+
+  const DauverseConnectionStatusPill({
+    Key? key,
+    required this.statusCode,
+    required this.isVi,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = DauversePalette.of(context);
+    final norm = statusCode.toUpperCase();
+    final (Color color, String text, IconData icon) = switch (norm) {
+      'CONNECTED' => (
+          p.success,
+          isVi ? 'Connected • Đang điều khiển' : 'Connected • Active Session',
+          Icons.cast_connected_rounded,
+        ),
+      'ONLINE' => (
+          p.success,
+          isVi ? 'Online • Sẵn sàng kết nối' : 'Online • Ready',
+          Icons.check_circle_outline_rounded,
+        ),
+      'CONNECTING' => (
+          p.warning,
+          isVi ? 'Connecting • Đang kết nối mạng' : 'Connecting • Handshaking',
+          Icons.sync_rounded,
+        ),
+      _ => (
+          p.danger,
+          isVi ? 'Offline • Ngoại tuyến / Tạm dừng' : 'Offline • Disconnected',
+          Icons.cloud_off_rounded,
+        ),
+    };
+    return DauverseStatusBadge(label: text, color: color, icon: icon);
   }
 }
 
@@ -324,7 +464,7 @@ class _SparklinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) return;
+    if (values.isEmpty || size.width <= 0 || size.height <= 0) return;
     final pts = values.length == 1 ? [values[0], values[0]] : values;
     final path = Path();
     final fillPath = Path();
@@ -350,7 +490,7 @@ class _SparklinePainter extends CustomPainter {
       fillPath,
       Paint()
         ..shader = LinearGradient(
-          colors: [color.withOpacity(0.28), color.withOpacity(0.01)],
+          colors: [color.withOpacity(0.26), color.withOpacity(0.01)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ).createShader(Offset.zero & size),
@@ -360,7 +500,7 @@ class _SparklinePainter extends CustomPainter {
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2,
+        ..strokeWidth = 2.1,
     );
   }
 

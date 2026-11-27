@@ -37,6 +37,7 @@ $StagingAppDir = Join-Path $WorkspaceRoot "STAGING\DAUVERSE_REMOTE_APP"
 $ExpectedCodexReportSha = "f07b61edbd82a376cc5e3f854d72d0cc3331735094bc0631e37fbc9ebc60a913"
 $ExpectedCodexRc2ReQaReportSha = "c23d36e7d83b2fb1402238d8a8501b9de899fcd94b2774155b6a602fd77fb954"
 $ExpectedCodexRc3SourceQaReportSha = "d7bf8f93fde76a95cbfcc3c089018f607c9b7743c679a1b3f8c8d38ce98e61ad"
+$ExpectedClaudeRc4QaReportSha = "38c30b6515532a031c0a9ea630581f592f2c006f1b67c79ef06a4ba508fb714d"
 
 function Assert-PackCondition {
     param([bool]$Condition, [string]$Message)
@@ -45,7 +46,7 @@ function Assert-PackCondition {
     }
 }
 
-$PackStage = Join-Path $WorkspaceRoot "TEMP\rc2_complete_qa_stage"
+$PackStage = Join-Path $WorkspaceRoot "TEMP\rc4_3_complete_qa_stage"
 if (Test-Path -LiteralPath $PackStage) { Remove-Item -LiteralPath $PackStage -Recurse -Force }
 foreach ($sub in @("RELEASE", "LOGS", "EVIDENCE", "EVIDENCE\LINUX_PREFLIGHT", "QA", "DOCS", "LICENSES", "BUNDLE", "SOURCE")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $PackStage $sub) | Out-Null
@@ -66,7 +67,7 @@ foreach ($relFile in @(
     Copy-Item -LiteralPath $src -Destination (Join-Path $PackStage "RELEASE\$relFile") -Force
 }
 
-foreach ($dllName in @("librustdesk.dll", "dylib_virtual_display.dll")) {
+foreach ($dllName in @("librustdesk.dll", "flutter_windows.dll", "dylib_virtual_display.dll")) {
     $dllSrc = Join-Path $StagingAppDir $dllName
     Assert-PackCondition (Test-Path -LiteralPath $dllSrc) "Missing staged DLL for offline PE inspection: $dllSrc"
     Copy-Item -LiteralPath $dllSrc -Destination (Join-Path $PackStage "RELEASE\$dllName") -Force
@@ -106,7 +107,7 @@ if (Test-Path -LiteralPath $RepoEvDir) {
     }
 }
 
-Write-Host "=== [2/5] Staging Original Codex QA Reports, Remediation Matrix, Handoff, Docs & Licenses ==="
+Write-Host "=== [2/5] Staging Historical QA Reports, Remediation Matrix, Handoff, Docs & Licenses ==="
 $CodexReportSrc = Join-Path $RepoRoot "QA\DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md"
 Assert-PackCondition (Test-Path -LiteralPath $CodexReportSrc) "Missing QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md"
 $ActualCodexSha = (Get-FileHash -LiteralPath $CodexReportSrc -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -125,7 +126,17 @@ $ActualCodexRc3Sha = (Get-FileHash -LiteralPath $CodexRc3ReportSrc -Algorithm SH
 Assert-PackCondition ($ActualCodexRc3Sha -eq $ExpectedCodexRc3SourceQaReportSha) "Codex RC3 Source QA report SHA-256 mismatch! Expected $ExpectedCodexRc3SourceQaReportSha, got $ActualCodexRc3Sha"
 Copy-Item -LiteralPath $CodexRc3ReportSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC3_INDEPENDENT_SOURCE_QA_REPORT.md") -Force
 
-foreach ($handoffName in @("DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md", "DAUVERSE_REMOTE_V1_RC4_SOURCE_REVIEW_HANDOFF.md")) {
+$ClaudeRc4ReportSrc = Join-Path $RepoRoot "QA\DAUVERSE_REMOTE_V1_RC4_CLAUDE_QA_REPORT.md"
+Assert-PackCondition (Test-Path -LiteralPath $ClaudeRc4ReportSrc) "Missing QA/DAUVERSE_REMOTE_V1_RC4_CLAUDE_QA_REPORT.md"
+$ActualClaudeRc4Sha = (Get-FileHash -LiteralPath $ClaudeRc4ReportSrc -Algorithm SHA256).Hash.ToLowerInvariant()
+Assert-PackCondition ($ActualClaudeRc4Sha -eq $ExpectedClaudeRc4QaReportSha) "Claude RC4 QA report SHA-256 mismatch! Expected $ExpectedClaudeRc4QaReportSha, got $ActualClaudeRc4Sha"
+Copy-Item -LiteralPath $ClaudeRc4ReportSrc -Destination (Join-Path $PackStage "QA\DAUVERSE_REMOTE_V1_RC4_CLAUDE_QA_REPORT.md") -Force
+
+foreach ($handoffName in @(
+    "DAUVERSE_REMOTE_V1_RC3_SOURCE_REVIEW_HANDOFF.md",
+    "DAUVERSE_REMOTE_V1_RC4_SOURCE_REVIEW_HANDOFF.md",
+    "DAUVERSE_REMOTE_V1_RC4_3_INTEGRATION_REPORT.md"
+)) {
     $hSrc = Join-Path $RepoRoot $handoffName
     if (Test-Path -LiteralPath $hSrc) {
         Copy-Item -LiteralPath $hSrc -Destination (Join-Path $PackStage "QA\$handoffName") -Force
@@ -159,11 +170,11 @@ foreach ($licRel in @("LICENSE", "LICENCE", "THIRD_PARTY_NOTICES", "LICENSE_COMP
 Copy-Item -LiteralPath (Join-Path $ReleaseDir "usbmmidd_v2_License.txt") -Destination (Join-Path $PackStage "LICENSES\usbmmidd_v2_License.txt") -Force
 
 Write-Host "=== [3/5] Creating & Verifying Self-Contained Git Bundle + Exporting Clean Source & Submodule ==="
-$BundlePath = Join-Path $PackStage "BUNDLE\DAUVERSE_REMOTE_DESKTOP_V1_RC2.bundle"
+$BundlePath = Join-Path $PackStage "BUNDLE\DAUVERSE_REMOTE_DESKTOP_V1_RC4_3.bundle"
 & git -C $RepoRoot bundle create $BundlePath HEAD --branches --tags
 Assert-PackCondition ($LASTEXITCODE -eq 0) "git bundle create failed with exit code $LASTEXITCODE"
 
-$BareVerifyDir = Join-Path $WorkspaceRoot "TEMP\rc2_bare_bundle_verify.git"
+$BareVerifyDir = Join-Path $WorkspaceRoot "TEMP\rc4_3_bare_bundle_verify.git"
 if (Test-Path -LiteralPath $BareVerifyDir) { Remove-Item -LiteralPath $BareVerifyDir -Recurse -Force }
 & git init --bare $BareVerifyDir | Out-Null
 
@@ -179,8 +190,8 @@ Assert-PackCondition ($BundleVerifyExit -eq 0) "Self-contained git bundle verify
 Remove-Item -LiteralPath $BareVerifyDir -Recurse -Force -ErrorAction SilentlyContinue
 [System.IO.File]::WriteAllText((Join-Path $PackStage "BUNDLE\BUNDLE_BARE_VERIFY.txt"), $BundleVerifyOut, (New-Object System.Text.UTF8Encoding($false)))
 
-$TempMainZip = Join-Path $WorkspaceRoot "TEMP\rc2_main_src.zip"
-$TempSubZip  = Join-Path $WorkspaceRoot "TEMP\rc2_sub_hbb.zip"
+$TempMainZip = Join-Path $WorkspaceRoot "TEMP\rc4_3_main_src.zip"
+$TempSubZip  = Join-Path $WorkspaceRoot "TEMP\rc4_3_sub_hbb.zip"
 if (Test-Path -LiteralPath $TempMainZip) { Remove-Item -LiteralPath $TempMainZip -Force }
 if (Test-Path -LiteralPath $TempSubZip)  { Remove-Item -LiteralPath $TempSubZip -Force }
 
@@ -197,7 +208,7 @@ Assert-PackCondition ($LASTEXITCODE -eq 0) "git archive libs/hbb_common failed"
 [System.IO.Compression.ZipFile]::ExtractToDirectory($TempSubZip, $SubDestDir)
 Remove-Item -LiteralPath $TempSubZip -Force
 
-Write-Host "=== [4/5] Generating Recursive SHA256_MANIFEST.txt & Zipping Complete RC2 Archive ==="
+Write-Host "=== [4/5] Generating Recursive SHA256_MANIFEST.txt & Zipping Complete RC4.3 Archive ==="
 $StageRootNorm = (Resolve-Path -LiteralPath $PackStage).Path.TrimEnd('\')
 $ManifestEntries = New-Object System.Collections.Generic.List[string]
 $AllStageFiles = @(Get-ChildItem -LiteralPath $StageRootNorm -Recurse -File | Sort-Object FullName)
@@ -212,7 +223,7 @@ foreach ($f in $AllStageFiles) {
 $ArchiveManifestPath = Join-Path $StageRootNorm "SHA256_MANIFEST.txt"
 [System.IO.File]::WriteAllLines($ArchiveManifestPath, $ManifestEntries, (New-Object System.Text.UTF8Encoding($false)))
 
-$ZipOutPath = Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip"
+$ZipOutPath = Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC4_3_COMPLETE_QA.zip"
 if (Test-Path -LiteralPath $ZipOutPath) { Remove-Item -LiteralPath $ZipOutPath -Force }
 
 $ZipStream = [System.IO.File]::Open($ZipOutPath, [System.IO.FileMode]::Create)
@@ -243,7 +254,7 @@ try {
 }
 
 Write-Host "=== [5/5] Clean-Room Extraction & Bidirectional Manifest + Bare Bundle Audit ==="
-$CleanRoom = Join-Path $WorkspaceRoot "TEMP\rc2_cleanroom_audit"
+$CleanRoom = Join-Path $WorkspaceRoot "TEMP\rc4_3_cleanroom_audit"
 if (Test-Path -LiteralPath $CleanRoom) { Remove-Item -LiteralPath $CleanRoom -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $CleanRoom | Out-Null
 
@@ -290,10 +301,10 @@ try {
     $CleanCodexSha = (Get-FileHash -LiteralPath (Join-Path $CleanRoom "QA\DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md") -Algorithm SHA256).Hash.ToLowerInvariant()
     Assert-PackCondition ($CleanCodexSha -eq $ExpectedCodexReportSha) "Clean-room Codex QA report hash mismatch!"
 
-    $CleanBare = Join-Path $WorkspaceRoot "TEMP\rc2_cleanroom_bare.git"
+    $CleanBare = Join-Path $WorkspaceRoot "TEMP\rc4_3_cleanroom_bare.git"
     if (Test-Path -LiteralPath $CleanBare) { Remove-Item -LiteralPath $CleanBare -Recurse -Force }
     & git init --bare $CleanBare | Out-Null
-    & git -C $CleanBare bundle verify (Join-Path $CleanRoom "BUNDLE\DAUVERSE_REMOTE_DESKTOP_V1_RC2.bundle") | Out-Null
+    & git -C $CleanBare bundle verify (Join-Path $CleanRoom "BUNDLE\DAUVERSE_REMOTE_DESKTOP_V1_RC4_3.bundle") | Out-Null
     Assert-PackCondition ($LASTEXITCODE -eq 0) "Clean-room bare git bundle verify failed!"
     Remove-Item -LiteralPath $CleanBare -Recurse -Force -ErrorAction SilentlyContinue
 } finally {
@@ -308,13 +319,13 @@ $ZipSha = (Get-FileHash -LiteralPath $ZipOutPath -Algorithm SHA256).Hash.ToLower
 $SetupSha = (Get-FileHash -LiteralPath (Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
 $PortSha  = (Get-FileHash -LiteralPath (Join-Path $OutputDir "DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe") -Algorithm SHA256).Hash.ToLowerInvariant()
 
-[System.IO.File]::WriteAllText("$ZipOutPath.sha256", "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip`n", (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllText("$ZipOutPath.sha256", "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC4_3_COMPLETE_QA.zip`n", (New-Object System.Text.UTF8Encoding($false)))
 $OuterLines = @(
-    "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC2_COMPLETE_QA.zip",
+    "$ZipSha  DAUVERSE_REMOTE_DESKTOP_V1_WINDOWS_RC4_3_COMPLETE_QA.zip",
     "$SetupSha  DAUVERSE_REMOTE_DESKTOP_V1_SETUP.exe",
     "$PortSha  DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe"
 )
 [System.IO.File]::WriteAllLines((Join-Path $OutputDir "FINAL_HANDOFF_SHA256_MANIFEST.txt"), [string[]]$OuterLines, (New-Object System.Text.UTF8Encoding($false)))
 
-Write-Host "=== COMPLETE RC2 QA ARCHIVE PACKAGED & CLEAN-ROOM VERIFIED ($($CleanLines.Count) inner files, 0 missing, 0 unlisted) ==="
+Write-Host "=== COMPLETE RC4.3 QA ARCHIVE PACKAGED & CLEAN-ROOM VERIFIED ($($CleanLines.Count) inner files, 0 missing, 0 unlisted) ==="
 Get-Content -LiteralPath (Join-Path $OutputDir "FINAL_HANDOFF_SHA256_MANIFEST.txt")

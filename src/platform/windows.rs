@@ -1349,7 +1349,35 @@ fn get_subkey(name: &str, wow: bool) -> String {
     }
 }
 
+fn is_dauverse_runtime_binary() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("DAUVERSE_REMOTE.exe").is_file()))
+        .unwrap_or(false)
+}
+
 fn get_valid_subkey() -> String {
+    for wow in [false, true] {
+        let dv_subkey = get_subkey("DauverseRemoteDesktop", wow);
+        let dv_loc = get_reg_of(&dv_subkey, "InstallLocation");
+        if !dv_loc.is_empty() {
+            let owned_by_cur = std::env::current_exe()
+                .ok()
+                .map(|exe| {
+                    crate::dauverse::service_ctrl::is_service_image_path_owned_by_install_dir(
+                        &exe.to_string_lossy(),
+                        &dv_loc,
+                    )
+                })
+                .unwrap_or(false);
+            if owned_by_cur || std::path::Path::new(&dv_loc).join("DAUVERSE_REMOTE.exe").is_file() {
+                return dv_subkey;
+            }
+        }
+    }
+    if is_dauverse_runtime_binary() {
+        return get_subkey("DauverseRemoteDesktop", false);
+    }
     let app_name = crate::get_app_name();
     let subkey = format!("{HKLM_PREFIX}Software\\{app_name}\\InstallState\\{app_name}");
     if !get_reg_of(&subkey, "InstallLocation").is_empty() {
@@ -1446,6 +1474,9 @@ fn get_default_install_path() -> String {
         if std::path::Path::new(&tmp).exists() {
             pf = tmp;
         }
+    }
+    if is_dauverse_runtime_binary() {
+        return format!("{}\\DAUVERSE Remote Desktop", pf);
     }
     format!("{}\\{}", pf, crate::get_app_name())
 }

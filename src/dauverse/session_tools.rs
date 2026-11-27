@@ -213,7 +213,10 @@ impl SessionToolsManager {
         let hist_count = self.history.lock().unwrap().len();
         let clean_notes = redact_sensitive(extra_notes);
         serde_json::to_string_pretty(&serde_json::json!({
-            "product": "DAUVERSE REMOTE DESKTOP V1.0",
+            "product": "DAUVERSE REMOTE DESKTOP",
+            "version": super::update_center::DAUVERSE_PRODUCT_VERSION,
+            "release_candidate": super::update_center::DAUVERSE_RELEASE_CANDIDATE,
+            "engine_base": super::update_center::UPSTREAM_ENGINE_VERSION,
             "generated_at_utc": chrono::Utc::now().to_rfc3339(),
             "os": std::env::consts::OS,
             "arch": std::env::consts::ARCH,

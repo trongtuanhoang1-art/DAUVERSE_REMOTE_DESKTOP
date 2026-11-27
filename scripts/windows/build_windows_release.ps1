@@ -142,7 +142,7 @@ Start-Transcript -Path $LogFile -Append | Out-Null
 $TranscriptActive = $true
 
 try {
-    Write-Host "=== DAUVERSE REMOTE DESKTOP V1.0 -- WINDOWS NATIVE BUILD (RC2) ==="
+    Write-Host "=== DAUVERSE REMOTE DESKTOP V1.0 -- WINDOWS NATIVE BUILD (RC4.3) ==="
     Write-Host "RepoRoot      : $RepoRoot"
     Write-Host "WorkspaceRoot : $WorkspaceRoot"
     Write-Host "CargoTarget   : $CargoTargetDir"
@@ -178,6 +178,54 @@ try {
         }
     }
     $env:VCPKG_INSTALLED_ROOT = "$env:VCPKG_ROOT\installed"
+
+    # 1b. Phase A Engine Guard: Ensure Flutter 3.24.5 SDK carries pinned rustdesk/engine windows-x64-release + dropdown patch
+    $FlutterCmdSource = (Get-Command flutter -ErrorAction Stop).Source
+    $FlutterSdkRoot = Split-Path -Parent (Split-Path -Parent $FlutterCmdSource)
+    $EngineReleaseDir = Join-Path $FlutterSdkRoot "bin\cache\artifacts\engine\windows-x64-release"
+    $CachedFlutterDll = Join-Path $EngineReleaseDir "flutter_windows.dll"
+    $ExpectedFlutterWinDllSha = "295d3767a5e5c4017f4877e67a4a8926178ecdfbb1196c3bd21ec5f5097f5ed3"
+    $ExpectedEngineZipSha = "ec8cabf36ee4ff24c8d98de25b00e70781eb03876265aee84d0fe554a110036e"
+    $NeedEngineBootstrap = $true
+    if (Test-Path -LiteralPath $CachedFlutterDll) {
+        $CurDllSha = (Get-FileHash -LiteralPath $CachedFlutterDll -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($CurDllSha -eq $ExpectedFlutterWinDllSha) {
+            $NeedEngineBootstrap = $false
+        }
+    }
+    if ($NeedEngineBootstrap) {
+        Write-Host "Bootstrapping pinned rustdesk/engine windows-x64-release into $EngineReleaseDir..."
+        Invoke-Checked "flutter precache --windows" { & flutter precache --windows }
+        $EngineZipCache = Join-Path $WorkspaceRoot "CACHE\windows-x64-release.zip"
+        if (-not (Test-Path -LiteralPath $EngineZipCache)) {
+            Invoke-WebRequest -Uri "https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip" -OutFile $EngineZipCache
+        }
+        $ZipSha = (Get-FileHash -LiteralPath $EngineZipCache -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($ZipSha -ne $ExpectedEngineZipSha) {
+            throw "PHASE_A_ENGINE_ABORT: windows-x64-release.zip SHA-256 mismatch! Expected $ExpectedEngineZipSha, got $ZipSha"
+        }
+        $EngExtract = Join-Path $WorkspaceRoot "TEMP\rustdesk_engine_extract"
+        if (Test-Path -LiteralPath $EngExtract) { Remove-Item -LiteralPath $EngExtract -Recurse -Force }
+        Expand-Archive -LiteralPath $EngineZipCache -DestinationPath $EngExtract -Force
+        New-Item -ItemType Directory -Force -Path $EngineReleaseDir | Out-Null
+        Copy-Item -Path (Join-Path $EngExtract "*") -Destination $EngineReleaseDir -Recurse -Force
+    }
+    $DropdownPatch = Join-Path $RepoRoot ".github\patches\flutter_3.24.4_dropdown_menu_enableFilter.diff"
+    if (Test-Path -LiteralPath $DropdownPatch) {
+        $PrevEapPatch = $ErrorActionPreference
+        $PrevNatPatch = $PSNativeCommandUseErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $PSNativeCommandUseErrorActionPreference = $false
+        & git -C $FlutterSdkRoot apply --reverse --check $DropdownPatch 2>$null
+        $IsPatched = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $PrevEapPatch
+        $PSNativeCommandUseErrorActionPreference = $PrevNatPatch
+        if (-not $IsPatched) {
+            Invoke-Checked "Apply flutter_3.24.4_dropdown_menu_enableFilter.diff" {
+                & git -C $FlutterSdkRoot apply $DropdownPatch
+            }
+        }
+    }
 
     # 2. Resolve Flutter dependencies & generate flutter_rust_bridge bindings if absent on fresh clone
     Push-Location (Join-Path $RepoRoot "flutter")
@@ -276,6 +324,15 @@ try {
     Copy-Item -Recurse -Force $FlutterReleaseDir $StagingAppDir
     Copy-Item -Force $DllPath (Join-Path $StagingAppDir "librustdesk.dll")
 
+    $StagedFlutterDll = Join-Path $StagingAppDir "flutter_windows.dll"
+    if (-not (Test-Path -LiteralPath $StagedFlutterDll)) {
+        throw "PHASE_A_ENGINE_ABORT: Staged flutter_windows.dll missing at $StagedFlutterDll"
+    }
+    $StagedFlutterDllSha = (Get-FileHash -LiteralPath $StagedFlutterDll -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($StagedFlutterDllSha -ne $ExpectedFlutterWinDllSha) {
+        throw "PHASE_A_ENGINE_ABORT: Staged flutter_windows.dll SHA-256 ($StagedFlutterDllSha) does NOT match pinned multi-window-safe rustdesk/engine ($ExpectedFlutterWinDllSha)!"
+    }
+
     $VirtDllPath = $null
     $VirtDllCandidates = @(
         (Join-Path $CargoTargetDir "release\dylib_virtual_display.dll"),
@@ -336,6 +393,7 @@ try {
     }
 
     # 7. Build Portable Single-File Executable (DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe)
+    # Passing DAUVERSE_REMOTE.exe isolates portable extraction to %LOCALAPPDATA%\dauverse_remote\ (Phase A)
     $PortableOut = Join-Path $ReleaseDir "DAUVERSE_REMOTE_DESKTOP_V1_PORTABLE.exe"
     if ($null -ne $ManifestXmlBackup) {
         $FilteredManifest = ($ManifestXmlBackup -split "`r?`n" | Where-Object { $_ -notmatch "dpiAware" }) -join "`r`n"
@@ -347,7 +405,7 @@ try {
             & python -m pip install -r requirements.txt
         }
         Invoke-Checked "Generate single-file portable executable" {
-            & python .\generate.py -f $StagingAppDir -o . -e (Join-Path $StagingAppDir "rustdesk.exe")
+            & python .\generate.py -f $StagingAppDir -o . -e (Join-Path $StagingAppDir "DAUVERSE_REMOTE.exe")
         }
     } finally {
         Pop-Location
@@ -452,9 +510,10 @@ try {
     }
 
     $BuildProv = [ordered]@{
-        schema_version = 4
-        task_id = "DREMOTE-V1-RC4-FOCUSED-CLOSURE-011"
-        release_candidate = "RC4"
+        schema_version = 5
+        task_id = "DREMOTE-V1-FINAL-INTEGRATION-016"
+        release_candidate = "RC4.3"
+        product_version = "1.0.0-rc4.3"
         built_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         source = [ordered]@{
             repository = "trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP"
@@ -502,6 +561,10 @@ try {
             librustdesk_dll = [ordered]@{
                 size_bytes = (Get-Item -LiteralPath $DllPath).Length
                 sha256 = (Get-FileHash -LiteralPath $DllPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+            flutter_windows_dll = [ordered]@{
+                size_bytes = (Get-Item -LiteralPath $StagedFlutterDll).Length
+                sha256 = $StagedFlutterDllSha
             }
             dylib_virtual_display_dll = [ordered]@{
                 size_bytes = (Get-Item -LiteralPath $VirtDllPath).Length

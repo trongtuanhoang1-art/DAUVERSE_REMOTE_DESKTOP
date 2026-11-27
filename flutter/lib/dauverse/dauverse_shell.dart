@@ -85,37 +85,54 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext outerContext) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        final theme = DauverseTheme.buildTheme(_controller.isDarkMode);
+        final i18n = _controller.i18n;
+        // Render classic Engine Gốc using outerContext's ThemeExtensions (TabbarTheme + ColorThemeExtension)
+        // so DesktopTabPage never encounters a null-check crash on Theme.of(context).extension<TabbarTheme>()!
+        if (_controller.showClassicRustDeskConnector && widget.classicRustDeskBuilder != null) {
+          return Stack(
+            children: [
+              widget.classicRustDeskBuilder!(outerContext),
+              Positioned(
+                right: 16,
+                bottom: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF06B6D4),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      elevation: 6,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => _controller.selectScreen(DauverseScreenId.dashboard),
+                    icon: const Icon(Icons.dashboard_customize, size: 18),
+                    label: Text(
+                      i18n.t(
+                        'Quay lại Trung tâm Điều hành DAUVERSE',
+                        'Return to DAUVERSE Command Center',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        final inheritedExts = Theme.of(outerContext).extensions.values;
+        final theme = DauverseTheme.buildTheme(
+          _controller.isDarkMode,
+          inheritedExtensions: inheritedExts,
+        );
         return Theme(
           data: theme,
           child: Builder(
-            builder: (innerCtx) {
-              if (_controller.showClassicRustDeskConnector && widget.classicRustDeskBuilder != null) {
-                return Stack(
-                  children: [
-                    widget.classicRustDeskBuilder!(innerCtx),
-                    Positioned(
-                      right: 16,
-                      bottom: 16,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF06B6D4),
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: () => _controller.selectScreen(DauverseScreenId.dashboard),
-                        icon: const Icon(Icons.dashboard_customize, size: 18),
-                        label: const Text('Return to DAUVERSE Command Center'),
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return _buildExecutiveFrame(innerCtx);
-            },
+            builder: (innerCtx) => _buildExecutiveFrame(innerCtx),
           ),
         );
       },
@@ -145,243 +162,369 @@ class _DauverseExecutiveShellState extends State<DauverseExecutiveShell> {
       (DauverseScreenId.about, Icons.info_outline_rounded),
     ];
 
-    return Scaffold(
-      backgroundColor: p.bg,
-      body: Stack(
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, shellConstraints) {
+        final shellWidth = shellConstraints.maxWidth;
+        final compactRail = _controller.sidebarCollapsed || shellWidth < 1080;
+        final showInlineBanner = shellWidth >= 1180 && _controller.lastActionBanner.isNotEmpty;
+        final compactHeader = shellWidth < 900;
+
+        return Scaffold(
+          backgroundColor: p.bg,
+          body: Stack(
             children: [
-              // Left Executive Navigation Rail
-              Container(
-                width: 248,
-                decoration: BoxDecoration(
-                  color: p.sidebarBg,
-                  border: Border(right: BorderSide(color: p.border)),
-                ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-                      child: Row(
-                        children: [
-                          const DauverseEmblem(size: 36),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('DAUVERSE', style: DauverseTypography.heading(p, size: 15)),
-                                Text('REMOTE DESKTOP V1',
-                                    style: TextStyle(
-                                      fontFamily: DauverseTypography.kpiFont,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1.2,
-                                      color: p.cyan,
-                                    )),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
+              Row(
+                children: [
+                  // Responsive Left Executive Navigation Rail (236px full or 68px compact icon rail)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: compactRail ? 68 : 236,
+                    decoration: BoxDecoration(
+                      color: p.sidebarBg,
+                      border: Border(right: BorderSide(color: p.border)),
                     ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                        itemCount: navItems.length,
-                        itemBuilder: (ctx, idx) {
-                          final (id, icon) = navItems[idx];
-                          final selected = _controller.currentScreen == id;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(10),
-                              onTap: () => _controller.selectScreen(id),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                                decoration: BoxDecoration(
-                                  gradient: selected
-                                      ? LinearGradient(
-                                          colors: [p.cyan.withOpacity(0.22), p.blue.withOpacity(0.16)],
-                                        )
-                                      : null,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: selected ? Border.all(color: p.cyan.withOpacity(0.5)) : null,
+                    child: ClipRect(
+                      child: LayoutBuilder(
+                        builder: (ctx, railConstraints) {
+                          final renderCompact = railConstraints.maxWidth < 170;
+                          return Column(
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.fromLTRB(
+                                  renderCompact ? 10 : 14,
+                                  14,
+                                  renderCompact ? 10 : 10,
+                                  12,
                                 ),
-                                child: Row(
-                                  children: [
-                                    Icon(icon, size: 18, color: selected ? p.cyan : p.textSecondary),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        i18n.screenTitle(id),
-                                        style: DauverseTypography.body(
-                                          p,
-                                          size: 12.5,
-                                          weight: selected ? FontWeight.w700 : FontWeight.w500,
+                                child: renderCompact
+                                    ? Tooltip(
+                                        message: i18n.t('Mở rộng thanh điều hướng', 'Expand navigation sidebar'),
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(10),
+                                          onTap: _controller.toggleSidebar,
+                                          child: const Center(child: DauverseEmblem(size: 34)),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
+                                      )
+                                    : Row(
+                                        children: [
+                                          const DauverseEmblem(size: 34),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'DAUVERSE',
+                                                  style: DauverseTypography.heading(p, size: 15),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                Text(
+                                                  'REMOTE DESKTOP V1',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontFamily: DauverseTypography.kpiFont,
+                                                    fontSize: 9.5,
+                                                    fontWeight: FontWeight.w700,
+                                                    letterSpacing: 1.0,
+                                                    color: p.cyan,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          IconButton(
+                                            visualDensity: VisualDensity.compact,
+                                            tooltip: i18n.t('Thu gọn thanh bên', 'Collapse sidebar'),
+                                            onPressed: _controller.toggleSidebar,
+                                            icon: Icon(Icons.menu_open_rounded, size: 18, color: p.textSecondary),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
+                              ),
+                              const Divider(height: 1),
+                              Expanded(
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                                  itemCount: navItems.length,
+                                  itemBuilder: (ctx, idx) {
+                                    final (id, icon) = navItems[idx];
+                                    final selected = _controller.currentScreen == id;
+                                    final label = i18n.screenTitle(id);
+                                    final tile = InkWell(
+                                      borderRadius: BorderRadius.circular(10),
+                                      onTap: () => _controller.selectScreen(id),
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: renderCompact ? 0 : 12,
+                                          vertical: 9,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient: selected
+                                              ? LinearGradient(
+                                                  colors: [
+                                                    p.cyan.withOpacity(0.22),
+                                                    p.blue.withOpacity(0.15),
+                                                  ],
+                                                )
+                                              : null,
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: selected
+                                              ? Border.all(color: p.cyan.withOpacity(0.5))
+                                              : null,
+                                        ),
+                                        child: renderCompact
+                                            ? Center(
+                                                child: Icon(
+                                                  icon,
+                                                  size: 19,
+                                                  color: selected ? p.cyan : p.textSecondary,
+                                                ),
+                                              )
+                                            : Row(
+                                                children: [
+                                                  Icon(
+                                                    icon,
+                                                    size: 18,
+                                                    color: selected ? p.cyan : p.textSecondary,
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      label,
+                                                      style: DauverseTypography.body(
+                                                        p,
+                                                        size: 12.5,
+                                                        weight: selected ? FontWeight.w700 : FontWeight.w500,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                      ),
+                                    );
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 2),
+                                      child: renderCompact ? Tooltip(message: label, child: tile) : tile,
+                                    );
+                                  },
                                 ),
                               ),
-                            ),
+                            ],
                           );
                         },
                       ),
                     ),
-                  ],
-                ),
-              ),
-              // Main Content Area
-              Expanded(
-                child: Column(
-                  children: [
-                    // Top Executive Status Header (Draggable Window Chrome + Controls)
-                    Container(
-                      height: 54,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      decoration: BoxDecoration(
-                        color: p.sidebarBg,
-                        border: Border(bottom: BorderSide(color: p.border)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onPanStart: (_) async {
-                                try {
-                                  await windowManager.startDragging();
-                                } catch (_) {}
-                              },
-                              onDoubleTap: () async {
-                                try {
-                                  if (await windowManager.isMaximized()) {
-                                    await windowManager.unmaximize();
-                                  } else {
-                                    await windowManager.maximize();
-                                  }
-                                } catch (_) {}
-                              },
-                              child: SizedBox(
-                                height: double.infinity,
-                                child: Row(
-                                  children: [
-                                    Text(
-                                      i18n.screenTitle(_controller.currentScreen),
-                                      style: DauverseTypography.heading(p, size: 16),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    if (_controller.lastActionBanner.isNotEmpty)
-                                      Expanded(
-                                        child: Text(
-                                          _controller.lastActionBanner,
-                                          style: DauverseTypography.caption(p, size: 12),
-                                          overflow: TextOverflow.ellipsis,
+                  ),
+                  // Main Content Area
+                  Expanded(
+                    child: Column(
+                      children: [
+                        // Top Executive Status Header (Overflow-Safe Draggable Window Chrome + Controls)
+                        LayoutBuilder(
+                          builder: (ctx, headerBox) {
+                            final hdrW = headerBox.maxWidth;
+                            final tightHdr = hdrW < 580;
+                            final showPerfPill = hdrW >= 540;
+                            return Container(
+                              height: 54,
+                              padding: EdgeInsets.symmetric(horizontal: tightHdr ? 10 : (compactHeader ? 12 : 20)),
+                              decoration: BoxDecoration(
+                                color: p.sidebarBg,
+                                border: Border(bottom: BorderSide(color: p.border)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onPanStart: (_) async {
+                                        try {
+                                          await windowManager.startDragging();
+                                        } catch (_) {}
+                                      },
+                                      onDoubleTap: () async {
+                                        try {
+                                          if (await windowManager.isMaximized()) {
+                                            await windowManager.unmaximize();
+                                          } else {
+                                            await windowManager.maximize();
+                                          }
+                                        } catch (_) {}
+                                      },
+                                      child: SizedBox(
+                                        height: double.infinity,
+                                        child: Row(
+                                          children: [
+                                            Flexible(
+                                              flex: 3,
+                                              child: Text(
+                                                i18n.screenTitle(_controller.currentScreen),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: DauverseTypography.heading(
+                                                  p,
+                                                  size: compactHeader ? 14.5 : 16,
+                                                ),
+                                              ),
+                                            ),
+                                            if (showInlineBanner && hdrW >= 820) ...[
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                flex: 4,
+                                                child: Text(
+                                                  _controller.lastActionBanner,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: DauverseTypography.caption(p, size: 12),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ),
-                                      )
-                                    else
-                                      const Spacer(),
+                                      ),
+                                    ),
+                                  ),
+                                  if (showPerfPill) ...[
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: i18n.t(
+                                        'Chế độ hiệu năng luồng hình ảnh: ${_controller.performanceMode}',
+                                        'Active stream performance profile: ${_controller.performanceMode}',
+                                      ),
+                                      child: DauverseStatusBadge(
+                                        label: (compactHeader || hdrW < 760)
+                                            ? i18n.performanceBadgeShort(_controller.performanceMode)
+                                            : _controller.performanceMode,
+                                        color: p.cyan,
+                                      ),
+                                    ),
                                   ],
+                                  const SizedBox(width: 6),
+                              Tooltip(
+                                message: i18n.t(
+                                  'Chuyển đổi ngôn ngữ Tiếng Việt / English',
+                                  'Switch language Tiếng Việt / English',
+                                ),
+                                child: TextButton(
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(38, 34),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  ),
+                                  onPressed: _controller.toggleLanguage,
+                                  child: Text(
+                                    _controller.isVietnamese ? 'VI' : 'EN',
+                                    style: DauverseTypography.kpi(p, size: 12, color: p.cyan),
+                                  ),
                                 ),
                               ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Dark / Light Mode',
+                                onPressed: _controller.toggleTheme,
+                                icon: Icon(
+                                  _controller.isDarkMode
+                                      ? Icons.light_mode_outlined
+                                      : Icons.dark_mode_outlined,
+                                  size: 18,
+                                  color: p.textPrimary,
+                                ),
+                              ),
+                              const VerticalDivider(width: 10, indent: 14, endIndent: 14),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: i18n.t('Thu nhỏ cửa sổ', 'Minimize'),
+                                onPressed: () async {
+                                  try {
+                                    await windowManager.minimize();
+                                  } catch (_) {}
+                                },
+                                icon: Icon(Icons.minimize, size: 16, color: p.textSecondary),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: i18n.t('Phóng to / Khôi phục', 'Maximize / Restore'),
+                                onPressed: () async {
+                                  try {
+                                    if (await windowManager.isMaximized()) {
+                                      await windowManager.unmaximize();
+                                    } else {
+                                      await windowManager.maximize();
+                                    }
+                                  } catch (_) {}
+                                },
+                                icon: Icon(Icons.crop_square, size: 15, color: p.textSecondary),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: i18n.t('Đóng cửa sổ', 'Close'),
+                                onPressed: () async {
+                                  try {
+                                    await windowManager.close();
+                                  } catch (_) {}
+                                },
+                                  icon: Icon(Icons.close, size: 17, color: p.danger),
+                                ),
+                              ],
                             ),
-                          ),
-                          DauverseStatusBadge(
-                            label: _controller.performanceMode,
-                            color: p.cyan,
-                          ),
-                          const SizedBox(width: 10),
-                          TextButton(
-                            onPressed: _controller.toggleLanguage,
-                            child: Text(_controller.isVietnamese ? 'VI' : 'EN',
-                                style: DauverseTypography.kpi(p, size: 12, color: p.cyan)),
-                          ),
-                          IconButton(
-                            tooltip: 'Dark / Light Mode',
-                            onPressed: _controller.toggleTheme,
-                            icon: Icon(
-                              _controller.isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-                              size: 18,
-                              color: p.textPrimary,
-                            ),
-                          ),
-                          const VerticalDivider(width: 12, indent: 14, endIndent: 14),
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'Minimize',
-                            onPressed: () async {
-                              try {
-                                await windowManager.minimize();
-                              } catch (_) {}
-                            },
-                            icon: Icon(Icons.minimize, size: 16, color: p.textSecondary),
-                          ),
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'Maximize / Restore',
-                            onPressed: () async {
-                              try {
-                                if (await windowManager.isMaximized()) {
-                                  await windowManager.unmaximize();
-                                } else {
-                                  await windowManager.maximize();
-                                }
-                              } catch (_) {}
-                            },
-                            icon: Icon(Icons.crop_square, size: 15, color: p.textSecondary),
-                          ),
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            tooltip: 'Close',
-                            onPressed: () async {
-                              try {
-                                await windowManager.close();
-                              } catch (_) {}
-                            },
-                            icon: Icon(Icons.close, size: 17, color: p.danger),
-                          ),
-                        ],
+                          );
+                        },
                       ),
+                        if (!showInlineBanner && _controller.lastActionBanner.isNotEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: p.surfaceElevated,
+                              border: Border(bottom: BorderSide(color: p.border)),
+                            ),
+                            child: Text(
+                              _controller.lastActionBanner,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: DauverseTypography.caption(p, size: 11.5, color: p.cyan),
+                            ),
+                          ),
+                        if (!_controller.backendAvailable)
+                          Container(
+                            key: const Key('dauverse-ffi-fail-closed-banner'),
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            color: p.danger,
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    i18n.t(
+                                      'CẢNH BÁO AN TOÀN (FAIL-CLOSED): Backend gốc librustdesk không khả dụng — mọi thao tác cấu hình & bảo mật đã bị từ chối (${_controller.backendError}).',
+                                      'SECURITY FAIL-CLOSED: Native librustdesk backend is unavailable — privileged operations are refused (${_controller.backendError}).',
+                                    ),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Expanded(child: _buildActiveScreen()),
+                      ],
                     ),
-                    if (!_controller.backendAvailable)
-                      Container(
-                        key: const Key('dauverse-ffi-fail-closed-banner'),
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        color: p.danger,
-                        child: Row(
-                          children: [
-                            const Icon(Icons.error_outline, color: Colors.white, size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                i18n.t(
-                                  'CẢNH BÁO AN TOÀN (FAIL-CLOSED): Backend gốc librustdesk không khả dụng — mọi thao tác cấu hình & bảo mật đã bị từ chối (${_controller.backendError}).',
-                                  'SECURITY FAIL-CLOSED: Native librustdesk backend is unavailable — privileged operations are refused (${_controller.backendError}).',
-                                ),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Expanded(child: _buildActiveScreen()),
-                  ],
-                ),
+                  ),
+                ],
               ),
+              DauverseCornerToastOverlay(controller: _controller),
             ],
           ),
-          DauverseCornerToastOverlay(controller: _controller),
-        ],
-      ),
+        );
+      },
     );
   }
 

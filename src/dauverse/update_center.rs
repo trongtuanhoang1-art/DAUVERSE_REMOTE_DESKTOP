@@ -2,7 +2,9 @@ use super::crypto_util::{check_no_symlink_or_reparse_component, sha256_file};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-pub const DAUVERSE_PRODUCT_VERSION: &str = "1.0.0";
+pub const DAUVERSE_PRODUCT_VERSION: &str = "1.0.0-rc4.3";
+pub const DAUVERSE_RELEASE_CANDIDATE: &str = "RC4.3";
+pub const DAUVERSE_DISPLAY_VERSION: &str = "V1.0 RC4.3";
 pub const UPSTREAM_ENGINE_VERSION: &str = "1.5.3";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -231,6 +233,8 @@ pub fn current_release_status() -> serde_json::Value {
         "product_name": "DAUVERSE REMOTE DESKTOP",
         "short_name": "DAUVERSE REMOTE",
         "product_version": DAUVERSE_PRODUCT_VERSION,
+        "release_candidate": DAUVERSE_RELEASE_CANDIDATE,
+        "display_version": DAUVERSE_DISPLAY_VERSION,
         "upstream_engine_base": UPSTREAM_ENGINE_VERSION,
         "code_signing_status": "UNSIGNED",
         "auto_update_enabled": false,

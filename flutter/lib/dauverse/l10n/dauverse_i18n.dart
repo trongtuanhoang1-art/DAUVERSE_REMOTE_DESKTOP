@@ -58,5 +58,24 @@ class DauverseI18n {
     }
   }
 
+  String performanceBadgeShort(String mode) {
+    switch (mode) {
+      case 'AUTO_ADAPTIVE':
+        return isVi ? 'Thích ứng (Adaptive)' : 'Adaptive';
+      case 'ULTRA_LOW_LATENCY':
+        return isVi ? 'Độ trễ siêu thấp' : 'Ultra Low Latency';
+      case 'BALANCED':
+        return isVi ? 'Cân bằng' : 'Balanced';
+      case 'HIGH_QUALITY':
+        return isVi ? 'Chất lượng cao' : 'High Quality';
+      case 'LOW_BANDWIDTH':
+        return isVi ? 'Tiết kiệm băng thông' : 'Low Bandwidth';
+      case 'AI_WORKLOAD_PRIORITY':
+        return isVi ? 'Ưu tiên AI' : 'AI Priority';
+      default:
+        return mode;
+    }
+  }
+
   String t(String vi, String en) => isVi ? vi : en;
 }

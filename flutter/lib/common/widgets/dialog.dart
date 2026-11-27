@@ -546,7 +546,6 @@ class DialogTextField extends StatelessWidget {
                 obscureText: obscureText,
                 keyboardType: keyboardType,
                 inputFormatters: inputFormatters,
-                selectAllOnFocus: isDesktop ? false : null,
                 maxLength: maxLength,
               ),
               if (errorText != null)

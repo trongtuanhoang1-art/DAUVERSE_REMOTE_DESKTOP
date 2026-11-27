@@ -2521,6 +2521,13 @@ pub fn main_has_file_clipboard() -> SyncReturn<bool> {
 }
 
 pub fn main_has_gpu_texture_render() -> SyncReturn<bool> {
+    #[cfg(all(windows, feature = "vram"))]
+    {
+        return SyncReturn(
+            crate::ui_interface::use_texture_render() && scrap::codec::allow_d3d_render(),
+        );
+    }
+    #[cfg(not(all(windows, feature = "vram")))]
     SyncReturn(cfg!(feature = "vram"))
 }
 

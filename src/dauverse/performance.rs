@@ -134,8 +134,51 @@ pub struct BenchmarkReport {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum GraphicsFallbackMode {
+    PixelBufferSafe,
+    SoftwareCanvasFallback,
+    GpuD3d11ZeroCopy,
+}
+
+impl Default for GraphicsFallbackMode {
+    fn default() -> Self {
+        Self::PixelBufferSafe
+    }
+}
+
+impl GraphicsFallbackMode {
+    pub fn from_key(s: &str) -> Self {
+        match s.trim().to_ascii_uppercase().as_str() {
+            "SOFTWARE_CANVAS_FALLBACK" | "SOFTWARE" | "SAFE_SOFTWARE" => {
+                Self::SoftwareCanvasFallback
+            }
+            "GPU_D3D11_ZERO_COPY" | "GPU_VRAM_ZERO_COPY" | "D3D11_VRAM" => Self::GpuD3d11ZeroCopy,
+            _ => Self::PixelBufferSafe,
+        }
+    }
+
+    pub fn as_key(&self) -> &'static str {
+        match self {
+            Self::PixelBufferSafe => "PIXEL_BUFFER_SAFE",
+            Self::SoftwareCanvasFallback => "SOFTWARE_CANVAS_FALLBACK",
+            Self::GpuD3d11ZeroCopy => "GPU_D3D11_ZERO_COPY",
+        }
+    }
+
+    pub fn option_pair(&self) -> (&'static str, &'static str) {
+        match self {
+            Self::PixelBufferSafe => ("Y", "N"),
+            Self::SoftwareCanvasFallback => ("N", "N"),
+            Self::GpuD3d11ZeroCopy => ("Y", "Y"),
+        }
+    }
+}
+
 pub struct PerformanceEngine {
     mode: Mutex<PerformanceMode>,
+    graphics_mode: Mutex<GraphicsFallbackMode>,
     last_sample: Mutex<NetworkRuntimeSample>,
 }
 
@@ -143,12 +186,35 @@ impl PerformanceEngine {
     pub fn new() -> Self {
         Self {
             mode: Mutex::new(PerformanceMode::AutoAdaptive),
+            graphics_mode: Mutex::new(GraphicsFallbackMode::PixelBufferSafe),
             last_sample: Mutex::new(NetworkRuntimeSample::default()),
         }
     }
 
     pub fn get_mode(&self) -> PerformanceMode {
         *self.mode.lock().unwrap()
+    }
+
+    pub fn get_graphics_mode(&self) -> GraphicsFallbackMode {
+        *self.graphics_mode.lock().unwrap()
+    }
+
+    pub fn set_graphics_mode_in_memory(&self, mode: GraphicsFallbackMode) {
+        *self.graphics_mode.lock().unwrap() = mode;
+    }
+
+    pub fn set_graphics_mode(&self, mode: GraphicsFallbackMode) -> GraphicsFallbackMode {
+        *self.graphics_mode.lock().unwrap() = mode;
+        let (use_tex, allow_d3d) = mode.option_pair();
+        hbb_common::config::LocalConfig::set_option(
+            "use-texture-render".to_owned(),
+            use_tex.to_owned(),
+        );
+        hbb_common::config::LocalConfig::set_option(
+            "allow-d3d-render".to_owned(),
+            allow_d3d.to_owned(),
+        );
+        mode
     }
 
     pub fn set_mode(&self, mode: PerformanceMode) -> StreamParameters {

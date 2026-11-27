@@ -19,7 +19,7 @@ use self::{
     hardware::HardwareMonitor,
     headless::HeadlessManager,
     notifications::{NotificationCenter, NotificationPreferences},
-    performance::{PerformanceEngine, PerformanceMode},
+    performance::{GraphicsFallbackMode, PerformanceEngine, PerformanceMode},
     security::DeviceShieldSecurityCenter,
     service_ctrl::ServiceController,
     session_tools::SessionToolsManager,
@@ -34,6 +34,14 @@ use std::{
     sync::{atomic::AtomicBool, Arc, Mutex, OnceLock},
 };
 
+fn default_true_pref() -> bool {
+    true
+}
+
+fn default_overwrite_policy() -> String {
+    "REQUIRE_CONFIRMATION".to_owned()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedUserSettings {
     pub performance_mode: PerformanceMode,
@@ -41,6 +49,14 @@ pub struct PersistedUserSettings {
     pub notification_preferences: NotificationPreferences,
     pub transfer_bandwidth_limit_kbps: Option<u32>,
     pub shortcuts: HashMap<String, String>,
+    #[serde(default)]
+    pub graphics_fallback_mode: GraphicsFallbackMode,
+    #[serde(default = "default_true_pref")]
+    pub ui_dark_mode: bool,
+    #[serde(default = "default_true_pref")]
+    pub ui_vietnamese: bool,
+    #[serde(default = "default_overwrite_policy")]
+    pub transfer_overwrite_policy: String,
 }
 
 pub struct DauverseRuntime {
@@ -59,6 +75,10 @@ pub struct DauverseRuntime {
     pub bridge_listen_port: u16,
     pub mini_control_minimized: Mutex<bool>,
     pub mini_control_idle: Mutex<bool>,
+    pub ui_dark_mode: Mutex<bool>,
+    pub ui_vietnamese: Mutex<bool>,
+    pub transfer_overwrite_policy: Mutex<String>,
+    pub cached_public_ip: Mutex<(Option<String>, String)>,
     pub storage_error: Mutex<Option<String>>,
     _bridge_stop: Arc<AtomicBool>,
 }
@@ -198,6 +218,10 @@ impl DauverseRuntime {
         let transfer_queue = TransferQueueManager::new(transfer_root);
         let session_tools = SessionToolsManager::new();
 
+        let mut loaded_dark_mode = true;
+        let mut loaded_vietnamese = true;
+        let mut loaded_overwrite_policy = default_overwrite_policy();
+
         match std::fs::symlink_metadata(&settings_path) {
             Ok(_) => match crypto_util::open_no_follow_regular_file(&settings_path) {
                 Ok((mut f, _)) => {
@@ -207,10 +231,19 @@ impl DauverseRuntime {
                     }) {
                         Some(saved) => {
                             performance.set_mode(saved.performance_mode);
+                            #[cfg(test)]
+                            performance.set_graphics_mode_in_memory(saved.graphics_fallback_mode);
+                            #[cfg(not(test))]
+                            performance.set_graphics_mode(saved.graphics_fallback_mode);
                             clipboard_guard.update_policy(saved.clipboard_policy);
                             notifications.update_preferences(saved.notification_preferences);
                             transfer_queue.set_bandwidth_limit_kbps(saved.transfer_bandwidth_limit_kbps);
                             session_tools.set_shortcuts_map(saved.shortcuts);
+                            loaded_dark_mode = saved.ui_dark_mode;
+                            loaded_vietnamese = saved.ui_vietnamese;
+                            if !saved.transfer_overwrite_policy.trim().is_empty() {
+                                loaded_overwrite_policy = saved.transfer_overwrite_policy;
+                            }
                         }
                         None => {
                             let msg = "SETTINGS_STATE_CORRUPTED_FAIL_CLOSED: invalid dauverse_settings_state.json".to_owned();
@@ -227,13 +260,31 @@ impl DauverseRuntime {
                     }
                 }
             },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                #[cfg(not(test))]
+                {
+                    performance.set_graphics_mode(GraphicsFallbackMode::PixelBufferSafe);
+                }
+            }
             Err(e) => {
                 let msg = format!("SETTINGS_STATE_STAT_ERROR_FAIL_CLOSED: {e}");
                 security.append_audit("SYSTEM", "LOAD_SETTINGS_STATE", "FAILED_CLOSED", &msg);
                 if init_err.is_none() {
                     init_err = Some(msg);
                 }
+            }
+        }
+
+        #[cfg(not(test))]
+        {
+            if hbb_common::config::LocalConfig::get_option("lang")
+                .trim()
+                .is_empty()
+            {
+                hbb_common::config::LocalConfig::set_option(
+                    "lang".to_owned(),
+                    if loaded_vietnamese { "vi" } else { "en" }.to_owned(),
+                );
             }
         }
 
@@ -303,6 +354,10 @@ impl DauverseRuntime {
             bridge_listen_port: bound_port,
             mini_control_minimized: Mutex::new(false),
             mini_control_idle: Mutex::new(false),
+            ui_dark_mode: Mutex::new(loaded_dark_mode),
+            ui_vietnamese: Mutex::new(loaded_vietnamese),
+            transfer_overwrite_policy: Mutex::new(loaded_overwrite_policy),
+            cached_public_ip: Mutex::new((None, "OPT_IN_NOT_QUERIED".to_owned())),
             storage_error: Mutex::new(init_err),
             _bridge_stop: stop_flag,
         }
@@ -320,6 +375,10 @@ impl DauverseRuntime {
             notification_preferences: self.notifications.preferences(),
             transfer_bandwidth_limit_kbps: self.transfer_queue.get_bandwidth_limit_kbps(),
             shortcuts: self.session_tools.shortcuts(),
+            graphics_fallback_mode: self.performance.get_graphics_mode(),
+            ui_dark_mode: *self.ui_dark_mode.lock().unwrap(),
+            ui_vietnamese: *self.ui_vietnamese.lock().unwrap(),
+            transfer_overwrite_policy: self.transfer_overwrite_policy.lock().unwrap().clone(),
         };
         let bytes = serde_json::to_vec_pretty(&state)
             .map_err(|e| format!("SETTINGS_SERIALIZE_ERROR: {e}"))?;
@@ -333,6 +392,37 @@ impl DauverseRuntime {
         }
     }
 
+    pub fn probe_public_ip_opt_in(&self) -> Result<String, String> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(3))
+            .build()
+            .map_err(|e| format!("PUBLIC_IP_CLIENT_ERR: {e}"))?;
+        let resp = client
+            .get("https://api.ipify.org?format=json")
+            .send()
+            .map_err(|e| {
+                *self.cached_public_ip.lock().unwrap() = (None, "UNAVAILABLE".to_owned());
+                format!("PUBLIC_IP_QUERY_FAILED: {e}")
+            })?;
+        let json_val: serde_json::Value = resp.json().map_err(|e| {
+            *self.cached_public_ip.lock().unwrap() = (None, "UNAVAILABLE".to_owned());
+            format!("PUBLIC_IP_PARSE_FAILED: {e}")
+        })?;
+        let ip_raw = json_val
+            .get("ip")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let parsed_ip: std::net::IpAddr = ip_raw.parse().map_err(|_| {
+            *self.cached_public_ip.lock().unwrap() = (None, "UNAVAILABLE".to_owned());
+            "PUBLIC_IP_INVALID_RESPONSE".to_owned()
+        })?;
+        let clean_ip = parsed_ip.to_string();
+        *self.cached_public_ip.lock().unwrap() =
+            (Some(clean_ip.clone()), "VERIFIED_OPT_IN".to_owned());
+        Ok(clean_ip)
+    }
+
     pub fn dashboard_snapshot(&self) -> serde_json::Value {
         let svc_status = self.service_ctrl.status();
         let svc_running = svc_status.service_state == service_ctrl::ServiceRunState::Running;
@@ -344,7 +434,16 @@ impl DauverseRuntime {
             .filter(|t| t.status == ai_bridge::AiTaskStatus::Completed)
             .count();
 
+        let (pub_ip, pub_ip_status) = self.cached_public_ip.lock().unwrap().clone();
+        let conn_identity =
+            service_ctrl::collect_connection_identity_snapshot(pub_ip, &pub_ip_status);
+        let active_sessions = conn_identity
+            .get("active_sessions_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+
         let mut net_sample = performance::NetworkRuntimeSample::default();
+        net_sample.session_connected = active_sessions > 0;
         net_sample.host_cpu_pct = hw.cpu_usage_pct;
         net_sample.host_gpu_pct = hw.gpu_usage_pct.unwrap_or(0.0);
         net_sample.host_vram_pct = hw.vram_usage_pct.unwrap_or(0.0);
@@ -354,7 +453,11 @@ impl DauverseRuntime {
         net_sample.mini_control_idle = *self.mini_control_idle.lock().unwrap();
         let perf = self.performance.update_runtime_sample(net_sample);
 
-        let local_id = hbb_common::config::Config::get_id();
+        let local_id = conn_identity
+            .get("connection_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned)
+            .unwrap_or_else(hbb_common::config::Config::get_id);
         let sec_summary = self.security.summary();
         let sec_persist_ok = sec_summary
             .get("persistence_healthy")
@@ -383,8 +486,17 @@ impl DauverseRuntime {
         serde_json::json!({
             "product": "DAUVERSE REMOTE DESKTOP",
             "version": update_center::DAUVERSE_PRODUCT_VERSION,
+            "release_candidate": update_center::DAUVERSE_RELEASE_CANDIDATE,
+            "display_version": update_center::DAUVERSE_DISPLAY_VERSION,
             "engine_base": update_center::UPSTREAM_ENGINE_VERSION,
             "local_peer_id": local_id,
+            "connection_identity": conn_identity,
+            "graphics_fallback_mode": self.performance.get_graphics_mode().as_key(),
+            "ui_preferences": {
+                "dark_mode": *self.ui_dark_mode.lock().unwrap(),
+                "vietnamese": *self.ui_vietnamese.lock().unwrap(),
+                "transfer_overwrite_policy": self.transfer_overwrite_policy.lock().unwrap().clone(),
+            },
             "data_dir": self.data_dir.to_string_lossy(),
             "storage_healthy": storage_healthy,
             "storage_error": storage_err,
@@ -421,6 +533,7 @@ impl DauverseRuntime {
             "transfer_queue": {
                 "authorized_root": self.transfer_queue.get_authorized_root(),
                 "bandwidth_limit_kbps": self.transfer_queue.get_bandwidth_limit_kbps(),
+                "overwrite_policy": self.transfer_overwrite_policy.lock().unwrap().clone(),
                 "active_count": self.transfer_queue.active_transfer_count(),
                 "jobs": self.transfer_queue.list_jobs(),
             },
@@ -431,6 +544,13 @@ impl DauverseRuntime {
             },
             "headless": self.headless.get_state(),
             "service": svc_status,
+            "host_capabilities": self.service_ctrl.read_live_host_capabilities(),
+            "windows_access_readiness": self.service_ctrl.windows_access_readiness(),
+            "session_tools": {
+                "recording": self.session_tools.recording_state(),
+                "history": self.session_tools.session_history(),
+                "shortcuts": self.session_tools.shortcuts(),
+            },
             "security": {
                 "summary": sec_summary,
                 "recent_audit": self.security.recent_audit_entries(30),

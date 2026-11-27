@@ -21,6 +21,7 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -39,6 +40,7 @@ late List<String> kBootArgs;
 Future<void> main(List<String> args) async {
   earlyAssert();
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   debugPrint("launch args: $args");
   kBootArgs = List.from(args);
@@ -113,7 +115,7 @@ Future<void> main(List<String> args) async {
     if (Platform.environment['DAUVERSE_XVFB_CAPTURE'] == '1') {
       runApp(MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'DAUVERSE REMOTE DESKTOP V1.0',
+        title: 'DAUVERSE REMOTE DESKTOP V1.0 (RC4.3)',
         home: DauverseExecutiveShell(
           classicRustDeskBuilder: (_) => const DesktopTabPage(),
           onLaunchRealSession: (ctx, peerId, {bool isFileTransfer = false}) async {
@@ -126,7 +128,7 @@ Future<void> main(List<String> args) async {
       if (isMacOS) {
         disableWindowMovable(kWindowId);
       }
-      runMainApp(false);
+      runMainApp(!args.contains('--no-server'));
     }
   } else {
     desktopType = DesktopType.main;
@@ -135,7 +137,7 @@ Future<void> main(List<String> args) async {
     if (isMacOS) {
       disableWindowMovable(kWindowId);
     }
-    runMainApp(true);
+    runMainApp(!args.contains('--no-server'));
   }
 }
 
@@ -161,6 +163,7 @@ void runMainApp(bool startService) async {
   if (startService) {
     gFFI.serverModel.startService();
   }
+  unawaited(bind.mainGetMyId());
   await Future.wait([gFFI.abModel.loadCache(), gFFI.groupModel.loadCache()]);
   gFFI.userModel.refreshCurrentUser();
   runApp(App());
@@ -175,6 +178,9 @@ void runMainApp(bool startService) async {
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(
       isMainWindow: true, alwaysOnTop: alwaysOnTop);
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    try {
+      await windowManager.setMinimumSize(const Size(900, 600));
+    } catch (_) {}
     // Restore the location of the main window before window hide or show.
     await restoreWindowPosition(WindowType.Main);
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.

@@ -702,6 +702,290 @@ pub fn dispatch_command(cmd: &str, payload_json: &str) -> serde_json::Value {
                 Err(e) => serde_json::json!({ "ok": false, "error": format!("BAD_DESCRIPTOR: {e}") }),
             }
         }
+        "regenerate_temporary_password" => {
+            hbb_common::password_security::update_temporary_password();
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            crate::ui_interface::update_temporary_password();
+            let (pub_ip, pub_status) = rt.cached_public_ip.lock().unwrap().clone();
+            let identity =
+                super::service_ctrl::collect_connection_identity_snapshot(pub_ip, &pub_status);
+            rt.security.append_audit(
+                "BOSS",
+                "REGENERATE_TEMPORARY_PASSWORD",
+                "OK",
+                "Rotated temporary session password on user request",
+            );
+            serde_json::json!({ "ok": true, "data": identity })
+        }
+        "probe_public_ip" => match rt.probe_public_ip_opt_in() {
+            Ok(ip) => serde_json::json!({
+                "ok": true,
+                "data": { "public_ip": ip, "status": "VERIFIED_OPT_IN" }
+            }),
+            Err(e) => serde_json::json!({
+                "ok": false,
+                "error": e,
+                "data": { "public_ip": serde_json::Value::Null, "status": "UNAVAILABLE" }
+            }),
+        },
+        "set_graphics_fallback_mode" => {
+            let raw_mode = args
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("PIXEL_BUFFER_SAFE");
+            let parsed = super::performance::GraphicsFallbackMode::from_key(raw_mode);
+            let applied = rt.performance.set_graphics_mode(parsed);
+            let (use_tex, allow_d3d) = applied.option_pair();
+            #[cfg(feature = "flutter")]
+            {
+                crate::flutter_ffi::main_set_local_option(
+                    "use-texture-render".to_owned(),
+                    use_tex.to_owned(),
+                );
+                crate::flutter_ffi::main_set_local_option(
+                    "allow-d3d-render".to_owned(),
+                    allow_d3d.to_owned(),
+                );
+            }
+            #[cfg(not(feature = "flutter"))]
+            let _ = (use_tex, allow_d3d);
+            if applied == super::performance::GraphicsFallbackMode::SoftwareCanvasFallback {
+                let _ = rt
+                    .service_ctrl
+                    .commit_security_options(&[("enable-hwcodec", "N")], false);
+            } else if args
+                .get("restore_hwcodec")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+            {
+                let _ = rt
+                    .service_ctrl
+                    .commit_security_options(&[("enable-hwcodec", "Y")], false);
+            }
+            match rt.persist_user_settings() {
+                Ok(()) => serde_json::json!({
+                    "ok": true,
+                    "data": { "graphics_fallback_mode": applied.as_key() }
+                }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "set_ui_preferences" => {
+            if let Some(d) = args.get("dark_mode").and_then(|v| v.as_bool()) {
+                *rt.ui_dark_mode.lock().unwrap() = d;
+                hbb_common::config::LocalConfig::set_option(
+                    "theme".to_owned(),
+                    if d { "dark" } else { "light" }.to_owned(),
+                );
+            }
+            if let Some(vi) = args.get("vietnamese").and_then(|v| v.as_bool()) {
+                *rt.ui_vietnamese.lock().unwrap() = vi;
+                hbb_common::config::LocalConfig::set_option(
+                    "lang".to_owned(),
+                    if vi { "vi" } else { "en" }.to_owned(),
+                );
+            }
+            match rt.persist_user_settings() {
+                Ok(()) => serde_json::json!({
+                    "ok": true,
+                    "data": {
+                        "dark_mode": *rt.ui_dark_mode.lock().unwrap(),
+                        "vietnamese": *rt.ui_vietnamese.lock().unwrap(),
+                    }
+                }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "set_transfer_overwrite_policy" => {
+            let pol = args
+                .get("policy")
+                .and_then(|v| v.as_str())
+                .unwrap_or("REQUIRE_CONFIRMATION");
+            if !matches!(pol, "REQUIRE_CONFIRMATION" | "AUTO_RENAME" | "SKIP") {
+                return serde_json::json!({
+                    "ok": false,
+                    "error": format!("INVALID_OVERWRITE_POLICY: {pol}")
+                });
+            }
+            *rt.transfer_overwrite_policy.lock().unwrap() = pol.to_owned();
+            match rt.persist_user_settings() {
+                Ok(()) => serde_json::json!({
+                    "ok": true,
+                    "data": { "overwrite_policy": pol }
+                }),
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "set_host_capability" => {
+            let key = args.get("key").and_then(|v| v.as_str()).unwrap_or("");
+            let enabled = args.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            let pin = args.get("step_up_pin").and_then(|v| v.as_str()).unwrap_or("");
+            let tok = args.get("step_up_token").and_then(|v| v.as_str()).unwrap_or("");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            if let Err(e) =
+                rt.security
+                    .verify_owner_step_up_or_token(pin, tok, "SERVICE_CONFIG", now_ms)
+            {
+                return serde_json::json!({ "ok": false, "error": e });
+            }
+            let cfg_key = match key {
+                "enable_keyboard" | "enable-keyboard" => "enable-keyboard",
+                "enable_audio" | "enable-audio" => "enable-audio",
+                "enable_file_transfer" | "enable-file-transfer" => "enable-file-transfer",
+                "enable_clipboard" | "enable-clipboard" => "enable-clipboard",
+                "enable_tunnel" | "enable-tunnel" => "enable-tunnel",
+                "enable_remote_restart" | "enable-remote-restart" => "enable-remote-restart",
+                _ => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "error": format!("UNSUPPORTED_CAPABILITY_KEY: {key}")
+                    });
+                }
+            };
+            let val = if enabled { "Y" } else { "N" };
+            match rt
+                .service_ctrl
+                .commit_security_options(&[(cfg_key, val)], !enabled)
+            {
+                Ok(_) => {
+                    rt.security.append_audit(
+                        "BOSS",
+                        "UPDATE_HOST_CAPABILITY",
+                        "OK",
+                        &format!("{cfg_key}={val}"),
+                    );
+                    serde_json::json!({
+                        "ok": true,
+                        "data": rt.service_ctrl.read_live_host_capabilities()
+                    })
+                }
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
+        "manage_owned_windows_service" => {
+            let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("");
+            let confirmed = args
+                .get("user_confirmed")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let pin = args.get("step_up_pin").and_then(|v| v.as_str()).unwrap_or("");
+            let tok = args.get("step_up_token").and_then(|v| v.as_str()).unwrap_or("");
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            if let Err(e) =
+                rt.security
+                    .verify_owner_step_up_or_token(pin, tok, "SERVICE_CONFIG", now_ms)
+            {
+                return serde_json::json!({ "ok": false, "error": e });
+            }
+            match rt.service_ctrl.manage_owned_windows_service(action, confirmed) {
+                Ok(st) => {
+                    rt.security.append_audit(
+                        "BOSS",
+                        "MANAGE_OWNED_WINDOWS_SERVICE",
+                        "OK",
+                        action,
+                    );
+                    serde_json::json!({
+                        "ok": true,
+                        "data": {
+                            "service": st,
+                            "readiness": rt.service_ctrl.windows_access_readiness(),
+                        }
+                    })
+                }
+                Err(e) => {
+                    rt.security.append_audit(
+                        "BOSS",
+                        "MANAGE_OWNED_WINDOWS_SERVICE",
+                        "FAILED",
+                        &format!("{action}: {e}"),
+                    );
+                    serde_json::json!({ "ok": false, "error": e })
+                }
+            }
+        }
+        "session_recording_control" => {
+            let enable = args.get("enable").and_then(|v| v.as_bool()).unwrap_or(false);
+            if enable {
+                let explicit_opt_in = args
+                    .get("explicit_opt_in")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let out_name = format!(
+                    "dauverse_session_{}.webm",
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                );
+                let out_path = rt.data_dir.join("recordings").join(out_name);
+                match rt.session_tools.start_recording(
+                    true,
+                    explicit_opt_in,
+                    &out_path.to_string_lossy(),
+                ) {
+                    Ok(rec) => {
+                        hbb_common::config::LocalConfig::set_option(
+                            "allow-auto-record-outgoing".to_owned(),
+                            "Y".to_owned(),
+                        );
+                        serde_json::json!({ "ok": true, "data": rec })
+                    }
+                    Err(e) => serde_json::json!({ "ok": false, "error": e }),
+                }
+            } else {
+                let rec = rt.session_tools.stop_recording();
+                hbb_common::config::LocalConfig::set_option(
+                    "allow-auto-record-outgoing".to_owned(),
+                    "N".to_owned(),
+                );
+                serde_json::json!({ "ok": true, "data": rec })
+            }
+        }
+        "record_session_history" => {
+            let peer_id = args
+                .get("peer_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim();
+            if peer_id.is_empty() {
+                return serde_json::json!({ "ok": false, "error": "EMPTY_PEER_ID" });
+            }
+            let peer_name = args
+                .get("peer_name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(peer_id);
+            let route = args
+                .get("route")
+                .and_then(|v| v.as_str())
+                .unwrap_or("NATIVE_P2P_OR_RELAY");
+            let rec = super::session_tools::SessionHistoryRecord {
+                session_id: uuid::Uuid::new_v4().to_string(),
+                peer_id: peer_id.to_owned(),
+                peer_name: peer_name.to_owned(),
+                route: route.to_owned(),
+                started_at_utc: chrono::Utc::now().to_rfc3339(),
+                ended_at_utc: None,
+                duration_secs: 0,
+                recorded: rt.session_tools.recording_state().active,
+            };
+            rt.session_tools.record_session_history(rec);
+            serde_json::json!({
+                "ok": true,
+                "data": rt.session_tools.session_history()
+            })
+        }
+        "set_shortcut" => {
+            let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("");
+            let combo = args.get("combo").and_then(|v| v.as_str()).unwrap_or("");
+            match rt.session_tools.update_shortcut(action, combo) {
+                Ok(()) => match rt.persist_user_settings() {
+                    Ok(()) => serde_json::json!({
+                        "ok": true,
+                        "data": rt.session_tools.shortcuts()
+                    }),
+                    Err(e) => serde_json::json!({ "ok": false, "error": e }),
+                },
+                Err(e) => serde_json::json!({ "ok": false, "error": e }),
+            }
+        }
         _ => serde_json::json!({
             "ok": false,
             "error": format!("UNKNOWN_COMMAND: {cmd}")
@@ -855,5 +1139,51 @@ mod tests {
         rt.transfer_queue
             .track_engine_transfer_finish_scoped(&test_xfer_id, None, false, true, Some("cleanup"))
             .unwrap();
+
+        // RC4.3: Verify unified version, connection_identity, graphics_fallback_mode, and service guards
+        let snap_rc43 = dispatch_command("dashboard_snapshot", "{}");
+        assert_eq!(snap_rc43["ok"], true);
+        assert_eq!(snap_rc43["data"]["version"], "1.0.0-rc4.3");
+        assert_eq!(snap_rc43["data"]["release_candidate"], "RC4.3");
+        assert_eq!(
+            snap_rc43["data"]["connection_identity"]["public_ip_status"],
+            "OPT_IN_NOT_QUERIED"
+        );
+        assert_eq!(
+            snap_rc43["data"]["windows_access_readiness"]["windows_password_preserved"],
+            true
+        );
+        assert_eq!(
+            snap_rc43["data"]["windows_access_readiness"]["windows_auto_login_disabled"],
+            true
+        );
+
+        let gfx_res = dispatch_command(
+            "set_graphics_fallback_mode",
+            r#"{"mode":"PIXEL_BUFFER_SAFE"}"#,
+        );
+        assert_eq!(gfx_res["ok"], true);
+        assert_eq!(gfx_res["data"]["graphics_fallback_mode"], "PIXEL_BUFFER_SAFE");
+
+        let unconfirmed_svc = dispatch_command(
+            "manage_owned_windows_service",
+            r#"{"action":"INSTALL_AND_START_ELEVATED","user_confirmed":false,"step_up_pin":"BossVault#2026"}"#,
+        );
+        assert_eq!(unconfirmed_svc["ok"], false);
+
+        let unauth_svc = dispatch_command(
+            "manage_owned_windows_service",
+            r#"{"action":"STOP","user_confirmed":true,"step_up_pin":"wrong"}"#,
+        );
+        assert_eq!(unauth_svc["ok"], false);
+    }
+
+    #[test]
+    fn rc43_connection_id_display_grouping_is_deterministic() {
+        use crate::dauverse::service_ctrl::format_connection_id_display;
+        assert_eq!(format_connection_id_display("123456789"), "123 456 789");
+        assert_eq!(format_connection_id_display("1234567890"), "1 234 567 890");
+        assert_eq!(format_connection_id_display("  987654321  "), "987 654 321");
+        assert_eq!(format_connection_id_display("UNBOUND-TEST"), "UNBOUND-TEST");
     }
 }

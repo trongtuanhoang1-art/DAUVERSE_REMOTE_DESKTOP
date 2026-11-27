@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../bridge/dauverse_bridge.dart';
 import '../l10n/dauverse_i18n.dart';
@@ -26,16 +27,18 @@ class DauverseCornerToastOverlay extends StatelessWidget {
     final i18n = controller.i18n;
     final accent = _parseHexColor(toast['severity_color_hex']?.toString() ?? '', p.success);
     final verifiedEvidence = toast['verified_evidence_line'] as String?;
+    final screenW = MediaQuery.sizeOf(context).width;
+    final toastW = math.max(220.0, math.min(390.0, screenW - 36));
 
     return Positioned(
-      right: 20,
-      bottom: 20,
+      right: 18,
+      bottom: 18,
       child: FocusScope(
         canRequestFocus: false,
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: 390,
+            width: toastW,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: p.sidebarBg.withOpacity(0.97),
@@ -64,13 +67,17 @@ class DauverseCornerToastOverlay extends StatelessWidget {
                       child: Text(
                         '${toast['project_name'] ?? ''} • ${toast['timestamp'] ?? ''}',
                         style: DauverseTypography.caption(p, size: 11),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    InkWell(
-                      canRequestFocus: false,
-                      onTap: controller.dismissCornerToast,
-                      child: Icon(Icons.close, size: 16, color: p.textSecondary),
+                    Tooltip(
+                      message: i18n.t('Đóng thông báo', 'Dismiss toast'),
+                      child: InkWell(
+                        canRequestFocus: false,
+                        onTap: controller.dismissCornerToast,
+                        child: Icon(Icons.close_rounded, size: 16, color: p.textSecondary),
+                      ),
                     ),
                   ],
                 ),
@@ -78,6 +85,8 @@ class DauverseCornerToastOverlay extends StatelessWidget {
                 Text(
                   toast['title']?.toString() ?? '',
                   style: DauverseTypography.heading(p, size: 14),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -96,6 +105,8 @@ class DauverseCornerToastOverlay extends StatelessWidget {
                     ),
                     child: Text(
                       '$verifiedEvidence (VERIFIED EVIDENCE)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: DauverseTypography.kpi(p, size: 11, color: p.success),
                     ),
                   ),

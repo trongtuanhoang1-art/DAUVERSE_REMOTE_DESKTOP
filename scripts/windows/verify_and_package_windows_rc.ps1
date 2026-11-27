@@ -593,6 +593,7 @@ public static class DauverseWinTrustCatalog {
     Assert-Condition (Test-Path -LiteralPath $ArpKey64) "Missing 64-bit ARP Uninstall registry key at $ArpKey64"
     $ArpProps = Get-ItemProperty -LiteralPath $ArpKey64
     Assert-Condition ($ArpProps.DisplayName -eq "DAUVERSE REMOTE DESKTOP V1.0") "Unexpected ARP DisplayName: $($ArpProps.DisplayName)"
+    Assert-Condition ($ArpProps.DisplayVersion -eq "1.0.0-rc4.3") "Unexpected ARP DisplayVersion: $($ArpProps.DisplayVersion)"
     Assert-Condition ($ArpProps.InstallLocation -eq $ExpectedInstallDir) "Unexpected ARP InstallLocation: $($ArpProps.InstallLocation)"
 
     $StartMenuCandidates = @(
@@ -602,11 +603,14 @@ public static class DauverseWinTrustCatalog {
     $StartMenuLnk = $StartMenuCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
     Assert-Condition ($null -ne $StartMenuLnk) "Missing Start Menu shortcut in Programs or CommonPrograms"
 
-    Write-Host "=== [3/7] Startup Verification (Exact Version 1.5.3, Win32 GUI 5s Survival & Portable GUI) ==="
+    Write-Host "=== [3/7] Startup Verification (Exact Version 1.5.3, Pinned flutter_windows.dll, Win32 GUI 5s Survival & Portable Isolation) ==="
     $InstalledMainExe = Join-Path $ExpectedInstallDir "DAUVERSE_REMOTE.exe"
     $InstalledShimExe = Join-Path $ExpectedInstallDir "rustdesk.exe"
     $InstalledDllMachine = Get-PeMachineHex -FilePath (Join-Path $ExpectedInstallDir "librustdesk.dll")
     Assert-Condition ($InstalledDllMachine -eq "0x8664") "Expected x64 librustdesk.dll, got $InstalledDllMachine"
+    $ExpectedPatchedFlutterDllSha = "295d3767a5e5c4017f4877e67a4a8926178ecdfbb1196c3bd21ec5f5097f5ed3"
+    $InstalledFlutterDllSha = (Get-FileHash -LiteralPath (Join-Path $ExpectedInstallDir "flutter_windows.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+    Assert-Condition ($InstalledFlutterDllSha -eq $ExpectedPatchedFlutterDllSha) "Phase A regression: Installed flutter_windows.dll SHA-256 ($InstalledFlutterDllSha) != pinned rustdesk/engine ($ExpectedPatchedFlutterDllSha)"
 
     $VerOutFile1 = Join-Path $env:TEMP "dauverse_cli_ver1.txt"
     $VerProc1 = Start-Process -FilePath $InstalledMainExe -ArgumentList "--version" -WorkingDirectory $ExpectedInstallDir -RedirectStandardOutput $VerOutFile1 -Wait -PassThru
@@ -638,8 +642,8 @@ public static class DauverseWinTrustCatalog {
         Stop-ProcessesUnderDir -DirPath $ExpectedInstallDir
     }
 
-    # Portable self-extraction + portable Win32 GUI 5s survival
-    $PortableExtractDir = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "rustdesk"
+    # Portable self-extraction into isolated %LOCALAPPDATA%\dauverse_remote + portable Win32 GUI 5s survival
+    $PortableExtractDir = Join-Path ([Environment]::GetFolderPath("LocalApplicationData")) "dauverse_remote"
     if (Test-Path -LiteralPath $PortableExtractDir) {
         Stop-ProcessesUnderDir -DirPath $PortableExtractDir
         Remove-Item -LiteralPath $PortableExtractDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -652,8 +656,10 @@ public static class DauverseWinTrustCatalog {
         Assert-Condition ($PortProc.ExitCode -eq 0) "PORTABLE.exe --version exited with $($PortProc.ExitCode)"
         Start-Sleep -Seconds 2
         foreach ($reqPort in @("meta.toml", "DAUVERSE_REMOTE.exe", "librustdesk.dll", "flutter_windows.dll", "usbmmidd_v2\License.txt")) {
-            Assert-Condition (Test-Path -LiteralPath (Join-Path $PortableExtractDir $reqPort)) "PORTABLE.exe did not extract $reqPort into $PortableExtractDir"
+            Assert-Condition (Test-Path -LiteralPath (Join-Path $PortableExtractDir $reqPort)) "PORTABLE.exe did not extract $reqPort into isolated $PortableExtractDir"
         }
+        $PortFlutterDllSha = (Get-FileHash -LiteralPath (Join-Path $PortableExtractDir "flutter_windows.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+        Assert-Condition ($PortFlutterDllSha -eq $ExpectedPatchedFlutterDllSha) "Phase A regression: Portable flutter_windows.dll SHA-256 ($PortFlutterDllSha) != pinned rustdesk/engine ($ExpectedPatchedFlutterDllSha)"
         $PortGuiProc = Start-Process -FilePath (Join-Path $PortableExtractDir "DAUVERSE_REMOTE.exe") -ArgumentList "--dauverse-ui", "--no-server" -WorkingDirectory $PortableExtractDir -PassThru
         Start-Sleep -Seconds 5
         $PortGuiProc.Refresh()
@@ -1263,11 +1269,12 @@ elif phase == "phase4_corrupt_replay":
     Assert-Condition ($AddedCerts.Count -eq 0) "Unexpected residual Root Certificates after uninstall: $($AddedCerts | Out-String)"
     Assert-Condition ($PreHkcuRun -eq $PostHkcuRun) "HKCU Run registry values changed unexpectedly after uninstall!"
 
-    Write-Host "=== [7/7] Emitting Scoped RC4 Verification Reports & Final Bidirectional SHA256_MANIFEST.txt ==="
+    Write-Host "=== [7/7] Emitting Scoped RC4.3 Verification Reports & Final Bidirectional SHA256_MANIFEST.txt ==="
     $ReportObj = [ordered]@{
-        schema_version = 4
-        task_id = "DREMOTE-V1-RC4-FOCUSED-CLOSURE-011"
-        release_candidate = "RC4"
+        schema_version = 5
+        task_id = "DREMOTE-V1-FINAL-INTEGRATION-016"
+        release_candidate = "RC4.3"
+        product_version = "1.0.0-rc4.3"
         verified_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
         git_commit_sha = $GitSha
         submodule_hbb_common_sha = $SubmoduleSha
@@ -1288,6 +1295,8 @@ elif phase == "phase4_corrupt_replay":
                 sha256 = (Get-FileHash -LiteralPath $PortableExe -Algorithm SHA256).Hash.ToLowerInvariant()
                 pe_machine = $PortableMachine
             }
+            flutter_windows_dll_sha256 = $InstalledFlutterDllSha
+            portable_extract_dir_isolated = "%LOCALAPPDATA%\dauverse_remote"
             signing_status = $SigningText
             initial_build_manifest_entries_verified = $InitialManifestEntries
         }
@@ -1302,9 +1311,10 @@ elif phase == "phase4_corrupt_replay":
             usbmmidd_v2_license_txt_preserved = "PASS"
             cli_version_exact_1_5_3 = $CliVerOut
             shim_version_exact_1_5_3 = $ShimVerOut
+            phase_a_patched_flutter_windows_dll_verified = "PASS"
             installed_win32_gui_5s_survived = $GuiAliveAfter5s
             installed_win32_loaded_dlls = $LoadedKeyDlls
-            portable_self_extract_and_win32_gui_5s_survived = $PortableGuiSurvived
+            portable_self_extract_dauverse_remote_and_win32_gui_5s_survived = $PortableGuiSurvived
             dpapi_four_process_security_matrix = [ordered]@{
                 phase1 = $Phase1Res
                 phase2 = $Phase2Res
@@ -1324,28 +1334,29 @@ elif phase == "phase4_corrupt_replay":
     $ReportObj | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportJsonOut -Encoding UTF8
 
     $MdLines = @(
-        "# WINDOWS RC4 VERIFICATION REPORT (SCOPED SINGLE-HOST RUNNER EVIDENCE)",
+        "# WINDOWS RC4.3 VERIFICATION REPORT (SCOPED SINGLE-HOST RUNNER EVIDENCE)",
         "",
-        "- **Task ID:** ``DREMOTE-V1-RC4-FOCUSED-CLOSURE-011`` (``RC4``)",
+        "- **Task ID:** ``DREMOTE-V1-FINAL-INTEGRATION-016`` (``RC4.3`` • ``1.0.0-rc4.3``)",
         "- **Git Commit SHA:** ``$GitSha`` (``libs/hbb_common``: ``$SubmoduleSha``)",
         "- **Verified UTC:** ``$($ReportObj.verified_at_utc)``",
         "- **Runner OS:** ``$($ReportObj.runner_os)`` (Session ``$SessionId``)",
         "- **Signing Status:** ``$SigningText``",
-        "- **Production Status:** ``LOCKED`` (Developer CI verification -- awaiting Independent Codex Re-QA)",
+        "- **Production Status:** ``LOCKED`` (Developer CI verification -- awaiting Boss two-PC Windows acceptance)",
         "",
         "## 1. Single-Host Native Windows Gates Executed (``PASS``)",
-        "1. **Negative Harness Self-Tests (``F02``, ``FT010-B01``, ``FT010-Q01``):** ``PASS`` ($($NegResults.Count)/$($NegResults.Count) negative sentinels--missing file, missing initial manifest in final layout, bad SHA-256, duplicate entry, unlisted extra file, GUI early exits ``0/1/2``, missing DLL, missing/tiny/padded/complete-marker synthetic build logs, skipped-test marker--verified to fail closed).",
+        "1. **Negative Harness Self-Tests (``F02``, ``FT010-B01``, ``FT010-Q01``):** ``PASS`` ($($NegResults.Count)/$($NegResults.Count) negative sentinels verified to fail closed).",
         "2. **Bidirectional Immutable Build Manifest & Multi-Marker Log (``F02``, ``F15``):** ``PASS`` (``INITIAL_BUILD_SHA256_MANIFEST.txt`` verified bidirectionally before testing; real ``WINDOWS_NATIVE_BUILD.log`` ordered stage and compiler/NSIS markers verified).",
-        "3. **External RustDesk Coexistence & Ownership (``F03``):** ``PASS`` (Simulated external ``RustDesk`` service and config outside ``$ExpectedInstallDir`` survived ``SETUP.exe /S``, ``rollback_windows_release.ps1``, and ``Uninstall.exe /S`` untouched; real running RustDesk service coexistence remains ``BLOCKED`` pending lab guest).",
-        "4. **Driver Authenticity & License Closure (``F04``, ``A02``):** ``PASS`` (``usbmmidd.cat`` ``Status=$UsbCatStatus``, signer ``$UsbCatSubject``, catalog check ``$CatalogValidationStatus``, ``usbmmidd_v2\License.txt`` preserved verbatim; zero ``WDKTestCert`` / ``RustDeskIddDriver``).",
-        "5. **Startup & Win32 GUI Liveness (``F02``):** ``PASS`` (``DAUVERSE_REMOTE.exe --version`` == ``1.5.3``, ``rustdesk.exe --version`` == ``1.5.3``, both installed and portable Win32 GUI processes survived 5s with ``librustdesk.dll`` + ``flutter_windows.dll`` loaded; interactive GUI rendering remains pilot scope).",
-        "6. **4-Process Windows DPAPI & Security Negative Matrix (``F01``, ``F04``, ``F05``, ``F07``, ``F09``, ``F10``, ``F12``, ``F13``, ``F14``, ``F16``, ``N01``):** ``PASS`` (DPAPI encrypt->exit->reopen decrypt; HMAC v3 lossless f32 tags + neighbor collision rejection + corrupt replay journal fail-closed + per-file sender SHA-256 & full-identity isolation).",
-        "7. **Bidirectional Manifest-Only Rollback -- Simulated Overlay Helper Check (``F11``):** ``PASS (SIMULATED_BINARY_OVERLAY)`` (Tampered and unlisted-extra backups refused without mutating ``$ExpectedInstallDir``; valid manifested backup restored Release A ``librustdesk.dll`` SHA-256 cleanly; distinct two-release A->B->A native acceptance remains pilot scope).",
-        "8. **Host Cleanliness Diff:** ``PASS`` (Zero residual Windows Services, Root Certificates, or ``HKCU Run`` entries).",
+        "3. **Phase A Patched Flutter 3.24.5 Engine & Portable Isolation:** ``PASS`` (``flutter_windows.dll`` SHA-256 ``$InstalledFlutterDllSha`` matches pinned ``rustdesk/engine``; ``PORTABLE.exe`` extracted cleanly into isolated ``%LOCALAPPDATA%\dauverse_remote\``).",
+        "4. **External RustDesk Coexistence & Ownership (``F03``):** ``PASS`` (Simulated external ``RustDesk`` service and config outside ``$ExpectedInstallDir`` survived ``SETUP.exe /S``, ``rollback_windows_release.ps1``, and ``Uninstall.exe /S`` untouched).",
+        "5. **Driver Authenticity & License Closure (``F04``, ``A02``):** ``PASS`` (``usbmmidd.cat`` ``Status=$UsbCatStatus``, signer ``$UsbCatSubject``, catalog check ``$CatalogValidationStatus``, ``usbmmidd_v2\License.txt`` preserved verbatim; zero ``WDKTestCert`` / ``RustDeskIddDriver``).",
+        "6. **Startup & Win32 GUI Liveness (``F02``):** ``PASS`` (``DAUVERSE_REMOTE.exe --version`` == ``1.5.3``, ``rustdesk.exe --version`` == ``1.5.3``, both installed and portable Win32 GUI processes survived 5s with ``librustdesk.dll`` + ``flutter_windows.dll`` loaded).",
+        "7. **4-Process Windows DPAPI & Security Negative Matrix (``F01``, ``F04``, ``F05``, ``F07``, ``F09``, ``F10``, ``F12``, ``F13``, ``F14``, ``F16``, ``N01``):** ``PASS``.",
+        "8. **Bidirectional Manifest-Only Rollback -- Simulated Overlay Helper Check (``F11``):** ``PASS (SIMULATED_BINARY_OVERLAY)``.",
+        "9. **Host Cleanliness Diff:** ``PASS`` (Zero residual Windows Services, Root Certificates, or ``HKCU Run`` entries).",
         "",
         "## 2. Gates Explicitly Retained as ``BLOCKED`` / ``PARTIAL-NATIVE`` (Not Claimed as Full ``PASS``)",
-        "- **Two-Machine Live Remote Session:** ``BLOCKED`` in single-runner CI (requires two authorized Windows endpoints).",
-        "- **Distinct Release A -> Release B Native Upgrade/Rollback Pilot (``F11``):** ``PARTIAL-NATIVE`` (single-build harness uses ``SIMULATED_BINARY_OVERLAY``; requires two distinct built releases).",
+        "- **Two-Machine Live Remote Session:** ``BLOCKED`` in single-runner CI (requires Boss two-PC Windows pilot).",
+        "- **Distinct Release A -> Release B Native Upgrade/Rollback Pilot (``F11``):** ``PARTIAL-NATIVE`` (single-build harness uses ``SIMULATED_BINARY_OVERLAY``).",
         "- **Physical Monitorless GPU & Authorized Driver Install:** ``BLOCKED`` by governance (no host driver installation without Boss approval).",
         "- **Hunonic SK02 Hardware Control:** ``BLOCKED`` (``DisabledSmartPlugAdapter`` retained; no public vendor API)."
     )
@@ -1362,7 +1373,7 @@ elif phase == "phase4_corrupt_replay":
     $FinalManifestLines = New-ReleaseManifestLines -BaseDirectory $ReleaseDir -ManifestRole "Final"
     Set-Content -LiteralPath $ManifestTxt -Value $FinalManifestLines -Encoding UTF8
     $FinalVerifiedCount = Assert-ManifestFileValid -ManifestFilePath $ManifestTxt -BaseDirectory $ReleaseDir -ManifestRole "Final"
-    Write-Host "=== ALL SINGLE-HOST WINDOWS RC4 GATES PASSED ($FinalVerifiedCount manifest entries verified) ==="
+    Write-Host "=== ALL SINGLE-HOST WINDOWS RC4.3 GATES PASSED ($FinalVerifiedCount manifest entries verified) ==="
     Get-Content -LiteralPath $ManifestTxt
 } finally {
     $PSNativeCommandUseErrorActionPreference = $false

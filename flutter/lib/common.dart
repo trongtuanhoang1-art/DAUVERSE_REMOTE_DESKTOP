@@ -379,8 +379,7 @@ class MyTheme {
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
-    dialogTheme: DialogThemeData(
-      backgroundColor: Colors.white,
+    dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
@@ -411,7 +410,7 @@ class MyTheme {
     cardColor: grayBg,
     hintColor: Color(0xFFAAAAAA),
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: const TabBarThemeData(
+    tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
     tooltipTheme: tooltipTheme(),
@@ -478,8 +477,7 @@ class MyTheme {
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
     ),
-    dialogTheme: DialogThemeData(
-      backgroundColor: Color(0xFF18191E),
+    dialogTheme: DialogTheme(
       elevation: 15,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18.0),
@@ -513,7 +511,7 @@ class MyTheme {
     ),
     cardColor: Color(0xFF24252B),
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: const TabBarThemeData(
+    tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
     ),
     tooltipTheme: tooltipTheme(),
@@ -3063,18 +3061,19 @@ int versionCmp(String v1, String v2) {
 }
 
 String getWindowName({WindowType? overrideType}) {
-  final name = bind.mainGetAppNameSync();
+  final rawName = bind.mainGetAppNameSync();
+  final name = rawName == 'RustDesk' ? 'DAUVERSE Remote Desktop' : rawName;
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
       return name;
     case WindowType.FileTransfer:
-      return "File Transfer - $name";
+      return "${translate('File Transfer')} - $name";
     case WindowType.ViewCamera:
-      return "View Camera - $name";
+      return "${translate('View Camera')} - $name";
     case WindowType.PortForward:
-      return "Port Forward - $name";
+      return "${translate('Port Forward')} - $name";
     case WindowType.RemoteDesktop:
-      return "Remote Desktop - $name";
+      return "${translate('Remote Desktop')} - $name";
     default:
       break;
   }

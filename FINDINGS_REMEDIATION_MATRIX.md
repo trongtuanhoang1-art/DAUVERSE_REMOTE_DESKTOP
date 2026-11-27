@@ -1,6 +1,6 @@
-# DAUVERSE REMOTE DESKTOP V1 — FINDINGS REMEDIATION MATRIX (RC4.2 BUILD RECOVERY)
+# DAUVERSE REMOTE DESKTOP V1 — FINDINGS REMEDIATION MATRIX (`RC4.3` FINAL INTEGRATION)
 
-- **Task ID:** `DREMOTE-V1-RC4.2-BUILD-RECOVERY-015` (`PHASE 1 CARBON HOTFIX + PHASE 2 TARGETED PRO QA + PHASE 3 CONTROLLED WINDOWS CI`)
+- **Task ID:** `DREMOTE-V1-FINAL-INTEGRATION-016` (`RC4.3 — FINAL PRODUCT POLISH & LIVE OPERATIONAL RECOVERY`)
 - **Input Independent QA Reports (Preserved Byte-for-Byte):**
   1. `QA/DAUVERSE_REMOTE_V1_INDEPENDENT_QA_REPORT.md` — SHA-256: `f07b61edbd82a376cc5e3f854d72d0cc3331735094bc0631e37fbc9ebc60a913`
   2. `QA/DAUVERSE_REMOTE_V1_RC2_INDEPENDENT_REQA_REPORT.md` — SHA-256: `c23d36e7d83b2fb1402238d8a8501b9de899fcd94b2774155b6a602fd77fb954`
@@ -11,12 +11,16 @@
   - RC2: `0e1e3e87185159a481360b2c2b28f3dee541328f` (GitHub Actions Run `45720572543`)
   - RC3: `821f1dabbbe865930d1bd0676760956659533c15` (`FAIL_SOURCE_GATE`)
   - RC4: `980373472ae17b869f273b7544336b133ca3ce86` (Claude Independent QA `012`: `B01`–`B05`, `Q01`–`Q03`, `F01` verified `CLOSED-SOURCE`)
-  - RC4.1 (Pinned Baseline): `800443eacba6cf77bec7068cea569c5f8a72ba5d` (`RC4-N01` remediated; Windows CI Run `45854069899` stopped at `librustdesk.dll` with 1 borrow-checker error `E0382` at `src/dauverse/service_ctrl.rs:1169:16`, remediated in RC4.2)
+  - RC4.1: `800443eacba6cf77bec7068cea569c5f8a72ba5d` (`RC4-N01` remediated; Windows CI Run `45854069899`)
+  - RC4.2: `258db6cdbbe034bad1462ed0c7c3d03a52ebb0a4` (Windows CI Run `45863490227` succeeded; Boss live 2-PC Windows test uncovered multi-window `flutter_windows.dll` `0xc0000005` crash + UI/UX & service gaps, remediated in `RC4.3`)
   - Submodule `libs/hbb_common`: `450cc1d7b729cfa8d19b5a7527c9cc2fe54cf5eb` (untouched)
+- **RC4.3 Live Operational Remediation Summary (`Phase A`–`Phase F`):**
+  - **RC4.3-A01 (P0 Live Crash — `flutter_windows.dll` `0xc0000005` @ `0xc2c668`/`0xc2d108`):** Root-caused via PE disassembly of Run `45863490227` artifact to stock Flutter `3.50.0` ANGLE D3D11 `rx::StateManager11::updateState` multi-window context race (`flutter/flutter#155685`). Remediated by pinning Windows x64 to **Flutter `3.24.5`** + **`rustdesk/engine` `windows-x64-release`** (`flutter_windows.dll` SHA-256 `295d3767a5e5c4017f4877e67a4a8926178ecdfbb1196c3bd21ec5f5097f5ed3`), defaulting `GraphicsFallbackMode` to `PixelBufferSafe`, isolating portable extraction to `%LOCALAPPDATA%\dauverse_remote\`, fixing `--dauverse-ui` server startup, and fixing `Engine Gốc` `TabbarTheme` crash.
+  - **RC4.3-B01 (Mandatory Dashboard Connection Hero & Multi-DPI Neon UI):** Implemented `36px` ID + `26px` live LAN IPv4s + 1-click Copy (`"Đã sao chép"`) + Temp Password Show/Hide/Copy/Regenerate + Paste + `KẾT NỐI NGAY` + `Online/Offline/Connecting/Connected` pill + offline SIL OFL-1.1 fonts + `1.0.0-rc4.3` version unification + Phase E Windows Service UAC / Winlogon readiness controls while preserving every closed security invariant (`F01`–`F16`, `B01`–`B05`, `RC4-N01`).
 - **Severities Preserved Unchanged:** Historical `6 P1` (`F01`–`F06`), `9 P2` (`F07`–`F14`, `F16`) + `N01` (`P2`), `1 P3` (`F15`); RC3 Blockers `FT010-B01`..`B05` (`CLOSED-SOURCE` in RC4); RC4 Blocker `RC4-N01` (`P2`) + non-blocking `N02`–`N07`.
 - **Governance & Status Legend:**
-  - `CLOSED-SOURCE (PRESERVED)`: Independently verified `CLOSED-SOURCE` by Codex (RC3) and/or Claude (RC4) and preserved intact in RC4.1; native/pilot caveats remain explicitly tracked without claiming native PASS.
-  - `SOURCE_REMEDIATED_RC4_1`: Remaining source blocker (`RC4-N01`) remediated in RC4.1 with pre-fix `FAIL` and post-fix `PASS` bidirectional resume regression tests.
+  - `CLOSED-SOURCE (PRESERVED)`: Independently verified `CLOSED-SOURCE` by Codex (RC3) and/or Claude (RC4) and preserved intact in RC4.3; native/pilot caveats remain explicitly tracked without claiming native PASS.
+  - `SOURCE_REMEDIATED_RC4_1`: Remaining source blocker (`RC4-N01`) remediated in RC4.1 and preserved intact in RC4.3 with bidirectional resume regression tests.
   - `PARTIAL-NATIVE`: Source closure hardened and helper-verified, but full acceptance requires real distinct-release A/B or native Windows pilot execution (`F11` single-build overlay is `SIMULATED_BINARY_OVERLAY`, never claimed as distinct-release A/B proof).
   - **Production Status:** **`LOCKED`**.
 

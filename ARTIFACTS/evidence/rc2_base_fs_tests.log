@@ -12,7 +12,6 @@ warning: `package.homepage` is redundant with `package.repository`
    = note: `cargo::redundant_homepage` is set to `warn` by default
 help: consider removing `package.homepage`
 warning: `enigo` (manifest) generated 1 warning
-   Compiling base v0.1.0 (/home/antigravity/trongtuanhoang1-art/DAUVERSE_REMOTE_DESKTOP/libs/base)
 warning: use of deprecated associated function `core::num::<impl u32>::max_value`: replaced by the `MAX` associated constant on this type
    --> libs/hbb_common/src/lib.rs:192:41
     |
@@ -34,7 +33,7 @@ help: replace the use of the deprecated method
     |
 
 warning: `hbb_common` (lib) generated 2 warnings (run `cargo fix --lib -p hbb_common` to apply 1 suggestion)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.47s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.02s
      Running unittests src/lib.rs (target/debug/build/base/ef3382270ef47cae/out/base-ef3382270ef47cae)
 
 running 28 tests
@@ -49,9 +48,9 @@ test fs::download_tests::download_refuses_linked_target_and_staging_files ... ok
 test fs::download_tests::download_refuses_symlink_destination_directory ... ok
 test fs::download_tests::download_requires_confirmation_to_overwrite ... ok
 test fs::android::tests::selected_folder_transfers_directly_and_preserves_data_on_publish_failure ... ok
-test fs::download_tests::f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch ... ok
-test fs::tests::compressed_file_extensions_ignore_case ... ok
 test fs::download_tests::download_requires_separate_confirmation_for_each_existing_file ... ok
+test fs::tests::compressed_file_extensions_ignore_case ... ok
+test fs::download_tests::f14_f16_download_refuses_hardlinked_staging_and_sha256_mismatch ... ok
 test fs::tests::f16_new_read_populates_sha256_and_detects_mid_transfer_mutation_and_corrupted_staging ... ok
 test fs::tests::path_traversal_e2e_write_rejects_absolute_path ... ok
 test fs::tests::path_traversal_e2e_write_rejects_relative_escape ... ok
@@ -67,5 +66,5 @@ test platform::linux::tests::test_shell_quote_metacharacters ... ok
 test platform::linux::tests::test_shell_quote_single_quotes ... ok
 test fs::tests::rc4_n01_bidirectional_upload_and_download_resume_seeks_reader_and_verifies_end_to_end ... ok
 
-test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
 

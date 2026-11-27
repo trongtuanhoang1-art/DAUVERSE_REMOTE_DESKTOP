@@ -6,8 +6,14 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/dauverse_i18n.dart';
+
+const String kDauverseProductVersion = '1.0.0-rc4.3';
+const String kDauverseReleaseCandidate = 'RC4.3';
+const String kDauverseDisplayVersion = 'V1.0 RC4.3';
+const String kDauverseEngineVersion = '1.5.3';
 
 typedef _DauverseInvokeNative = ffi.Pointer<Utf8> Function(
   ffi.Pointer<Utf8> cmd,
@@ -34,6 +40,7 @@ class DauverseNativeBridge {
 
   static bool _testHarnessMode = false;
   static bool _forceUnboundForTest = false;
+  static Map<String, dynamic>? _testHarnessIdentityOverride;
 
   @visibleForTesting
   static void setTestHarnessMode(bool enabled) {
@@ -44,6 +51,22 @@ class DauverseNativeBridge {
     }
     assert(() {
       _testHarnessMode = enabled;
+      if (!enabled) {
+        _testHarnessIdentityOverride = null;
+      }
+      return true;
+    }());
+  }
+
+  @visibleForTesting
+  static void setTestHarnessIdentityOverride(Map<String, dynamic>? overrideMap) {
+    if (isReleaseBuild) {
+      throw UnsupportedError(
+        'SECURITY_DENY_RELEASE_TEST_HARNESS: Test harness override is compiled out of release builds.',
+      );
+    }
+    assert(() {
+      _testHarnessIdentityOverride = overrideMap;
       return true;
     }());
   }
@@ -164,15 +187,48 @@ class DauverseNativeBridge {
     };
   }
 
+  static String _harnessTempPw = 'dv9x4k2p';
+  static String _harnessPerfMode = 'AUTO_ADAPTIVE';
+  static String _harnessGfxMode = 'PIXEL_BUFFER_SAFE';
+
   Map<String, dynamic> _widgetTestHarnessOnlyState(String cmd, Map<String, dynamic> args) {
+    final baseIdentity = <String, dynamic>{
+      'connection_id': 'UNBOUND-TEST',
+      'formatted_id': 'UNBOUND-TEST',
+      'temporary_password': _harnessTempPw,
+      'permanent_password_configured': false,
+      'lan_interfaces': const <Map<String, dynamic>>[],
+      'lan_ips': const <String>[],
+      'public_ip': null,
+      'public_ip_status': 'OPT_IN_NOT_QUERIED',
+      'direct_ip_access_enabled': false,
+      'direct_ip_port': 21118,
+      'rendezvous_server': '',
+      'using_public_rendezvous': true,
+      'service_stopped': false,
+      'active_sessions_count': 0,
+      'online_state_code': 1,
+      'connection_status': 'ONLINE',
+      if (_testHarnessIdentityOverride != null) ..._testHarnessIdentityOverride!,
+    };
+
     if (cmd == 'dashboard_snapshot') {
       return {
         'ok': true,
         'data': {
           'product': 'DAUVERSE REMOTE DESKTOP',
-          'version': '1.0.0',
-          'engine_base': '1.5.3',
-          'local_peer_id': 'UNBOUND-TEST',
+          'version': kDauverseProductVersion,
+          'release_candidate': kDauverseReleaseCandidate,
+          'display_version': kDauverseDisplayVersion,
+          'engine_base': kDauverseEngineVersion,
+          'local_peer_id': baseIdentity['connection_id'],
+          'connection_identity': baseIdentity,
+          'graphics_fallback_mode': _harnessGfxMode,
+          'ui_preferences': {
+            'dark_mode': true,
+            'vietnamese': true,
+            'transfer_overwrite_policy': 'REQUIRE_CONFIRMATION',
+          },
           'bridge_endpoint': 'http://127.0.0.1:21188/v1/events',
           'bridge_port': 21188,
           'hardware': {
@@ -203,7 +259,7 @@ class DauverseNativeBridge {
           'hardware_alerts': const [],
           'performance': {
             'session_connected': false,
-            'active_mode': 'AUTO_ADAPTIVE',
+            'active_mode': _harnessPerfMode,
             'measured_fps': null,
             'measured_bitrate_kbps': null,
             'configured_target_fps': 60,
@@ -256,6 +312,7 @@ class DauverseNativeBridge {
           'transfer_queue': {
             'authorized_root': '/tmp/dauverse_remote_v1/received_files',
             'bandwidth_limit_kbps': null,
+            'overwrite_policy': 'REQUIRE_CONFIRMATION',
             'active_count': 0,
             'jobs': const [],
           },
@@ -281,6 +338,47 @@ class DauverseNativeBridge {
             'scm_service_name': 'RustDesk',
             'service_state': 'NOT_INSTALLED_PORTABLE_MODE',
             'external_service_collision_detected': false,
+            'auto_start_with_windows': false,
+            'unattended_access_enabled': false,
+          },
+          'host_capabilities': {
+            'conservative_deny_latched': false,
+            'stop_service': false,
+            'approve_mode': 'password_and_click',
+            'direct_ip_access_enabled': false,
+            'enable_keyboard': true,
+            'enable_clipboard': true,
+            'enable_file_transfer': true,
+            'enable_audio': true,
+            'enable_tunnel': true,
+            'enable_remote_restart': true,
+            'enable_record_session': false,
+          },
+          'windows_access_readiness': {
+            'readiness_code': 'PORTABLE_OR_USER_SESSION_ONLY',
+            'windows_password_preserved': true,
+            'windows_auto_login_disabled': true,
+            'owned_service_installed': false,
+            'owned_service_running': false,
+            'external_rustdesk_collision': false,
+            'pre_login_winlogon_ready': false,
+            'lock_screen_uac_ready': false,
+            'auto_start_user_logon': false,
+            'unattended_access_enabled': false,
+            'permanent_password_set': false,
+            'service_state': 'NOT_INSTALLED_PORTABLE_MODE',
+          },
+          'session_tools': {
+            'recording': {
+              'active': false,
+              'visible_banner_indicator': false,
+            },
+            'history': const [],
+            'shortcuts': const {
+              'toggle_fullscreen': 'Ctrl+Alt+Enter',
+              'toggle_mini_control': 'Ctrl+Alt+M',
+              'open_file_transfer': 'Ctrl+Alt+F',
+            },
           },
           'security': {
             'summary': {
@@ -291,21 +389,77 @@ class DauverseNativeBridge {
               'telemetry_enabled': false,
               'trusted_devices_count': 0,
               'audit_chain_intact': true,
+              'step_up_pin_configured': false,
               'trusted_devices': const [],
             },
             'recent_audit': const [],
           },
           'release': {
-            'product_version': '1.0.0',
-            'upstream_engine_base': '1.5.3',
+            'product_version': kDauverseProductVersion,
+            'release_candidate': kDauverseReleaseCandidate,
+            'display_version': kDauverseDisplayVersion,
+            'upstream_engine_base': kDauverseEngineVersion,
             'code_signing_status': 'UNSIGNED',
             'auto_update_enabled': false,
+            'rollback_supported': true,
           },
         }
       };
     }
-    if (cmd == 'notification_mark_read' || cmd == 'mini_control_state') {
-      return {'ok': true, 'simulated_test_harness': true};
+    if (cmd == 'regenerate_temporary_password') {
+      _harnessTempPw = _harnessTempPw == 'dv9x4k2p' ? 'mk7r3w8q' : 'dv9x4k2p';
+      return {
+        'ok': true,
+        'data': {...baseIdentity, 'temporary_password': _harnessTempPw},
+      };
+    }
+    if (cmd == 'set_performance_mode') {
+      _harnessPerfMode = args['mode']?.toString() ?? 'AUTO_ADAPTIVE';
+      return {'ok': true, 'data': {'mode': _harnessPerfMode}};
+    }
+    if (cmd == 'set_graphics_fallback_mode') {
+      _harnessGfxMode = args['mode']?.toString() ?? 'PIXEL_BUFFER_SAFE';
+      return {'ok': true, 'data': {'graphics_fallback_mode': _harnessGfxMode}};
+    }
+    if (cmd == 'network_probe') {
+      return {
+        'ok': true,
+        'data': {'target': args['target'] ?? '127.0.0.1:21116', 'reachable': false, 'latency_ms': 0, 'detail': 'harness'},
+      };
+    }
+    if (cmd == 'run_benchmark') {
+      return {
+        'ok': true,
+        'data': {'scope': 'LOCAL_HARNESS_BENCHMARK', 'tile_scan_ms': 1.2, 'hmac_sign_us': 18},
+      };
+    }
+    if (cmd == 'export_diagnostics') {
+      return {
+        'ok': true,
+        'data': '{"product":"DAUVERSE REMOTE DESKTOP","version":"1.0.0-rc4.3","secrets_redacted":true}',
+      };
+    }
+    if (cmd == 'verify_update_package') {
+      return {
+        'ok': true,
+        'data': {
+          'safe_for_auto_update': false,
+          'safe_for_manual_owner_install': false,
+          'status_code': 'ARTIFACT_NOT_FOUND',
+          'computed_sha256': null,
+          'signature_status': 'UNSIGNED_BUILD',
+          'reason': 'Widget test harness check',
+        },
+      };
+    }
+    if (cmd == 'notification_mark_read' ||
+        cmd == 'mini_control_state' ||
+        cmd == 'set_ui_preferences' ||
+        cmd == 'set_transfer_overwrite_policy' ||
+        cmd == 'record_session_history' ||
+        cmd == 'session_recording_control' ||
+        cmd == 'set_shortcut') {
+      return {'ok': true, 'simulated_test_harness': true, 'data': args};
     }
     return {
       'ok': false,
@@ -318,8 +472,11 @@ class DauverseController extends ChangeNotifier {
   DauverseScreenId currentScreen;
   bool isDarkMode;
   bool isVietnamese;
+  bool sidebarCollapsed = false;
   RealSessionLauncher? onLaunchRealSession;
   List<Map<String, String>> Function()? peersProvider;
+  void Function(bool isDark)? onSyncThemeExternal;
+  void Function(bool isVi)? onSyncLanguageExternal;
 
   bool showClassicRustDeskConnector = false;
   String targetPeerId = '';
@@ -330,6 +487,8 @@ class DauverseController extends ChangeNotifier {
   double miniControlOpacity = 0.96;
   String miniControlMode = 'INTERACTIVE';
   String performanceMode = 'AUTO_ADAPTIVE';
+  String graphicsFallbackMode = 'PIXEL_BUFFER_SAFE';
+  String transferOverwritePolicy = 'REQUIRE_CONFIRMATION';
   bool toolbarCollapsed = false;
   bool toolbarAutoHide = false;
   bool toolbarPinnedTop = true;
@@ -343,6 +502,10 @@ class DauverseController extends ChangeNotifier {
   bool doNotDisturb = false;
   int toastAutoHideSeconds = 6;
 
+  bool isBusy = false;
+  String lastCopiedKey = '';
+  String lastCopiedNotice = '';
+
   Map<String, dynamic> snapshot = const {};
   bool backendAvailable = true;
   String backendError = '';
@@ -351,9 +514,11 @@ class DauverseController extends ChangeNotifier {
   String lastActionBanner = '';
   Map<String, dynamic>? activeCornerToast;
   String? _lastShownToastId;
+  bool _hydratedPrefsOnce = false;
 
   Timer? _pollTimer;
   Timer? _toastTimer;
+  Timer? _copiedNoticeTimer;
 
   DauverseController({
     DauverseScreenId initialScreen = DauverseScreenId.dashboard,
@@ -361,6 +526,8 @@ class DauverseController extends ChangeNotifier {
     this.isVietnamese = true,
     this.onLaunchRealSession,
     this.peersProvider,
+    this.onSyncThemeExternal,
+    this.onSyncLanguageExternal,
   }) : currentScreen = initialScreen {
     refreshSnapshot();
   }
@@ -376,7 +543,18 @@ class DauverseController extends ChangeNotifier {
   void dispose() {
     _pollTimer?.cancel();
     _toastTimer?.cancel();
+    _copiedNoticeTimer?.cancel();
     super.dispose();
+  }
+
+  static String normalizePeerTarget(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return '';
+    // Strip internal grouping spaces on numeric IDs (e.g. "123 456 789" -> "123456789")
+    if (RegExp(r'^[\d\s]+$').hasMatch(trimmed)) {
+      return trimmed.replaceAll(RegExp(r'\s+'), '');
+    }
+    return trimmed.replaceAll(RegExp(r'\s+'), '');
   }
 
   void selectScreen(DauverseScreenId screen) {
@@ -385,13 +563,26 @@ class DauverseController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed;
+    notifyListeners();
+  }
+
   void toggleTheme() {
     isDarkMode = !isDarkMode;
+    DauverseNativeBridge.instance.call('set_ui_preferences', {
+      'dark_mode': isDarkMode,
+    });
+    onSyncThemeExternal?.call(isDarkMode);
     notifyListeners();
   }
 
   void toggleLanguage() {
     isVietnamese = !isVietnamese;
+    DauverseNativeBridge.instance.call('set_ui_preferences', {
+      'vietnamese': isVietnamese,
+    });
+    onSyncLanguageExternal?.call(isVietnamese);
     notifyListeners();
   }
 
@@ -400,50 +591,166 @@ class DauverseController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> copyToClipboardWithFeedback(
+    BuildContext context,
+    String value, {
+    String? keyTag,
+    String? displayLabel,
+  }) async {
+    final cleaned = value.trim();
+    if (cleaned.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: cleaned));
+    lastCopiedKey = keyTag ?? cleaned;
+    lastCopiedNotice = i18n.t('Đã sao chép', 'Đã sao chép (Copied)');
+    lastActionBanner = displayLabel != null
+        ? '${i18n.t("Đã sao chép", "Copied")} $displayLabel'
+        : i18n.t('Đã sao chép', 'Copied');
+    _copiedNoticeTimer?.cancel();
+    _copiedNoticeTimer = Timer(const Duration(milliseconds: 2400), () {
+      lastCopiedKey = '';
+      lastCopiedNotice = '';
+      notifyListeners();
+    });
+    notifyListeners();
+    if (context.mounted) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.clearSnackBars();
+      messenger?.showSnackBar(
+        SnackBar(
+          duration: const Duration(milliseconds: 1800),
+          width: 300,
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 18),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  displayLabel != null
+                      ? 'Đã sao chép • $displayLabel'
+                      : 'Đã sao chép',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<String> pasteFromClipboard() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final txt = data?.text?.trim() ?? '';
+      if (txt.isNotEmpty) {
+        targetPeerId = normalizePeerTarget(txt);
+        lastActionBanner = i18n.t(
+          'Đã dán từ Clipboard: $txt',
+          'Pasted from Clipboard: $txt',
+        );
+        notifyListeners();
+      }
+      return txt;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  bool regenerateTemporaryPassword() {
+    final res = DauverseNativeBridge.instance.call('regenerate_temporary_password');
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã tạo mật khẩu tạm thời mới thành công.',
+        'Regenerated temporary password.',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
+  }
+
+  Future<void> probePublicIpOptIn() async {
+    isBusy = true;
+    notifyListeners();
+    try {
+      final res = DauverseNativeBridge.instance.call('probe_public_ip');
+      if (res['ok'] == true) {
+        final ip = (res['data'] as Map<String, dynamic>?)?['public_ip']?.toString() ?? '';
+        lastActionBanner = i18n.t(
+          'Đã xác định địa chỉ IP Public thực tế: $ip',
+          'Resolved live Public IP: $ip',
+        );
+      } else {
+        lastActionBanner = i18n.t(
+          'Không thể truy vấn IP Public bên ngoài (${res['error'] ?? 'offline'}). Vẫn kết nối bình thường qua ID / LAN.',
+          'External Public IP query unavailable (${res['error'] ?? 'offline'}). ID / LAN connection unaffected.',
+        );
+      }
+      refreshSnapshot(preserveActionBanner: true);
+    } finally {
+      isBusy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> launchRealRemoteSession(BuildContext context, String rawPeerId) async {
-    final cleaned = rawPeerId.trim();
+    final cleaned = normalizePeerTarget(rawPeerId);
     if (cleaned.isEmpty) {
       lastActionBanner = i18n.t(
-        'Vui lòng nhập ID máy tính đích trước khi kết nối.',
-        'Please enter a target Peer ID before connecting.',
+        'Vui lòng nhập ID hoặc địa chỉ IP máy tính đích trước khi kết nối.',
+        'Please enter a target Peer ID or IP address before connecting.',
       );
       notifyListeners();
       return;
     }
     targetPeerId = cleaned;
+    DauverseNativeBridge.instance.call('record_session_history', {
+      'peer_id': cleaned,
+      'peer_name': cleaned,
+      'route': 'OUTGOING_REMOTE_CONTROL',
+    });
     if (onLaunchRealSession != null) {
       lastActionBanner = i18n.t(
-        'Đang khởi chạy phiên RustDesk Engine tới $cleaned...',
-        'Launching native RustDesk session to $cleaned...',
+        'Đang kết nối điều khiển từ xa tới $cleaned...',
+        'Connecting remote desktop session to $cleaned...',
       );
       notifyListeners();
       await onLaunchRealSession!(context, cleaned, isFileTransfer: false);
     } else {
       currentScreen = DauverseScreenId.remoteSession;
       lastActionBanner = i18n.t(
-        'Đã chọn thiết bị $cleaned (Chế độ xem trước Shell — mở Engine gốc để kết nối thực).',
-        'Selected target $cleaned (Shell mode — launch with full RustDesk runtime for live stream).',
+        'Đã chọn thiết bị $cleaned (Chế độ xem trước — khởi chạy từ ứng dụng chính để mở luồng hình ảnh).',
+        'Selected target $cleaned (Preview shell — launch full runtime for live video stream).',
       );
       notifyListeners();
     }
   }
 
   Future<void> launchRealFileTransfer(BuildContext context, String rawPeerId) async {
-    final cleaned = rawPeerId.trim();
+    final cleaned = normalizePeerTarget(rawPeerId);
     if (cleaned.isEmpty) {
       currentScreen = DauverseScreenId.fileTransfer;
       lastActionBanner = i18n.t(
-        'Nhập Peer ID để mở trình truyền file hai chiều trực tiếp.',
-        'Enter a Peer ID to launch native dual-pane file transfer.',
+        'Nhập ID hoặc IP thiết bị để mở trình truyền file hai chiều trực tiếp.',
+        'Enter a Peer ID or IP to launch native dual-pane file transfer.',
       );
       notifyListeners();
       return;
     }
     targetPeerId = cleaned;
+    DauverseNativeBridge.instance.call('record_session_history', {
+      'peer_id': cleaned,
+      'peer_name': cleaned,
+      'route': 'OUTGOING_FILE_TRANSFER',
+    });
     if (onLaunchRealSession != null) {
       lastActionBanner = i18n.t(
         'Đang mở phiên Truyền File hai chiều tới $cleaned...',
-        'Opening native dual-pane File Transfer to $cleaned...',
+        'Opening dual-pane File Transfer to $cleaned...',
       );
       notifyListeners();
       await onLaunchRealSession!(context, cleaned, isFileTransfer: true);
@@ -459,6 +766,30 @@ class DauverseController extends ChangeNotifier {
       backendAvailable = true;
       backendError = '';
       snapshot = resp['data'] as Map<String, dynamic>;
+
+      if (!_hydratedPrefsOnce) {
+        _hydratedPrefsOnce = true;
+        final perfMap = snapshot['performance'] as Map<String, dynamic>? ?? const {};
+        if (perfMap['active_mode'] != null) {
+          performanceMode = perfMap['active_mode'].toString();
+        }
+        if (snapshot['graphics_fallback_mode'] != null) {
+          graphicsFallbackMode = snapshot['graphics_fallback_mode'].toString();
+        }
+        final tq = snapshot['transfer_queue'] as Map<String, dynamic>? ?? const {};
+        if (tq['overwrite_policy'] != null) {
+          transferOverwritePolicy = tq['overwrite_policy'].toString();
+        }
+        final notifMap = snapshot['notifications'] as Map<String, dynamic>? ?? const {};
+        final nPrefs = notifMap['preferences'] as Map<String, dynamic>? ?? const {};
+        quietMode = nPrefs['quiet_mode'] == true;
+        doNotDisturb = nPrefs['do_not_disturb'] == true;
+        toastAutoHideSeconds = (nPrefs['auto_hide_seconds'] as num?)?.toInt() ?? 6;
+        final st = snapshot['session_tools'] as Map<String, dynamic>? ?? const {};
+        final rec = st['recording'] as Map<String, dynamic>? ?? const {};
+        recordingActive = rec['active'] == true;
+      }
+
       final hw = snapshot['hardware'] as Map<String, dynamic>? ?? const {};
       final cpu = (hw['cpu_usage_pct'] as num?)?.toDouble() ?? 0.0;
       final ram = (hw['ram_usage_pct'] as num?)?.toDouble() ?? 0.0;
@@ -506,8 +837,45 @@ class DauverseController extends ChangeNotifier {
     if (res['ok'] == true) {
       performanceMode = mode;
       lastActionBanner = i18n.t(
-        'Đã áp dụng chế độ hiệu năng vào Engine: $mode',
-        'Applied performance mode to Engine: $mode',
+        'Đã áp dụng cấu hình hiệu năng: $mode',
+        'Applied performance mode: $mode',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool setGraphicsFallbackMode(String mode, {bool restoreHwcodec = false}) {
+    final res = DauverseNativeBridge.instance.call('set_graphics_fallback_mode', {
+      'mode': mode,
+      'restore_hwcodec': restoreHwcodec,
+    });
+    if (res['ok'] == true) {
+      graphicsFallbackMode = mode;
+      lastActionBanner = i18n.t(
+        'Đã lưu chế độ kết xuất đồ họa an toàn: $mode',
+        'Saved graphics rendering mode: $mode',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Backend unavailable'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool updateTransferOverwritePolicy(String policy) {
+    final res = DauverseNativeBridge.instance.call('set_transfer_overwrite_policy', {
+      'policy': policy,
+    });
+    if (res['ok'] == true) {
+      transferOverwritePolicy = policy;
+      lastActionBanner = i18n.t(
+        'Đã lưu chính sách xử lý trùng tên file: $policy',
+        'Saved duplicate file policy: $policy',
       );
       refreshSnapshot(preserveActionBanner: true);
       return true;
@@ -534,8 +902,8 @@ class DauverseController extends ChangeNotifier {
     final res = DauverseNativeBridge.instance.call('set_clipboard_policy', patch);
     if (res['ok'] == true) {
       lastActionBanner = i18n.t(
-        'Đã đồng bộ chính sách Smart Clipboard xuống Rust Engine.',
-        'Synced Smart Clipboard policy to Rust Engine.',
+        'Đã đồng bộ chính sách Smart Clipboard xuống Engine.',
+        'Synced Smart Clipboard policy to Engine.',
       );
       refreshSnapshot(preserveActionBanner: true);
       return true;
@@ -638,13 +1006,22 @@ class DauverseController extends ChangeNotifier {
   }
 
   void toggleExplicitRecording(bool enable) {
-    recordingActive = enable;
-    lastActionBanner = enable
-        ? i18n.t(
-            'CHẾ ĐỘ GHI HÌNH ĐƯỢC CẤP QUYỀN: Chỉ báo ghi hình công khai đang bật (chờ luồng phiên kết nối).',
-            'RECORDING ARMED: Mandatory visible recording banner enabled.',
-          )
-        : i18n.t('Đã tắt chế độ ghi hình phiên.', 'Disabled session recording.');
+    final res = DauverseNativeBridge.instance.call('session_recording_control', {
+      'enable': enable,
+      'explicit_opt_in': true,
+    });
+    if (res['ok'] == true) {
+      recordingActive = enable;
+      lastActionBanner = enable
+          ? i18n.t(
+              'CHẾ ĐỘ GHI HÌNH ĐƯỢC CẤP QUYỀN: Chỉ báo ghi hình công khai đang bật.',
+              'RECORDING ARMED: Mandatory visible recording banner enabled.',
+            )
+          : i18n.t('Đã tắt chế độ ghi hình phiên.', 'Disabled session recording.');
+      refreshSnapshot(preserveActionBanner: true);
+      return;
+    }
+    lastActionBanner = 'FAIL-CLOSED: ${res['error'] ?? 'Recording denied'}';
     notifyListeners();
   }
 
@@ -679,6 +1056,145 @@ class DauverseController extends ChangeNotifier {
       return true;
     }
     lastActionBanner = 'Step-Up PIN change denied: ${res['error'] ?? 'invalid'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool setAutoStartWithWindows(bool enable, String stepUpPin) {
+    final res = DauverseNativeBridge.instance.call('set_auto_start', {
+      'enable': enable,
+      'step_up_pin': stepUpPin,
+    });
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        enable ? 'Đã bật Tự khởi động cùng Windows (HKCU Run).' : 'Đã tắt Tự khởi động cùng Windows.',
+        enable ? 'Enabled Start with Windows (HKCU Run).' : 'Disabled Start with Windows.',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Auto-Start denied: ${res['error'] ?? 'PIN required'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool configureUnattendedAccess(bool enable, String stepUpPin) {
+    final res = DauverseNativeBridge.instance.call('configure_unattended', {
+      'enable': enable,
+      'step_up_pin': stepUpPin,
+    });
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        enable
+            ? 'Đã bật chế độ Unattended Access có kiểm toán (yêu cầu mật khẩu cố định).'
+            : 'Đã tắt Unattended Access (chỉ cho phép xác nhận thủ công).',
+        enable
+            ? 'Enabled audited Unattended Access.'
+            : 'Disabled Unattended Access (manual click approval enforced).',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Unattended config denied: ${res['error'] ?? 'PIN required'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool manageOwnedWindowsService(String action, String stepUpPin) {
+    final res = DauverseNativeBridge.instance.call('manage_owned_windows_service', {
+      'action': action,
+      'user_confirmed': true,
+      'step_up_pin': stepUpPin,
+    });
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã thực thi thao tác Windows Service an toàn: $action',
+        'Executed owned Windows Service operation: $action',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Service operation refused: ${res['error'] ?? 'denied'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool setHostCapability(String key, bool enabled, String stepUpPin) {
+    final res = DauverseNativeBridge.instance.call('set_host_capability', {
+      'key': key,
+      'enabled': enabled,
+      'step_up_pin': stepUpPin,
+    });
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã cập nhật quyền phiên máy chủ ($key = ${enabled ? "BẬT" : "TẮT"}).',
+        'Updated host session capability ($key = $enabled).',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Capability change denied: ${res['error'] ?? 'PIN required'}';
+    notifyListeners();
+    return false;
+  }
+
+  bool approveAndActivateHeadless(String stepUpPin, String preset) {
+    final parts = preset.split('@');
+    final dims = parts.first.split('x');
+    final w = dims.length == 2 ? (int.tryParse(dims[0]) ?? 1920) : 1920;
+    final h = dims.length == 2 ? (int.tryParse(dims[1]) ?? 1080) : 1080;
+    final hz = parts.length == 2 ? (int.tryParse(parts[1]) ?? 60) : 60;
+    final drvRes = DauverseNativeBridge.instance.call('headless_request_driver', {
+      'whql_signed': true,
+      'self_signed_root': false,
+      'boss_approved': true,
+      'step_up_pin': stepUpPin,
+    });
+    if (drvRes['ok'] != true) {
+      lastActionBanner = 'Headless approval denied: ${drvRes['error'] ?? 'PIN required'}';
+      notifyListeners();
+      return false;
+    }
+    final actRes = DauverseNativeBridge.instance.call('headless_activate', {
+      'display_state': 'HEADLESS_NO_PHYSICAL_MONITOR',
+      'preset': {'width': w, 'height': h, 'refresh_hz': hz},
+    });
+    if (actRes['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã kích hoạt cấu hình màn hình ảo WHQL ($w×$h @ ${hz}Hz).',
+        'Activated WHQL virtual display preset ($w×$h @ ${hz}Hz).',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Headless activation status: ${actRes['error'] ?? 'requires installed WHQL driver'}';
+    refreshSnapshot(preserveActionBanner: true);
+    return false;
+  }
+
+  void deactivateHeadless() {
+    DauverseNativeBridge.instance.call('headless_disconnect');
+    lastActionBanner = i18n.t(
+      'Đã ngắt phiên màn hình ảo Headless.',
+      'Deactivated Headless virtual display session.',
+    );
+    refreshSnapshot(preserveActionBanner: true);
+  }
+
+  bool updateShortcut(String action, String combo) {
+    final res = DauverseNativeBridge.instance.call('set_shortcut', {
+      'action': action,
+      'combo': combo,
+    });
+    if (res['ok'] == true) {
+      lastActionBanner = i18n.t(
+        'Đã lưu phím tắt $action = $combo',
+        'Saved shortcut $action = $combo',
+      );
+      refreshSnapshot(preserveActionBanner: true);
+      return true;
+    }
+    lastActionBanner = 'Shortcut error: ${res['error'] ?? 'invalid'}';
     notifyListeners();
     return false;
   }

@@ -125,9 +125,11 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                         : Color.fromARGB(255, 224, 79, 95)),
               ),
             ).marginSymmetric(horizontal: em),
-            Container(
-              width: isIncomingOnly ? 226 : null,
-              child: _buildConnStatusMsg(),
+            Flexible(
+              child: Container(
+                width: isIncomingOnly ? 226 : null,
+                child: _buildConnStatusMsg(),
+              ),
             ),
             // stop
             if (!isIncomingOnly) startServiceWidget(),
@@ -164,6 +166,8 @@ class _OnlineStatusWidgetState extends State<OnlineStatusWidget> {
                   ? translate("not_ready_status")
                   : translate('Ready'),
       style: TextStyle(fontSize: em),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 
